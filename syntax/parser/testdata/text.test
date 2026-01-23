@@ -1,0 +1,144 @@
+§ Text
+A small paragraph
+with some simple
+line breaks
+
+Some text with an inline link https://flo.znkr.io/diff.
+
+Here's a *strong text with _emphasis_ inside*.
+
+Emphasis can be tricky if _(parenthesis)_ are involved. _(_foo_)_ only empathies the parentheses.
+
+Extra care has to be take when using [brackets [like this], because they are special]. For example,
+they could not be closed like this [.
+
+But it's even more problematic if they are not opened: ]]
+
+There are a number of special characters like =, +, -, and / that should be parsed as text.
+
+Star in word context: a*b and text*3
+
+Underscore in word context: snake_case
+
+Star NOT in word - after space: a *b
+│ Markup
+│   Text: "A small paragraph"
+│   Space: "\n"
+│   Text: "with some simple"
+│   Space: "\n"
+│   Text: "line breaks"
+│   Parbreak: "\n\n"
+│   Text: "Some text with an inline link "
+│   Link: "https://flo.znkr.io/diff"
+│   Text: "."
+│   Parbreak: "\n\n"
+│   Text: "Here"
+│   SmartQuote: "'"
+│   Text: "s a"
+│   Space: " "
+│   Strong
+│     Star: "*"
+│     Markup
+│       Text: "strong text with"
+│       Space: " "
+│       Emph
+│         Underscore: "_"
+│         Markup
+│           Text: "emphasis"
+│         Underscore: "_"
+│       Space: " "
+│       Text: "inside"
+│     Star: "*"
+│   Text: "."
+│   Parbreak: "\n\n"
+│   Text: "Emphasis can be tricky if"
+│   Space: " "
+│   Emph
+│     Underscore: "_"
+│     Markup
+│       Text: "(parenthesis)"
+│     Underscore: "_"
+│   Space: " "
+│   Text: "are involved."
+│   Space: " "
+│   Emph
+│     Underscore: "_"
+│     Markup
+│       Text: "("
+│     Underscore: "_"
+│   Text: "foo"
+│   Emph
+│     Underscore: "_"
+│     Markup
+│       Text: ")"
+│     Underscore: "_"
+│   Space: " "
+│   Text: "only empathies the parentheses."
+│   Parbreak: "\n\n"
+│   Text: "Extra care has to be take when using"
+│   Space: " "
+│   Text: "["
+│   Text: "brackets"
+│   Space: " "
+│   Text: "["
+│   Text: "like this"
+│   Text: "]"
+│   Text: ", because they are special"
+│   Text: "]"
+│   Text: ". For example,"
+│   Space: "\n"
+│   Text: "they could not be closed like this"
+│   Space: " "
+│   Text: "["
+│   Text: "."
+│   Parbreak: "\n\n"
+│   Text: "But it"
+│   SmartQuote: "'"
+│   Text: "s even more problematic if they are not opened"
+│   Text: ":"
+│   Space: " "
+│   Text: "]"
+│   Error: "]"
+│     Msg: "unexpected"
+│     Hint: "try using a backslash escape: \\]"
+│   Parbreak: "\n\n"
+│   Text: "There are a number of special characters like"
+│   Space: " "
+│   Text: "=,"
+│   Space: " "
+│   Text: "+,"
+│   Space: " "
+│   Text: "-, and"
+│   Space: " "
+│   Text: "/"
+│   Space: " "
+│   Text: "that should be parsed as text."
+│   Parbreak: "\n\n"
+│   Text: "Star in word context"
+│   Text: ":"
+│   Space: " "
+│   Text: "a"
+│   Text: "*b and text"
+│   Text: "*3"
+│   Parbreak: "\n\n"
+│   Text: "Underscore in word context"
+│   Text: ":"
+│   Space: " "
+│   Text: "snake"
+│   Text: "_case"
+│   Parbreak: "\n\n"
+│   Text: "Star NOT in word"
+│   Space: " "
+│   Text: "-"
+│   Space: " "
+│   Text: "after space"
+│   Text: ":"
+│   Space: " "
+│   Text: "a"
+│   Space: " "
+│   Strong
+│     Error: "*"
+│       Msg: "unclosed delimiter"
+│     Markup
+│       Text: "b"
+│       Space: "\n"

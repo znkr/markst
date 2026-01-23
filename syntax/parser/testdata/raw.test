@@ -1,0 +1,131 @@
+§ Inline raw
+`code`
+│ Markup
+│   Raw
+│     RawDelim: "`"
+│     Text: "code"
+│     RawDelim: "`"
+│   Space: "\n"
+
+§ Inline raw empty
+``
+│ Markup
+│   Raw
+│     RawDelim: "`"
+│     RawDelim: "`"
+│   Space: "\n"
+
+§ Inline multiple lines
+This is `some rather
+long snippet`.
+│ Markup
+│   Text: "This is"
+│   Space: " "
+│   Raw
+│     RawDelim: "`"
+│     Text: "some rather"
+│     RawTrimmed: "\n"
+│     Text: "long snippet"
+│     RawDelim: "`"
+│   Text: "."
+│   Space: "\n"
+
+§ Inline raw with spaces
+`hello world`
+│ Markup
+│   Raw
+│     RawDelim: "`"
+│     Text: "hello world"
+│     RawDelim: "`"
+│   Space: "\n"
+
+§ Raw in text
+hello `code` world
+│ Markup
+│   Text: "hello"
+│   Space: " "
+│   Raw
+│     RawDelim: "`"
+│     Text: "code"
+│     RawDelim: "`"
+│   Space: " "
+│   Text: "world"
+│   Space: "\n"
+
+§ Block raw with lang
+```rust
+fn main() {}
+```
+│ Markup
+│   Raw
+│     RawDelim: "```"
+│     RawLang: "rust"
+│     RawTrimmed: "\n"
+│     Text: "fn main() {}"
+│     RawTrimmed: "\n"
+│     RawDelim: "```"
+│   Space: "\n"
+
+§ Block multiple lines
+```go
+package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hi")
+}
+```
+│ Markup
+│   Raw
+│     RawDelim: "```"
+│     RawLang: "go"
+│     RawTrimmed: "\n"
+│     Text: "package main"
+│     RawTrimmed: "\n"
+│     Text: ""
+│     RawTrimmed: "\n"
+│     Text: "import \"fmt\""
+│     RawTrimmed: "\n"
+│     Text: ""
+│     RawTrimmed: "\n"
+│     Text: "func main() {"
+│     RawTrimmed: "\n"
+│     Text: "    fmt.Println(\"Hi\")"
+│     RawTrimmed: "\n"
+│     Text: "}"
+│     RawTrimmed: "\n"
+│     RawDelim: "```"
+│   Space: "\n"
+
+§ Block raw no lang
+```
+code
+```
+│ Markup
+│   Raw
+│     RawDelim: "```"
+│     RawTrimmed: "\n"
+│     Text: "code"
+│     RawTrimmed: "\n"
+│     RawDelim: "```"
+│   Space: "\n"
+
+§ Block raw nested backticks
+````
+```inner```
+````
+│ Markup
+│   Raw
+│     RawDelim: "````"
+│     RawTrimmed: "\n"
+│     Text: "```inner```"
+│     RawTrimmed: "\n"
+│     RawDelim: "````"
+│   Space: "\n"
+
+§ Raw unclosed
+`unclosed
+│ Markup
+│   Error: "`unclosed\n"
+│     Msg: "unexpected"

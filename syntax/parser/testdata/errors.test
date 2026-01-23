@@ -1,0 +1,287 @@
+§ Unexpected right bracket
+]
+│ Markup
+│   Error: "]"
+│     Msg: "unexpected"
+│     Hint: "try using a backslash escape: \\]"
+│   Space: "\n"
+
+§ Unexpected token in code
+#{ @ }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Error: "@"
+│         Msg: "unexpected"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing expression after hash
+#
+│ Markup
+│   Hash: "#"
+│   Error
+│     Msg: "expected expression"
+│   Space: "\n"
+
+§ Missing identifier after dot
+#{ foo. }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       FieldAccess
+│         Ident: "foo"
+│         Dot: "."
+│         Space: " "
+│       Error: "}"
+│         Msg: "expected KindIdent"
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing closing star
+*hello
+│ Markup
+│   Strong
+│     Error: "*"
+│       Msg: "unclosed delimiter"
+│     Markup
+│       Text: "hello"
+│       Space: "\n"
+
+§ Missing closing underscore
+_hello
+│ Markup
+│   Emph
+│     Error: "_"
+│       Msg: "unclosed delimiter"
+│     Markup
+│       Text: "hello"
+│       Space: "\n"
+
+§ Invalid import item
+#{ import "foo": 123 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"foo\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           ImportItemPath
+│             Error: "123"
+│               Msg: "unexpected"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing colon in show rule
+#{ show heading it }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ShowRule
+│         Show: "show"
+│         Error: " "
+│           Msg: "expected colon"
+│         Ident: "heading"
+│       Error: "it"
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       Ident: "it"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Unexpected comma in for pattern
+#{ for a, b in items { } }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ForLoop
+│         For: "for"
+│         Space: " "
+│         Ident: "a"
+│         Error: ","
+│           Msg: "unexpected"
+│           Hint: "destructuring patterns must be wrapped in parentheses"
+│         Space: " "
+│         Ident: "b"
+│         Space: " "
+│         In: "in"
+│         Space: " "
+│         Ident: "items"
+│         Space: " "
+│         CodeBlock
+│           LeftBrace: "{"
+│           Code
+│             Space: " "
+│           RightBrace: "}"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Space before function args
+#{ foo (1) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Ident: "foo"
+│       Error: "("
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       Parenthesized
+│         LeftParen: "("
+│         Int: "1"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing identifier after as in import
+#{ import "foo" as }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"foo\""
+│         Space: " "
+│         As: "as"
+│         Space: " "
+│       Error: "}"
+│         Msg: "expected KindIdent"
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Not expression after not
+#{ x not y }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Ident: "x"
+│       Space: " "
+│       Not: "not"
+│       Error: "y"
+│         Msg: "expected keyword `in`"
+│       Space: " "
+│       Ident: "y"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing right paren in array
+#{ (1, 2 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Array
+│         Error: "("
+│           Msg: "unclosed delimiter"
+│         Int: "1"
+│         Comma: ","
+│         Space: " "
+│         Int: "2"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Missing right brace in code block
+#{ { 1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     Error: "{"
+│       Msg: "unclosed delimiter"
+│     Code
+│       Space: " "
+│       CodeBlock
+│         LeftBrace: "{"
+│         Code
+│           Space: " "
+│           Int: "1"
+│           Space: " "
+│         RightBrace: "}"
+│       Space: "\n"
+
+§ Unclosed paren in function call
+#{ foo(1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       FuncCall
+│         Ident: "foo"
+│         Args
+│           Error: "("
+│             Msg: "unclosed delimiter"
+│           Int: "1"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Unclosed content block in function call
+#foo[hello
+│ Markup
+│   Hash: "#"
+│   FuncCall
+│     Ident: "foo"
+│     Args
+│       ContentBlock
+│         Error: "["
+│           Msg: "unclosed delimiter"
+│         Markup
+│           Text: "hello"
+│           Space: "\n"
+
+§ Label in code mode
+#{ foo <label> }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Ident: "foo"
+│       Error: "<label>"
+│         Msg: "expected semicolon or line break"
+│         Hint: "labels can only be applied in markup mode"
+│         Hint: "try wrapping your code in a markup block (`[ ]`)"
+│       Space: " "
+│       Label: "<label>"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"

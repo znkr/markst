@@ -1,0 +1,75 @@
+§ Regular Reference
+This is a regular @reference.
+│ Markup
+│   Text: "This is a regular"
+│   Space: " "
+│   Ref
+│     RefMarker: "@reference"
+│   Text: "."
+│   Space: "\n"
+
+§ Reference with content block
+And this is a @reference[
+    with a
+    potentially
+
+    very large content block
+
+    - with
+    - lists
+    - and @references
+
+    And references with @blocks[
+        Yes, here is another one!
+    ]
+]
+│ Markup
+│   Text: "And this is a"
+│   Space: " "
+│   Ref
+│     RefMarker: "@reference"
+│     ContentBlock
+│       LeftBracket: "["
+│       Markup
+│         Space: "\n    "
+│         Text: "with a"
+│         Space: "\n    "
+│         Text: "potentially"
+│         Parbreak: "\n\n    "
+│         Text: "very large content block"
+│         Parbreak: "\n\n    "
+│         ListItem
+│           ListMarker: "-"
+│           Space: " "
+│           Markup
+│             Text: "with"
+│         Space: "\n    "
+│         ListItem
+│           ListMarker: "-"
+│           Space: " "
+│           Markup
+│             Text: "lists"
+│         Space: "\n    "
+│         ListItem
+│           ListMarker: "-"
+│           Space: " "
+│           Markup
+│             Text: "and"
+│             Space: " "
+│             Ref
+│               RefMarker: "@references"
+│         Parbreak: "\n\n    "
+│         Text: "And references with"
+│         Space: " "
+│         Ref
+│           RefMarker: "@blocks"
+│           ContentBlock
+│             LeftBracket: "["
+│             Markup
+│               Space: "\n        "
+│               Text: "Yes, here is another one!"
+│               Space: "\n    "
+│             RightBracket: "]"
+│         Space: "\n"
+│       RightBracket: "]"
+│   Space: "\n"

@@ -1,0 +1,76 @@
+§ Headings
+= Heading 1
+== Heading 2
+=== Heading 3
+==== Heading 4
+│ Markup
+│   Heading
+│     HeadingMarker: "="
+│     Space: " "
+│     Markup
+│       Text: "Heading 1"
+│   Space: "\n"
+│   Heading
+│     HeadingMarker: "=="
+│     Space: " "
+│     Markup
+│       Text: "Heading 2"
+│   Space: "\n"
+│   Heading
+│     HeadingMarker: "==="
+│     Space: " "
+│     Markup
+│       Text: "Heading 3"
+│   Space: "\n"
+│   Heading
+│     HeadingMarker: "===="
+│     Space: " "
+│     Markup
+│       Text: "Heading 4"
+│   Space: "\n"
+
+§ Not a Heading
+Not a heading ===
+│ Markup
+│   Text: "Not a heading"
+│   Space: " "
+│   Text: "==="
+│   Space: "\n"
+
+§ Heading with Line Breaks
+== Heading \ with \ line \ breaks
+│ Markup
+│   Heading
+│     HeadingMarker: "=="
+│     Space: " "
+│     Markup
+│       Text: "Heading"
+│       Space: " "
+│       Linebreak: "\\"
+│       Space: " "
+│       Text: "with"
+│       Space: " "
+│       Linebreak: "\\"
+│       Space: " "
+│       Text: "line"
+│       Space: " "
+│       Linebreak: "\\"
+│       Space: " "
+│       Text: "breaks"
+│   Space: "\n"
+
+§ Heading with Strong Text
+=== Heading with *strong text*
+│ Markup
+│   Heading
+│     HeadingMarker: "==="
+│     Space: " "
+│     Markup
+│       Text: "Heading with"
+│       Space: " "
+│       Strong
+│         Star: "*"
+│         Markup
+│           Text: "strong text"
+│         Star: "*"
+│   Space: "\n"

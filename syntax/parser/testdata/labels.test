@@ -1,0 +1,113 @@
+§ Basic label
+<intro>
+│ Markup
+│   Label: "<intro>"
+│   Space: "\n"
+
+§ Label with text before
+Some text <label>
+│ Markup
+│   Text: "Some text"
+│   Space: " "
+│   Label: "<label>"
+│   Space: "\n"
+
+§ Label with text after
+<label> more text
+│ Markup
+│   Label: "<label>"
+│   Space: " "
+│   Text: "more text"
+│   Space: "\n"
+
+§ Label on heading
+= Introduction <intro>
+│ Markup
+│   Heading
+│     HeadingMarker: "="
+│     Space: " "
+│     Markup
+│       Text: "Introduction"
+│   Space: " "
+│   Label: "<intro>"
+│   Space: "\n"
+
+§ Multiple labels
+<first> <second>
+│ Markup
+│   Label: "<first>"
+│   Space: " "
+│   Label: "<second>"
+│   Space: "\n"
+
+§ Label with numbers
+<section1>
+│ Markup
+│   Label: "<section1>"
+│   Space: "\n"
+
+§ Label with underscore
+<my_label>
+│ Markup
+│   Label: "<my_label>"
+│   Space: "\n"
+
+§ Label with hyphen
+<my-label>
+│ Markup
+│   Label: "<my-label>"
+│   Space: "\n"
+
+§ Label with colon
+<fig:intro>
+│ Markup
+│   Label: "<fig:intro>"
+│   Space: "\n"
+
+§ Label with dot
+<ch.1>
+│ Markup
+│   Label: "<ch.1>"
+│   Space: "\n"
+
+§ Label with mixed chars
+<fig:intro-1.2_a>
+│ Markup
+│   Label: "<fig:intro-1.2_a>"
+│   Space: "\n"
+
+§ Label and reference
+= Heading <heading>
+See @heading for more.
+│ Markup
+│   Heading
+│     HeadingMarker: "="
+│     Space: " "
+│     Markup
+│       Text: "Heading"
+│   Space: " "
+│   Label: "<heading>"
+│   Space: "\n"
+│   Text: "See"
+│   Space: " "
+│   Ref
+│     RefMarker: "@heading"
+│   Space: " "
+│   Text: "for more."
+│   Space: "\n"
+
+§ Reference with content
+See @heading[the heading] here.
+│ Markup
+│   Text: "See"
+│   Space: " "
+│   Ref
+│     RefMarker: "@heading"
+│     ContentBlock
+│       LeftBracket: "["
+│       Markup
+│         Text: "the heading"
+│       RightBracket: "]"
+│   Space: " "
+│   Text: "here."
+│   Space: "\n"

@@ -1,0 +1,381 @@
+§ Basic import
+#{ import "utils.typ" }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import with module rename
+#{ import "utils.typ" as utils }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Space: " "
+│         As: "as"
+│         Space: " "
+│         Ident: "utils"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import wildcard
+#{ import "utils.typ": * }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         Star: "*"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import single item
+#{ import "utils.typ": foo }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           ImportItemPath
+│             Ident: "foo"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import multiple items
+#{ import "utils.typ": foo, bar, baz }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           ImportItemPath
+│             Ident: "foo"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "bar"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "baz"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import nested path
+#{ import "utils.typ": a.b.c }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           ImportItemPath
+│             Ident: "a"
+│             Dot: "."
+│             Ident: "b"
+│             Dot: "."
+│             Ident: "c"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import renamed item
+#{ import "utils.typ": foo as f }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "foo"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "f"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import multiple with rename
+#{ import "utils.typ": foo as f, bar as b }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "foo"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "f"
+│           Comma: ","
+│           Space: " "
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "bar"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "b"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import parenthesized items
+#{ import "utils.typ": (foo, bar) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         LeftParen: "("
+│         ImportItems
+│           ImportItemPath
+│             Ident: "foo"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "bar"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import parenthesized with rename
+#{ import "utils.typ": (foo as f, bar) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         LeftParen: "("
+│         ImportItems
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "foo"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "f"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "bar"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import module rename with items
+#{ import "utils.typ" as utils: foo, bar }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Space: " "
+│         As: "as"
+│         Space: " "
+│         Ident: "utils"
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           ImportItemPath
+│             Ident: "foo"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "bar"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import module rename with wildcard
+#{ import "utils.typ" as utils: * }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Space: " "
+│         As: "as"
+│         Space: " "
+│         Ident: "utils"
+│         Colon: ":"
+│         Space: " "
+│         Star: "*"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import nested paths with rename
+#{ import "mod.typ": a.b as x, c.d.e as y }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"mod.typ\""
+│         Colon: ":"
+│         Space: " "
+│         ImportItems
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "a"
+│               Dot: "."
+│               Ident: "b"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "x"
+│           Comma: ","
+│           Space: " "
+│           RenamedImportItem
+│             ImportItemPath
+│               Ident: "c"
+│               Dot: "."
+│               Ident: "d"
+│               Dot: "."
+│               Ident: "e"
+│             Space: " "
+│             As: "as"
+│             Space: " "
+│             Ident: "y"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+§ Import multiline parenthesized
+#{
+  import "utils.typ": (
+    foo,
+    bar,
+    baz
+  )
+}
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: "\n  "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"utils.typ\""
+│         Colon: ":"
+│         Space: " "
+│         LeftParen: "("
+│         Space: "\n    "
+│         ImportItems
+│           ImportItemPath
+│             Ident: "foo"
+│           Comma: ","
+│           Space: "\n    "
+│           ImportItemPath
+│             Ident: "bar"
+│           Comma: ","
+│           Space: "\n    "
+│           ImportItemPath
+│             Ident: "baz"
+│         Space: "\n  "
+│         RightParen: ")"
+│       Space: "\n"
+│     RightBrace: "}"
+│   Space: "\n"

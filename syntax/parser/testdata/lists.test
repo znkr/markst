@@ -1,0 +1,251 @@
+§ Unordered Lists
+- this
+- is
+- a list
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "this"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "is"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "a list"
+│   Space: "\n"
+
+§ Two Independent Unordered Lists
+- list 1
+- item 1.2
+
+- list 2
+- item 2.2
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "list 1"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "item 1.2"
+│   Parbreak: "\n\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "list 2"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "item 2.2"
+│   Space: "\n"
+
+§ Unordered Lists Multiline Item
+- it's possible
+  to have multiple lines
+    in a single list item
+-
+- /* comment */ list item
+  with two lines
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "it"
+│       SmartQuote: "'"
+│       Text: "s possible"
+│       Space: "\n  "
+│       Text: "to have multiple lines"
+│       Space: "\n    "
+│       Text: "in a single list item"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Markup
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     BlockComment: "/* comment */"
+│     Space: " "
+│     Markup
+│       Text: "list item"
+│       Space: "\n  "
+│       Text: "with two lines"
+│   Space: "\n"
+
+§ Ordered Lists
++   numbered list
++   can have automatic or
+10. custom numbers
+4.  mixed however
+    you like
++
+│ Markup
+│   EnumItem
+│     EnumMarker: "+"
+│     Space: "   "
+│     Markup
+│       Text: "numbered list"
+│   Space: "\n"
+│   EnumItem
+│     EnumMarker: "+"
+│     Space: "   "
+│     Markup
+│       Text: "can have automatic or"
+│   Space: "\n"
+│   EnumItem
+│     EnumMarker: "10."
+│     Space: " "
+│     Markup
+│       Text: "custom numbers"
+│   Space: "\n"
+│   EnumItem
+│     EnumMarker: "4."
+│     Space: "  "
+│     Markup
+│       Text: "mixed however"
+│       Space: "\n    "
+│       Text: "you like"
+│   Space: "\n"
+│   EnumItem
+│     EnumMarker: "+"
+│     Markup
+│   Space: "\n"
+
+§ Definition Lists
+/ List: List without numbering
+/ Enum: List with numbering
+        (allows multiple lines too)
+/ Terms: Definition list
+│ Markup
+│   TermItem
+│     TermMarker: "/"
+│     Space: " "
+│     Markup
+│       Text: "List"
+│     Colon: ":"
+│     Space: " "
+│     Markup
+│       Text: "List without numbering"
+│   Space: "\n"
+│   TermItem
+│     TermMarker: "/"
+│     Space: " "
+│     Markup
+│       Text: "Enum"
+│     Colon: ":"
+│     Space: " "
+│     Markup
+│       Text: "List with numbering"
+│       Space: "\n        "
+│       Text: "(allows multiple lines too)"
+│   Space: "\n"
+│   TermItem
+│     TermMarker: "/"
+│     Space: " "
+│     Markup
+│       Text: "Terms"
+│     Colon: ":"
+│     Space: " "
+│     Markup
+│       Text: "Definition list"
+│   Space: "\n"
+
+§ Nested Lists
+- nested lists
+  - are very possible
+  - of course
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "nested lists"
+│       Space: "\n  "
+│       ListItem
+│         ListMarker: "-"
+│         Space: " "
+│         Markup
+│           Text: "are very possible"
+│       Space: "\n  "
+│       ListItem
+│         ListMarker: "-"
+│         Space: " "
+│         Markup
+│           Text: "of course"
+│   Space: "\n"
+
+§ Deeply Nested List
+- a
+  - a.a
+    - a.a.a
+  - a.b
+    - a.b.a
+      - a.b.a.a
+  - a.c
+- b
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "a"
+│       Space: "\n  "
+│       ListItem
+│         ListMarker: "-"
+│         Space: " "
+│         Markup
+│           Text: "a.a"
+│           Space: "\n    "
+│           ListItem
+│             ListMarker: "-"
+│             Space: " "
+│             Markup
+│               Text: "a.a.a"
+│       Space: "\n  "
+│       ListItem
+│         ListMarker: "-"
+│         Space: " "
+│         Markup
+│           Text: "a.b"
+│           Space: "\n    "
+│           ListItem
+│             ListMarker: "-"
+│             Space: " "
+│             Markup
+│               Text: "a.b.a"
+│               Space: "\n      "
+│               ListItem
+│                 ListMarker: "-"
+│                 Space: " "
+│                 Markup
+│                   Text: "a.b.a.a"
+│       Space: "\n  "
+│       ListItem
+│         ListMarker: "-"
+│         Space: " "
+│         Markup
+│           Text: "a.c"
+│   Space: "\n"
+│   ListItem
+│     ListMarker: "-"
+│     Space: " "
+│     Markup
+│       Text: "b"
+│   Space: "\n"
