@@ -1,10 +1,10 @@
-§ Basic label
+--- basic-label ---
 <intro>
 │ Markup
 │   Label: "<intro>"
 │   Space: "\n"
 
-§ Label with text before
+--- label-with-text-before ---
 Some text <label>
 │ Markup
 │   Text: "Some text"
@@ -12,7 +12,7 @@ Some text <label>
 │   Label: "<label>"
 │   Space: "\n"
 
-§ Label with text after
+--- label-with-text-after ---
 <label> more text
 │ Markup
 │   Label: "<label>"
@@ -20,7 +20,7 @@ Some text <label>
 │   Text: "more text"
 │   Space: "\n"
 
-§ Label on heading
+--- label-on-heading ---
 = Introduction <intro>
 │ Markup
 │   Heading
@@ -32,7 +32,7 @@ Some text <label>
 │   Label: "<intro>"
 │   Space: "\n"
 
-§ Multiple labels
+--- multiple-labels ---
 <first> <second>
 │ Markup
 │   Label: "<first>"
@@ -40,43 +40,43 @@ Some text <label>
 │   Label: "<second>"
 │   Space: "\n"
 
-§ Label with numbers
+--- label-with-numbers ---
 <section1>
 │ Markup
 │   Label: "<section1>"
 │   Space: "\n"
 
-§ Label with underscore
+--- label-with-underscore ---
 <my_label>
 │ Markup
 │   Label: "<my_label>"
 │   Space: "\n"
 
-§ Label with hyphen
+--- label-with-hyphen ---
 <my-label>
 │ Markup
 │   Label: "<my-label>"
 │   Space: "\n"
 
-§ Label with colon
+--- label-with-colon ---
 <fig:intro>
 │ Markup
 │   Label: "<fig:intro>"
 │   Space: "\n"
 
-§ Label with dot
+--- label-with-dot ---
 <ch.1>
 │ Markup
 │   Label: "<ch.1>"
 │   Space: "\n"
 
-§ Label with mixed chars
+--- label-with-mixed-chars ---
 <fig:intro-1.2_a>
 │ Markup
 │   Label: "<fig:intro-1.2_a>"
 │   Space: "\n"
 
-§ Label and reference
+--- label-and-reference ---
 = Heading <heading>
 See @heading for more.
 │ Markup
@@ -96,7 +96,7 @@ See @heading for more.
 │   Text: "for more."
 │   Space: "\n"
 
-§ Reference with content
+--- reference-with-content ---
 See @heading[the heading] here.
 │ Markup
 │   Text: "See"

@@ -1,4 +1,4 @@
-§ Headings
+--- headings ---
 = Heading 1
 == Heading 2
 === Heading 3
@@ -29,7 +29,7 @@
 │       Text: "Heading 4"
 │   Space: "\n"
 
-§ Not a Heading
+--- not-a-heading ---
 Not a heading ===
 │ Markup
 │   Text: "Not a heading"
@@ -37,7 +37,7 @@ Not a heading ===
 │   Text: "==="
 │   Space: "\n"
 
-§ Heading with Line Breaks
+--- heading-with-line-breaks ---
 == Heading \ with \ line \ breaks
 │ Markup
 │   Heading
@@ -59,7 +59,7 @@ Not a heading ===
 │       Text: "breaks"
 │   Space: "\n"
 
-§ Heading with Strong Text
+--- heading-with-strong-text ---
 === Heading with *strong text*
 │ Markup
 │   Heading

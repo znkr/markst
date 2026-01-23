@@ -1,4 +1,4 @@
-§ Unordered Lists
+--- unordered-lists ---
 - this
 - is
 - a list
@@ -22,7 +22,7 @@
 │       Text: "a list"
 │   Space: "\n"
 
-§ Two Independent Unordered Lists
+--- two-independent-unordered-lists ---
 - list 1
 - item 1.2
 
@@ -54,7 +54,7 @@
 │       Text: "item 2.2"
 │   Space: "\n"
 
-§ Unordered Lists Multiline Item
+--- unordered-lists-multiline-item ---
 - it's possible
   to have multiple lines
     in a single list item
@@ -89,7 +89,7 @@
 │       Text: "with two lines"
 │   Space: "\n"
 
-§ Ordered Lists
+--- ordered-lists ---
 +   numbered list
 +   can have automatic or
 10. custom numbers
@@ -128,7 +128,7 @@
 │     Markup
 │   Space: "\n"
 
-§ Definition Lists
+--- definition-lists ---
 / List: List without numbering
 / Enum: List with numbering
         (allows multiple lines too)
@@ -167,7 +167,7 @@
 │       Text: "Definition list"
 │   Space: "\n"
 
-§ Nested Lists
+--- nested-lists ---
 - nested lists
   - are very possible
   - of course
@@ -191,7 +191,7 @@
 │           Text: "of course"
 │   Space: "\n"
 
-§ Deeply Nested List
+--- deeply-nested-list ---
 - a
   - a.a
     - a.a.a

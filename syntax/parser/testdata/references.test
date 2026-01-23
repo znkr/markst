@@ -1,4 +1,4 @@
-§ Regular Reference
+--- regular-reference ---
 This is a regular @reference.
 │ Markup
 │   Text: "This is a regular"
@@ -8,7 +8,7 @@ This is a regular @reference.
 │   Text: "."
 │   Space: "\n"
 
-§ Reference with content block
+--- reference-with-content-block ---
 And this is a @reference[
     with a
     potentially

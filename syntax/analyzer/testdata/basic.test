@@ -1,0 +1,231 @@
+--- simple-text ---
+Hello world
+│ #text("Hello world")
+
+--- multiple-paragraphs ---
+First paragraph
+
+Second paragraph
+│ #text("First paragraph")
+│ #parbreak()
+│ #text("Second paragraph")
+
+--- heading ---
+= Title
+Some content
+│ #heading(level: 1)[#text("Title")]
+│ #text("Some content")
+
+--- nested-headings ---
+= Top
+Content under top
+== Nested
+Content under nested
+│ #heading(level: 1)[#text("Top")]
+│ #text("Content under top")
+│ #heading(level: 2)[#text("Nested")]
+│ #text("Content under nested")
+
+--- strong ---
+This is *bold* text
+│ #text("This is")
+│ #strong[#text("bold")]
+│ #text("text")
+
+--- emphasis ---
+This is _emphasized_ text
+│ #text("This is")
+│ #emph[#text("emphasized")]
+│ #text("text")
+
+--- link ---
+Check https://example.com out
+│ #text("Check")
+│ #link(dest: "https://example.com")[#text("https://example.com")]
+│ #text("out")
+
+--- list ---
+- First item
+- Second item
+│ #list.item[#text("First item")]
+│ #list.item[#text("Second item")]
+
+--- list-inside-regular-text ---
+regular text
+- First item
+- Second item
+│ #text("regular text")
+│ #list.item[#text("First item")]
+│ #list.item[#text("Second item")]
+
+--- enum ---
+1. First
+2. Second
+│ #enum.item(1)[#text("First")]
+│ #enum.item(2)[#text("Second")]
+
+--- mixed-enum-markers ---
++ first
+42. second
++ third
+│ #enum.item(-1)[#text("first")]
+│ #enum.item(42)[#text("second")]
+│ #enum.item(-1)[#text("third")]
+
+--- nested-list ---
+- outer
+  - inner one
+  - inner two
+- another outer
+│ #list.item[
+│   #text("outer")
+│   #list.item[#text("inner one")]
+│   #list.item[#text("inner two")]
+│ ]
+│ #list.item[#text("another outer")]
+
+--- deeply-nested-list ---
+- a
+  - a.a
+    - a.a.a
+  - a.b
+- b
+│ #list.item[
+│   #text("a")
+│   #list.item[
+│     #text("a.a")
+│     #list.item[#text("a.a.a")]
+│   ]
+│   #list.item[#text("a.b")]
+│ ]
+│ #list.item[#text("b")]
+
+--- linebreak-in-heading ---
+== Title \ with \ break
+│ #heading(level: 2)[
+│   #text("Title")
+│   #linebreak()
+│   #text("with")
+│   #linebreak()
+│   #text("break")
+│ ]
+
+--- same-level-headings ---
+= First
+= Second
+│ #heading(level: 1)[#text("First")]
+│ #heading(level: 1)[#text("Second")]
+
+--- term-list ---
+/ Term: Definition
+/ Another: With more text
+│ #terms.item[#text("Term")][#text("Definition")]
+│ #terms.item[#text("Another")][#text("With more text")]
+
+--- term-list-multiline ---
+/ Key: Value that spans
+       multiple lines
+│ #terms.item[#text("Key")][
+│   #text("Value that spans")
+│   #text("multiple lines")
+│ ]
+
+--- inline-raw ---
+This has `code` in it
+│ #text("This has")
+│ #raw("code")
+│ #text("in it")
+
+--- inline-raw-multiline ---
+Text with `code that
+spans lines` here
+│ #text("Text with")
+│ #raw("code that", "spans lines")
+│ #text("here")
+
+--- block-raw ---
+```
+code block
+```
+│ #raw(block: true, "code block")
+
+--- block-raw-with-lang ---
+```rust
+fn main() {}
+```
+│ #raw(
+│   block: true,
+│   lang: "rust",
+│   "fn main() {}",
+│ )
+
+--- block-raw-multiline ---
+```go
+package main
+
+func main() {}
+```
+│ #raw(
+│   block: true,
+│   lang: "go",
+│   "package main",
+│   "",
+│   "func main() {}",
+│ )
+
+--- escape-character ---
+Use \* for literal star
+│ #text("Use")
+│ #text("*")
+│ #text("for literal star")
+
+--- unicode-escape ---
+Letter \u{41} is A
+│ #text("Letter")
+│ #text("A")
+│ #text("is A")
+
+--- smart-quote ---
+It's working
+│ #text("It")
+│ #text("'")
+│ #text("s working")
+
+--- shorthands ---
+Use ... for ellipsis and --- for dash
+│ #text("Use")
+│ #text("…")
+│ #text("for ellipsis and")
+│ #text("—")
+│ #text("for dash")
+
+--- reference ---
+See @intro for more
+│ #text("See")
+│ #ref(target: "intro")
+│ #text("for more")
+
+--- reference-with-supplement ---
+See @intro[the introduction] for details
+│ #text("See")
+│ #ref(target: "intro")[#text("the introduction")]
+│ #text("for details")
+
+--- label-on-heading ---
+= Introduction <intro>
+│ #heading(level: 1)[#text("Introduction")]
+│ #label("intro")
+
+--- label-on-paragraph ---
+Some text <my-label>
+│ #text("Some text")
+│ #label("my-label")
+
+--- label-and-reference ---
+= Chapter One <ch1>
+See @ch1 for details
+│ #heading(level: 1)[#text("Chapter One")]
+│ #label("ch1")
+│ #text("See")
+│ #ref(target: "ch1")
+│ #text("for details")

@@ -943,6 +943,26 @@ func TestScanner_CodeMode(t *testing.T) {
 			},
 		},
 		{
+			name:  "scientific_notation",
+			input: "1.2e3 1e-4 1E+5",
+			expected: []syntax.Node{
+				syntax.Leaf(syntax.KindFloat, "1.2e3"),
+				syntax.Leaf(syntax.KindSpace, " "),
+				syntax.Leaf(syntax.KindFloat, "1e-4"),
+				syntax.Leaf(syntax.KindSpace, " "),
+				syntax.Leaf(syntax.KindFloat, "1E+5"),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
+			name:  "scientific_notation_invalid_suffix",
+			input: "1.2e",
+			expected: []syntax.Node{
+				syntax.Error("invalid number suffix: \"e\"", "1.2e"),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
 			name:  "hex_octal_binary",
 			input: "0xff 0o77 0b101",
 			expected: []syntax.Node{
@@ -992,6 +1012,38 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: `"hello\nworld"`,
 			expected: []syntax.Node{
 				syntax.Leaf(syntax.KindStr, `"hello\nworld"`),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
+			name:  "string_unicode",
+			input: `"\u{1F600}"`,
+			expected: []syntax.Node{
+				syntax.Leaf(syntax.KindStr, `"\u{1F600}"`),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
+			name:  "string_escaped_quote",
+			input: `"\""`,
+			expected: []syntax.Node{
+				syntax.Leaf(syntax.KindStr, `"\""`),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
+			name:  "string_escaped_backslash",
+			input: `"\\"`,
+			expected: []syntax.Node{
+				syntax.Leaf(syntax.KindStr, `"\\"`),
+				syntax.Leaf(syntax.KindEnd, ""),
+			},
+		},
+		{
+			name:  "string_invalid_escape",
+			input: `"\z"`,
+			expected: []syntax.Node{
+				syntax.Error("invalid escape sequence", `"\z"`),
 				syntax.Leaf(syntax.KindEnd, ""),
 			},
 		},

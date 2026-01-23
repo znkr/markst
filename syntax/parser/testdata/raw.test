@@ -1,4 +1,4 @@
-§ Inline raw
+--- inline-raw ---
 `code`
 │ Markup
 │   Raw
@@ -7,7 +7,7 @@
 │     RawDelim: "`"
 │   Space: "\n"
 
-§ Inline raw empty
+--- inline-raw-empty ---
 ``
 │ Markup
 │   Raw
@@ -15,7 +15,7 @@
 │     RawDelim: "`"
 │   Space: "\n"
 
-§ Inline multiple lines
+--- inline-multiple-lines ---
 This is `some rather
 long snippet`.
 │ Markup
@@ -30,7 +30,7 @@ long snippet`.
 │   Text: "."
 │   Space: "\n"
 
-§ Inline raw with spaces
+--- inline-raw-with-spaces ---
 `hello world`
 │ Markup
 │   Raw
@@ -39,7 +39,7 @@ long snippet`.
 │     RawDelim: "`"
 │   Space: "\n"
 
-§ Raw in text
+--- raw-in-text ---
 hello `code` world
 │ Markup
 │   Text: "hello"
@@ -52,7 +52,7 @@ hello `code` world
 │   Text: "world"
 │   Space: "\n"
 
-§ Block raw with lang
+--- block-raw-with-lang ---
 ```rust
 fn main() {}
 ```
@@ -66,7 +66,7 @@ fn main() {}
 │     RawDelim: "```"
 │   Space: "\n"
 
-§ Block multiple lines
+--- block-multiple-lines ---
 ```go
 package main
 
@@ -98,7 +98,7 @@ func main() {
 │     RawDelim: "```"
 │   Space: "\n"
 
-§ Block raw no lang
+--- block-raw-no-lang ---
 ```
 code
 ```
@@ -111,7 +111,7 @@ code
 │     RawDelim: "```"
 │   Space: "\n"
 
-§ Block raw nested backticks
+--- block-raw-nested-backticks ---
 ````
 ```inner```
 ````
@@ -124,7 +124,7 @@ code
 │     RawDelim: "````"
 │   Space: "\n"
 
-§ Raw unclosed
+--- raw-unclosed ---
 `unclosed
 │ Markup
 │   Error: "`unclosed\n"

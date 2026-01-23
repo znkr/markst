@@ -1,0 +1,13 @@
+--- has-want ---
+input one
+│ expected one
+
+--- no-want ---
+input two
+│ new expected two
+
+--- also-no-want ---
+line one
+line two
+│ new line one
+│ new line two

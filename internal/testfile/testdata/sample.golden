@@ -1,0 +1,22 @@
+// This is a comment
+// Another comment
+
+--- simple ---
+hello world
+│ MODIFIED OUTPUT
+
+--- multi-line ---
+line one
+line two
+line three
+│ LINE ONE
+│ LINE TWO
+│ LINE THREE
+
+--- empty-input ---
+
+│ empty
+
+--- with-spaces ---
+  indented input
+│   INDENTED OUTPUT

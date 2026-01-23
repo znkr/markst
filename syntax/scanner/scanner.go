@@ -746,16 +746,47 @@ func (s *Scanner) scanIdent(start int) syntax.Kind {
 }
 
 func (s *Scanner) scanString() syntax.Kind {
+	var err string
+	var hints []string
 	for {
 		switch s.r.Next() {
 		case reader.EOF:
+			if err != "" {
+				return s.error(err, hints...)
+			}
 			return s.error("unclosed string")
 		case '"':
+			if err != "" {
+				return s.error(err, hints...)
+			}
 			return syntax.KindStr
 		case '\\':
-			// Skip escaped character
-			if s.r.Peek() != reader.EOF {
-				s.r.Next()
+			if s.r.Peek() == reader.EOF {
+				continue
+			}
+			switch ch := s.r.Next(); ch {
+			case 'u':
+				if !s.r.ConsumeIf("{") {
+					if err == "" {
+						err = "invalid unicode escape sequence"
+						hints = []string{"expected '{'"}
+					}
+					continue
+				}
+				s.r.ConsumeWhile(isASCIIAlphanumeric)
+				if !s.r.ConsumeIf("}") {
+					if err == "" {
+						err = "invalid unicode escape sequence"
+						hints = []string{"expected '}'"}
+					}
+					continue
+				}
+			case 'n', 'r', 't', '\\', '"', '\'':
+				// Valid escape sequences
+			default:
+				if err == "" {
+					err = "invalid escape sequence"
+				}
 			}
 		}
 	}
@@ -814,6 +845,18 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 			isFloat = true
 			s.r.Next()
 			s.r.ConsumeWhile(isASCIIDigit)
+		}
+
+		// Scientific notation
+		if ch := s.r.Peek(); ch == 'e' || ch == 'E' {
+			if next, ok := s.r.Scout(1); ok && (isASCIIDigit(next) || next == '+' || next == '-') {
+				isFloat = true
+				s.r.Next()
+				if s.r.Peek() == '+' || s.r.Peek() == '-' {
+					s.r.Next()
+				}
+				s.r.ConsumeWhile(isASCIIDigit)
+			}
 		}
 	}
 

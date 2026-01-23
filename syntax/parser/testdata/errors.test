@@ -1,4 +1,4 @@
-§ Unexpected right bracket
+--- unexpected-right-bracket ---
 ]
 │ Markup
 │   Error: "]"
@@ -6,7 +6,7 @@
 │     Hint: "try using a backslash escape: \\]"
 │   Space: "\n"
 
-§ Unexpected token in code
+--- unexpected-token-in-code ---
 #{ @ }
 │ Markup
 │   Hash: "#"
@@ -20,7 +20,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing expression after hash
+--- missing-expression-after-hash ---
 #
 │ Markup
 │   Hash: "#"
@@ -28,7 +28,7 @@
 │     Msg: "expected expression"
 │   Space: "\n"
 
-§ Missing identifier after dot
+--- missing-identifier-after-dot ---
 #{ foo. }
 │ Markup
 │   Hash: "#"
@@ -45,7 +45,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing closing star
+--- missing-closing-star ---
 *hello
 │ Markup
 │   Strong
@@ -55,7 +55,7 @@
 │       Text: "hello"
 │       Space: "\n"
 
-§ Missing closing underscore
+--- missing-closing-underscore ---
 _hello
 │ Markup
 │   Emph
@@ -65,7 +65,7 @@ _hello
 │       Text: "hello"
 │       Space: "\n"
 
-§ Invalid import item
+--- invalid-import-item ---
 #{ import "foo": 123 }
 │ Markup
 │   Hash: "#"
@@ -87,7 +87,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing colon in show rule
+--- missing-colon-in-show-rule ---
 #{ show heading it }
 │ Markup
 │   Hash: "#"
@@ -108,7 +108,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Unexpected comma in for pattern
+--- unexpected-comma-in-for-pattern ---
 #{ for a, b in items { } }
 │ Markup
 │   Hash: "#"
@@ -139,7 +139,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Space before function args
+--- space-before-function-args ---
 #{ foo (1) }
 │ Markup
 │   Hash: "#"
@@ -159,7 +159,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing identifier after as in import
+--- missing-identifier-after-as-in-import ---
 #{ import "foo" as }
 │ Markup
 │   Hash: "#"
@@ -179,7 +179,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Not expression after not
+--- not-expression-after-not ---
 #{ x not y }
 │ Markup
 │   Hash: "#"
@@ -198,7 +198,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing right paren in array
+--- missing-right-paren-in-array ---
 #{ (1, 2 }
 │ Markup
 │   Hash: "#"
@@ -217,7 +217,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Missing right brace in code block
+--- missing-right-brace-in-code-block ---
 #{ { 1 }
 │ Markup
 │   Hash: "#"
@@ -235,7 +235,7 @@ _hello
 │         RightBrace: "}"
 │       Space: "\n"
 
-§ Unclosed paren in function call
+--- unclosed-paren-in-function-call ---
 #{ foo(1 }
 │ Markup
 │   Hash: "#"
@@ -253,7 +253,7 @@ _hello
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Unclosed content block in function call
+--- unclosed-content-block-in-function-call ---
 #foo[hello
 │ Markup
 │   Hash: "#"
@@ -267,7 +267,7 @@ _hello
 │           Text: "hello"
 │           Space: "\n"
 
-§ Label in code mode
+--- label-in-code-mode ---
 #{ foo <label> }
 │ Markup
 │   Hash: "#"

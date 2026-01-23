@@ -1,4 +1,4 @@
-§ Basic import
+--- basic-import ---
 #{ import "utils.typ" }
 │ Markup
 │   Hash: "#"
@@ -14,7 +14,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import with module rename
+--- import-with-module-rename ---
 #{ import "utils.typ" as utils }
 │ Markup
 │   Hash: "#"
@@ -34,7 +34,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import wildcard
+--- import-wildcard ---
 #{ import "utils.typ": * }
 │ Markup
 │   Hash: "#"
@@ -53,7 +53,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import single item
+--- import-single-item ---
 #{ import "utils.typ": foo }
 │ Markup
 │   Hash: "#"
@@ -74,7 +74,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import multiple items
+--- import-multiple-items ---
 #{ import "utils.typ": foo, bar, baz }
 │ Markup
 │   Hash: "#"
@@ -103,7 +103,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import nested path
+--- import-nested-path ---
 #{ import "utils.typ": a.b.c }
 │ Markup
 │   Hash: "#"
@@ -128,7 +128,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import renamed item
+--- import-renamed-item ---
 #{ import "utils.typ": foo as f }
 │ Markup
 │   Hash: "#"
@@ -154,7 +154,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import multiple with rename
+--- import-multiple-with-rename ---
 #{ import "utils.typ": foo as f, bar as b }
 │ Markup
 │   Hash: "#"
@@ -189,7 +189,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import parenthesized items
+--- import-parenthesized-items ---
 #{ import "utils.typ": (foo, bar) }
 │ Markup
 │   Hash: "#"
@@ -216,7 +216,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import parenthesized with rename
+--- import-parenthesized-with-rename ---
 #{ import "utils.typ": (foo as f, bar) }
 │ Markup
 │   Hash: "#"
@@ -248,7 +248,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import module rename with items
+--- import-module-rename-with-items ---
 #{ import "utils.typ" as utils: foo, bar }
 │ Markup
 │   Hash: "#"
@@ -277,7 +277,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import module rename with wildcard
+--- import-module-rename-with-wildcard ---
 #{ import "utils.typ" as utils: * }
 │ Markup
 │   Hash: "#"
@@ -300,7 +300,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import nested paths with rename
+--- import-nested-paths-with-rename ---
 #{ import "mod.typ": a.b as x, c.d.e as y }
 │ Markup
 │   Hash: "#"
@@ -341,7 +341,7 @@
 │     RightBrace: "}"
 │   Space: "\n"
 
-§ Import multiline parenthesized
+--- import-multiline-parenthesized ---
 #{
   import "utils.typ": (
     foo,

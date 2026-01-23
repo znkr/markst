@@ -1,4 +1,4 @@
-package parser_test
+package analyzer_test
 
 import (
 	"flag"
@@ -8,13 +8,14 @@ import (
 	"znkr.io/diff/textdiff"
 
 	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/syntax/internal/format"
+	"znkr.io/writst/model/ir"
+	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )
 
 var update = flag.Bool("update", false, "update golden files")
 
-func TestParse(t *testing.T) {
+func TestAnalyze(t *testing.T) {
 	files, err := filepath.Glob("testdata/*.test")
 	if err != nil {
 		t.Fatal(err)
@@ -26,10 +27,11 @@ func TestParse(t *testing.T) {
 			for i, tc := range tests {
 				t.Run(tc.Name, func(t *testing.T) {
 					node := parser.Parse(tc.Input)
-					got := format.Format(node)
+					content := analyzer.Analyze(node)
+					got := ir.Format(content)
 
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
-						t.Errorf("Parse() mismatch (-want +got):\n%s", diff)
+						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}
 
 					if *update {

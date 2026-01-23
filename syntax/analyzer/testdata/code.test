@@ -1,0 +1,350 @@
+--- string-literal ---
+#"hello world"
+│ #"hello world"
+
+--- identifier ---
+#foo
+│ #foo
+
+--- field-access ---
+#foo.bar
+│ #foo.bar
+
+--- nested-field-access ---
+#foo.bar.baz
+│ #foo.bar.baz
+
+--- code-block-empty ---
+#{}
+│ #{ }
+
+--- code-block-single ---
+#{ 1 }
+│ #{ 1 }
+
+--- code-block-multiple ---
+#{ 1; 2; 3 }
+│ #{ 1; 2; 3 }
+
+--- content-block-in-code ---
+#{ [hello *world*] }
+│ #{ [#text("hello") #strong[#text("world")]] }
+
+--- parenthesized ---
+#{ (1) }
+│ #{ (1) }
+
+--- unary-plus ---
+#{ +1 }
+│ #{ +1 }
+
+--- unary-minus ---
+#{ -1 }
+│ #{ -1 }
+
+--- unary-not ---
+#{ not true }
+│ #{ not true }
+
+--- binary-addition ---
+#{ 1 + 2 }
+│ #{ 1 + 2 }
+
+--- binary-subtraction ---
+#{ 3 - 4 }
+│ #{ 3 - 4 }
+
+--- binary-multiplication ---
+#{ 5 * 6 }
+│ #{ 5 * 6 }
+
+--- binary-division ---
+#{ 7 / 8 }
+│ #{ 7 / 8 }
+
+--- binary-equality ---
+#{ 1 == 2 }
+│ #{ 1 == 2 }
+
+--- binary-inequality ---
+#{ 3 != 4 }
+│ #{ 3 != 4 }
+
+--- binary-less-than ---
+#{ 5 < 6 }
+│ #{ 5 < 6 }
+
+--- binary-less-than-or-equal ---
+#{ 7 <= 8 }
+│ #{ 7 <= 8 }
+
+--- binary-greater-than ---
+#{ 9 > 10 }
+│ #{ 9 > 10 }
+
+--- binary-greater-than-or-equal ---
+#{ 11 >= 12 }
+│ #{ 11 >= 12 }
+
+--- binary-and ---
+#{ true and false }
+│ #{ true and false }
+
+--- binary-or ---
+#{ true or false }
+│ #{ true or false }
+
+--- binary-in ---
+#{ x in y }
+│ #{ x in y }
+
+--- binary-not-in ---
+#{ x not in y }
+│ #{ x not in y }
+
+--- binary-assignment ---
+#{ x = 1 }
+│ #{ x = 1 }
+
+--- binary-add-assign ---
+#{ x += 2 }
+│ #{ x += 2 }
+
+--- binary-sub-assign ---
+#{ x -= 3 }
+│ #{ x -= 3 }
+
+--- binary-mul-assign ---
+#{ x *= 4 }
+│ #{ x *= 4 }
+
+--- binary-div-assign ---
+#{ x /= 5 }
+│ #{ x /= 5 }
+
+--- operator-precedence-mul-over-add ---
+#{ 1 + 2 * 3 }
+│ #{ 1 + 2 * 3 }
+
+--- operator-precedence-with-parens ---
+#{ (1 + 2) * 3 }
+│ #{ (1 + 2) * 3 }
+
+--- left-associativity ---
+#{ 1 - 2 - 3 }
+│ #{ 1 - 2 - 3 }
+
+--- right-associativity-assignment ---
+#{ x = y = 1 }
+│ #{ x = y = 1 }
+
+--- empty-array ---
+#()
+│ #()
+
+--- single-element-array ---
+#(1,)
+│ #(1,)
+
+--- multi-element-array ---
+#(1, 2, 3)
+│ #(1, 2, 3)
+
+--- empty-dictionary ---
+#(:)
+│ #(:)
+
+--- dictionary-with-named-entries ---
+#(a: 1, b: 2)
+│ #(a: 1, b: 2)
+
+--- dictionary-with-keyed-entries ---
+#("key": "value")
+│ #("key": "value")
+
+--- spread-in-array ---
+#(..items)
+│ #(..items)
+
+--- spread-in-dictionary ---
+#(a: 1, ..rest)
+│ #(a: 1, ..rest)
+
+--- function-call-no-args ---
+#foo()
+│ #foo()
+
+--- function-call-with-args ---
+#{ foo(1, 2) }
+│ #{ foo(1, 2) }
+
+--- function-call-with-named-args ---
+#{ foo(a: 1, b: 2) }
+│ #{ foo(a: 1, b: 2) }
+
+--- function-call-with-spread ---
+#{ foo(..args) }
+│ #{ foo(..args) }
+
+--- function-call-with-content-block ---
+#foo[hello]
+│ #foo()[#text("hello")]
+
+--- function-call-with-multiple-content-blocks ---
+#foo[hello][world]
+│ #foo()[#text("hello")][#text("world")]
+
+--- function-call-with-args-and-content ---
+#foo(1)[hello]
+│ #foo(1)[#text("hello")]
+
+--- method-call ---
+#foo.bar()
+│ #foo.bar()
+
+--- simple-closure ---
+#{ x => x + 1 }
+│ #{ x => x + 1 }
+
+--- underscore-closure ---
+#{ _ => 42 }
+│ #{ _ => 42 }
+
+--- multi-param-closure ---
+#{ (x, y) => x + y }
+│ #{ (x, y) => x + y }
+
+--- closure-with-default-param ---
+#{ (a, b: 1) => a + b }
+│ #{ (a, b: 1) => a + b }
+
+--- closure-with-spread-param ---
+#{ (..args) => args }
+│ #{ (..args) => args }
+
+--- nested-closures ---
+#{ x => y => x + y }
+│ #{ x => y => x + y }
+
+--- let-binding-simple ---
+#{ let x = 1 }
+│ #{ let x = 1 }
+
+--- let-binding-no-code-block ---
+#let x = 1
+│ #let x = 1
+
+--- let-binding-pattern ---
+#{ let (a, b) = pair }
+│ #{ let (a, b) = pair }
+
+--- let-function ---
+#{ let add(x, y) = x + y }
+│ #{ let add(x, y) = x + y }
+
+--- set-rule ---
+#{ set text(size: 12pt) }
+│ #{ set text(size: 12pt) }
+
+--- set-rule-with-condition ---
+#{ set text(red) if enabled }
+│ #{ set text(red) if enabled }
+
+--- set-rule-with-field-access ---
+#{ set table.cell(fill: blue) }
+│ #{ set table.cell(fill: blue) }
+
+--- show-rule-without-selector ---
+#{ show: emph }
+│ #{ show: emph }
+
+--- show-rule-with-selector ---
+#{ show heading: it => emph(it.body) }
+│ #{ show heading: it => emph(it.body) }
+
+--- conditional-if-only ---
+#{ if x { y } }
+│ #{ if x { y } }
+
+--- conditional-if-else ---
+#{ if x { y } else { z } }
+│ #{ if x { y } else { z } }
+
+--- conditional-else-if ---
+#{ if a { 1 } else if b { 2 } else { 3 } }
+│ #{ if a { 1 } else if b { 2 } else { 3 } }
+
+--- while-loop ---
+#{ while x { y } }
+│ #{ while x { y } }
+
+--- for-loop ---
+#{ for x in items { x } }
+│ #{ for x in items { x } }
+
+--- for-loop-with-pattern ---
+#{ for (k, v) in dict { k } }
+│ #{ for (k, v) in dict { k } }
+
+--- break ---
+#{ while true { break } }
+│ #{ while true { break } }
+
+--- continue ---
+#{ while true { continue } }
+│ #{ while true { continue } }
+
+--- return-with-value ---
+#{ let f() = { return 1 } }
+│ #{ let f() = { return 1 } }
+
+--- return-without-value ---
+#{ let f() = { return } }
+│ #{ let f() = { return } }
+
+--- include ---
+#{ include "other.typ" }
+│ #{ include "other.typ" }
+
+--- context-expression ---
+#{ context text.lang }
+│ #{ context text.lang }
+
+--- destructuring-assignment ---
+#{ _ = expr }
+│ #{ _ = expr }
+
+--- tuple-destructuring ---
+#{ (x, y) = point }
+│ #{ (x, y) = point }
+
+--- nested-destructuring ---
+#{ (a, (b, c)) = nested }
+│ #{ (a, (b, c)) = nested }
+
+--- spread-in-destructuring ---
+#{ (first, ..rest) = arr }
+│ #{ (first, ..rest) = arr }
+
+--- named-in-destructuring ---
+#{ (x: a, y: b) = point }
+│ #{ (x: a, y: b) = point }
+
+--- literals-none-auto-bool ---
+#none #auto #true #false
+│ #none
+│ #auto
+│ #true
+│ #false
+
+--- literal-int ---
+#42
+│ #42
+
+--- literal-float ---
+#3.14
+│ #3.14
+
+--- literal-numeric ---
+#12pt
+│ #12pt
