@@ -10,7 +10,7 @@ import (
 
 var stopParse = syntax.SetOf(syntax.KindEnd)
 
-func Parse(src string) syntax.Node {
+func Parse(src string) syntax.RootNode {
 	p := newParser(src)
 	p.parseMarkup(stopParse, mfAtStart|mfWrapTrivia)
 	if p.cur.kind != syntax.KindEnd {
@@ -19,7 +19,10 @@ func Parse(src string) syntax.Node {
 	if len(p.nodes) != 1 {
 		panic("expected single root node")
 	}
-	return p.nodes[0]
+	return syntax.RootNode{
+		Source: p.s.Source(),
+		Node:   p.nodes[0],
+	}
 }
 
 type nlMode int
@@ -140,19 +143,25 @@ func (p *parser) consumeIf(kind syntax.Kind) bool {
 }
 
 func (p *parser) unexpected() *syntax.ErrorValue {
-	n := syntax.Error("unexpected", p.cur.node.Value.Text())
-	p.nodes = append(p.nodes, n)
-	p.next()
-	return n.AsError()
+	return p.error("unexpected")
 }
 
 func (p *parser) expected(expected string) *syntax.ErrorValue {
+	return p.error(fmt.Sprintf("expected %s", expected))
+}
+
+func (p *parser) error(msg string) *syntax.ErrorValue {
 	at := len(p.nodes) - p.cur.trivia
 	if at > 0 && p.nodes[at-1].Kind == syntax.KindError {
 		// Already have an error at this position.
 		return p.nodes[at-1].AsError()
 	}
-	n := syntax.Error(fmt.Sprintf("expected %s", expected), p.cur.node.Value.Text())
+	var n syntax.Node
+	if p.cur.kind == syntax.KindError {
+		n = p.cur.node
+	} else {
+		n = syntax.Error(msg, p.cur.node.Span, p.cur.node.Value.Text())
+	}
 	p.nodes = slices.Insert(p.nodes, at, n)
 	return n.AsError()
 }
@@ -163,7 +172,7 @@ func (p *parser) expectedAt(i int, expected string) *syntax.ErrorValue {
 		// Already have an error at this position.
 		return prev.AsError()
 	}
-	n := syntax.Error(fmt.Sprintf("expected %s", expected), prev.Value.Text())
+	n := syntax.Error(fmt.Sprintf("expected %s", expected), prev.Span, prev.Value.Text())
 	p.nodes[i] = n
 	return n.AsError()
 }
@@ -188,7 +197,7 @@ func (p *parser) expect(expected syntax.Kind) bool {
 		p.consume()
 		return true
 	}
-	n := syntax.Error(fmt.Sprintf("expected %s", expected), p.cur.node.Value.Text())
+	n := syntax.Error(fmt.Sprintf("expected %s", expected), p.cur.node.Span, p.cur.node.Value.Text())
 	p.nodes = append(p.nodes, n)
 	return false
 }
@@ -202,7 +211,7 @@ func (p *parser) expectClosing(open int, expected syntax.Kind) *syntax.ErrorValu
 		// Already have an error at this position.
 		return nil
 	}
-	n := syntax.Error("unclosed delimiter", p.nodes[open].Value.Text())
+	n := syntax.Error("unclosed delimiter", p.nodes[open].Span, p.nodes[open].Value.Text())
 	p.nodes[open] = n
 	return n.AsError()
 }
@@ -217,7 +226,12 @@ func (p *parser) wrap(start int, kind syntax.Kind) {
 	from := min(start, to)
 	children := slices.Clone(p.nodes[from:to])
 	p.nodes = slices.Delete(p.nodes, from, to)
-	p.nodes = slices.Insert(p.nodes, from, syntax.Inner(kind, children))
+	var span syntax.Span
+	if len(children) > 0 {
+		span.Start = children[0].Span.Start
+		span.End = children[len(children)-1].Span.End
+	}
+	p.nodes = slices.Insert(p.nodes, from, syntax.Inner(kind, span, children))
 }
 
 func (p *parser) withMode(mode syntax.Mode, nlmode nlMode, fn func()) {

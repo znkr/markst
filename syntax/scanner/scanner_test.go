@@ -9,461 +9,581 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// nodeBuilder tracks offsets to generate proper spans for test expectations.
+type nodeBuilder struct {
+	offset uint32
+}
+
+func (b *nodeBuilder) leaf(kind syntax.Kind, literal string) syntax.Node {
+	start := b.offset
+	b.offset += uint32(len(literal))
+	return syntax.Leaf(kind, syntax.Span{Start: start, End: b.offset}, literal)
+}
+
+func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Node {
+	if len(children) == 0 {
+		return syntax.Inner(kind, syntax.Span{Start: b.offset, End: b.offset}, children)
+	}
+	start := children[0].Span.Start
+	end := children[len(children)-1].Span.End
+	return syntax.Inner(kind, syntax.Span{Start: start, End: end}, children)
+}
+
+func (b *nodeBuilder) err(msg string, literal string) syntax.Node {
+	start := b.offset
+	b.offset += uint32(len(literal))
+	return syntax.Error(msg, syntax.Span{Start: start, End: b.offset}, literal)
+}
+
+func (b *nodeBuilder) errWithHints(msg string, literal string, hints []string) syntax.Node {
+	start := b.offset
+	b.offset += uint32(len(literal))
+	return syntax.Node{
+		Kind: syntax.KindError,
+		Span: syntax.Span{Start: start, End: b.offset},
+		Value: &syntax.ErrorValue{
+			Message: msg,
+			Hints:   hints,
+			Literal: literal,
+		},
+	}
+}
+
 func TestScanner_MarkupMode(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []syntax.Node
+		expected func(b *nodeBuilder) []syntax.Node
 	}{
 		{
-			name:  "simple text",
+			name:  "simple_text",
 			input: "Hello",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "Hello"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "Hello"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "whitespace",
 			input: "Hello world\n\nParagraph\n  Next",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "Hello world"),
-				syntax.Leaf(syntax.KindParbreak, "\n\n"),
-				syntax.Leaf(syntax.KindText, "Paragraph"),
-				syntax.Leaf(syntax.KindSpace, "\n  "),
-				syntax.Leaf(syntax.KindText, "Next"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "Hello world"),
+					b.leaf(syntax.KindParbreak, "\n\n"),
+					b.leaf(syntax.KindText, "Paragraph"),
+					b.leaf(syntax.KindSpace, "\n  "),
+					b.leaf(syntax.KindText, "Next"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
-			name:  "text with inline link",
+			name:  "text_with_inline_link",
 			input: "Check https://example.com/ foo",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "Check "),
-				syntax.Leaf(syntax.KindLink, "https://example.com/"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "foo"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "Check "),
+					b.leaf(syntax.KindLink, "https://example.com/"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "foo"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "backslash_newline",
 			input: "\\\n",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLinebreak, "\\"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLinebreak, "\\"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "backslash_escape_char",
 			input: "\\*word",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEscape, "\\*"),
-				syntax.Leaf(syntax.KindText, "word"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEscape, "\\*"),
+					b.leaf(syntax.KindText, "word"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Unicode escapes
 		{
 			name:  "unicode_escape",
 			input: "\\u{41}",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEscape, "\\u{41}"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEscape, "\\u{41}"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unicode_escape_followed_by_text",
 			input: "\\u{41}B",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEscape, "\\u{41}"),
-				syntax.Leaf(syntax.KindText, "B"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEscape, "\\u{41}"),
+					b.leaf(syntax.KindText, "B"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unicode_escape_invalid_hex",
 			input: "\\u{ZZ}",
-			expected: []syntax.Node{
-				syntax.Error("invalid Unicode escape sequence", "\\u{ZZ}"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid Unicode escape sequence", "\\u{ZZ}"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unicode_escape_unclosed",
 			input: "\\u{41",
-			expected: []syntax.Node{
-				syntax.Error("unclosed Unicode escape sequence", "\\u{41"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed Unicode escape sequence", "\\u{41"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "line_comment",
 			input: "// comment\ntext",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLineComment, "// comment"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindText, "text"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLineComment, "// comment"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindText, "text"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "block_comment",
 			input: "/* comment */",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindBlockComment, "/* comment */"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindBlockComment, "/* comment */"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "nested_block_comment",
 			input: "/* outer /* inner */ */",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindBlockComment, "/* outer /* inner */ */"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindBlockComment, "/* outer /* inner */ */"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unmatched_end_block_comment",
 			input: "*/",
-			expected: []syntax.Node{
-				{
-					Kind: syntax.KindError, Value: &syntax.ErrorValue{
-						Message: "unmatched end of multiline comment",
-						Hints:   []string{"consider escaping the `*` with a backslash or opening the block comment with `/*`"},
-						Literal: "*/",
-					},
-				},
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.errWithHints("unmatched end of multiline comment", "*/", []string{"consider escaping the `*` with a backslash or opening the block comment with `/*`"}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unterminated_block_comment",
 			input: "/* foo",
-			expected: []syntax.Node{
-				syntax.Error("unterminated multiline comment", "/* foo"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unterminated multiline comment", "/* foo"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "formatted_text",
 			input: "*bold* _italic_",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStar, "*"),
-				syntax.Leaf(syntax.KindText, "bold"),
-				syntax.Leaf(syntax.KindStar, "*"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindUnderscore, "_"),
-				syntax.Leaf(syntax.KindText, "italic"),
-				syntax.Leaf(syntax.KindUnderscore, "_"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStar, "*"),
+					b.leaf(syntax.KindText, "bold"),
+					b.leaf(syntax.KindStar, "*"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindUnderscore, "_"),
+					b.leaf(syntax.KindText, "italic"),
+					b.leaf(syntax.KindUnderscore, "_"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "markers",
 			input: "- item\n+ enum\n/ term\n= header",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindListMarker, "-"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "item"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindEnumMarker, "+"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "enum"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindTermMarker, "/"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "term"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindHeadingMarker, "="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "header"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindListMarker, "-"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "item"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindEnumMarker, "+"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "enum"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindTermMarker, "/"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "term"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindHeadingMarker, "="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "header"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "punctuation",
 			input: "[]'\"$: #",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLeftBracket, "["),
-				syntax.Leaf(syntax.KindRightBracket, "]"),
-				syntax.Leaf(syntax.KindSmartQuote, "'"),
-				syntax.Leaf(syntax.KindSmartQuote, "\""),
-				syntax.Leaf(syntax.KindDollar, "$"),
-				syntax.Leaf(syntax.KindColon, ":"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindHash, "#"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLeftBracket, "["),
+					b.leaf(syntax.KindRightBracket, "]"),
+					b.leaf(syntax.KindSmartQuote, "'"),
+					b.leaf(syntax.KindSmartQuote, "\""),
+					b.leaf(syntax.KindDollar, "$"),
+					b.leaf(syntax.KindColon, ":"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindHash, "#"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "links",
 			input: "http://example.com https://example.org",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLink, "http://example.com"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindLink, "https://example.org"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLink, "http://example.com"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindLink, "https://example.org"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "link_unbalanced",
 			input: "http://(com",
-			expected: []syntax.Node{
-				syntax.Error("automatic links cannot contain unbalanced brackets, use 'link' function instead", "http://(com"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("automatic links cannot contain unbalanced brackets, use 'link' function instead", "http://(com"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "labels_refs",
 			input: "<lbl> @ref",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLabel, "<lbl>"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindRefMarker, "@ref"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLabel, "<lbl>"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindRefMarker, "@ref"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "label_unclosed",
 			input: "<lbl",
-			expected: []syntax.Node{
-				syntax.Error("unclosed label, expected '>'", "<lbl"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed label, expected '>'", "<lbl"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "label_empty",
 			input: "<>",
-			expected: []syntax.Node{
-				syntax.Error("label cannot be empty", "<>"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("label cannot be empty", "<>"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "shorthands",
 			input: "... -- --- -? ~ ..",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindShorthand, "..."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindShorthand, "-"),
-				syntax.Leaf(syntax.KindListMarker, "-"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindShorthand, "---"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindShorthand, "-"),
-				syntax.Leaf(syntax.KindText, "?"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindShorthand, "~"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, ".."),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindShorthand, "..."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindShorthand, "-"),
+					b.leaf(syntax.KindListMarker, "-"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindShorthand, "---"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindShorthand, "-"),
+					b.leaf(syntax.KindText, "?"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindShorthand, "~"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, ".."),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "text_interruption",
 			input: "word*word",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "word"),
-				syntax.Leaf(syntax.KindText, "*word"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "word"),
+					b.leaf(syntax.KindText, "*word"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Numbering tests
 		{
 			name:  "numbering_simple",
 			input: "1. item",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "1."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "item"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "1."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "item"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_multi_digit",
 			input: "123. item",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "123."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "item"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "123."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "item"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_at_end",
 			input: "42.",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "42."),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "42."),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_followed_by_newline",
 			input: "5.\ntext",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "5."),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindText, "text"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "5."),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindText, "text"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_no_space_is_text",
 			input: "1.23",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "1.23"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "1.23"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_no_dot_is_text",
 			input: "42 items",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "42 items"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "42 items"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_multiple",
 			input: "1. first\n2. second",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "1."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "first"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindEnumMarker, "2."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "second"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "1."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "first"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindEnumMarker, "2."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "second"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_single_digit_at_end",
 			input: "1.",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "1."),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "1."),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numbering_zero",
 			input: "0. item",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEnumMarker, "0."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "item"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEnumMarker, "0."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "item"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "link_trailing_punctuation",
 			input: "http://example.com.",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLink, "http://example.com"),
-				syntax.Leaf(syntax.KindText, "."),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLink, "http://example.com"),
+					b.leaf(syntax.KindText, "."),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "shorthand_hyphen_number",
 			input: "-1",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindShorthand, "-"),
-				syntax.Leaf(syntax.KindText, "1"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindShorthand, "-"),
+					b.leaf(syntax.KindText, "1"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "backslash_eof",
 			input: "\\",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLinebreak, "\\"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLinebreak, "\\"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "backslash_space",
 			input: "\\ ",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLinebreak, "\\"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLinebreak, "\\"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Raw text (inline)
 		{
 			name:  "raw_inline_simple",
 			input: "`code`",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-					syntax.Leaf(syntax.KindText, "code"),
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "`"),
+						b.leaf(syntax.KindText, "code"),
+						b.leaf(syntax.KindRawDelim, "`"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_inline_with_spaces",
 			input: "`hello world`",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-					syntax.Leaf(syntax.KindText, "hello world"),
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "`"),
+						b.leaf(syntax.KindText, "hello world"),
+						b.leaf(syntax.KindRawDelim, "`"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_inline_empty",
 			input: "``",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "`"),
+						b.leaf(syntax.KindRawDelim, "`"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_inline_with_newline",
 			input: "`line1\nline2`",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-					syntax.Leaf(syntax.KindText, "line1"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "line2"),
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "`"),
+						b.leaf(syntax.KindText, "line1"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "line2"),
+						b.leaf(syntax.KindRawDelim, "`"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_in_text",
 			input: "hello `code` world",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindText, "hello"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-					syntax.Leaf(syntax.KindText, "code"),
-					syntax.Leaf(syntax.KindRawDelim, "`"),
-				}),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindText, "world"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindText, "hello"),
+					b.leaf(syntax.KindSpace, " "),
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "`"),
+						b.leaf(syntax.KindText, "code"),
+						b.leaf(syntax.KindRawDelim, "`"),
+					}),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindText, "world"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_unclosed",
 			input: "`code",
-			expected: []syntax.Node{
-				syntax.Error("unclosed raw text", "`code"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed raw text", "`code"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Raw text (block - 3+ backticks)
@@ -471,193 +591,221 @@ func TestScanner_MarkupMode(t *testing.T) {
 		{
 			name:  "raw_block_lang_only",
 			input: "```code```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawLang, "code"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawLang, "code"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_with_lang",
 			input: "```rust\nfn main() {}\n```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawLang, "rust"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "fn main() {}"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawLang, "rust"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "fn main() {}"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_leading_space_trimmed",
 			input: "```typ let x = 1```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawLang, "typ"),
-					syntax.Leaf(syntax.KindRawTrimmed, " "),
-					syntax.Leaf(syntax.KindText, "let x = 1"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawLang, "typ"),
+						b.leaf(syntax.KindRawTrimmed, " "),
+						b.leaf(syntax.KindText, "let x = 1"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// When closing delimiter has no indent, dedent is 0
 		{
 			name:  "raw_block_no_dedent",
 			input: "```\n  line1\n  line2\n```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "  line1"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "  line2"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "  line1"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "  line2"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// When closing delimiter is indented, dedent is calculated
 		{
 			name:  "raw_block_dedent",
 			input: "```\n  line1\n  line2\n  ```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindText, "line1"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindText, "line2"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindText, "line1"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindText, "line2"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_4_backticks",
 			input: "````code````",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "````"),
-					syntax.Leaf(syntax.KindRawLang, "code"),
-					syntax.Leaf(syntax.KindRawDelim, "````"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "````"),
+						b.leaf(syntax.KindRawLang, "code"),
+						b.leaf(syntax.KindRawDelim, "````"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_nested_backticks",
 			input: "````\n```code```\n````",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "````"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "```code```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "````"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "````"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "```code```"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "````"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_unclosed",
 			input: "```code",
-			expected: []syntax.Node{
-				syntax.Error("unclosed raw text", "```code"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed raw text", "```code"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_trailing_space_before_backtick",
 			input: "``` x` ```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, " "),
-					syntax.Leaf(syntax.KindText, "x`"),
-					syntax.Leaf(syntax.KindRawTrimmed, " "), // trailing space before backtick is also trimmed
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, " "),
+						b.leaf(syntax.KindText, "x`"),
+						b.leaf(syntax.KindRawTrimmed, " "), // trailing space before backtick is also trimmed
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Mixed indent with no closing indent = no dedent
 		{
 			name:  "raw_block_mixed_indent_no_dedent",
 			input: "```\n    line1\n  line2\n```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "    line1"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindText, "  line2"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "    line1"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindText, "  line2"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Mixed indent with closing indent = minimum dedent
 		{
 			name:  "raw_block_mixed_indent",
 			input: "```\n    line1\n  line2\n  ```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindText, "  line1"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindText, "line2"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n  "),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindText, "  line1"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindText, "line2"),
+						b.leaf(syntax.KindRawTrimmed, "\n  "),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// 6 backticks opens a raw block that needs 6 backticks to close (not 3+3)
 		{
 			name:  "raw_block_6_backticks_unclosed",
 			input: "``````",
-			expected: []syntax.Node{
-				syntax.Error("unclosed raw text", "``````"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed raw text", "``````"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_empty",
 			input: "```\n```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "raw_block_whitespace_first_line",
 			input: "```   \ncode\n```",
-			expected: []syntax.Node{
-				syntax.Inner(syntax.KindRaw, []syntax.Node{
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-					syntax.Leaf(syntax.KindRawTrimmed, "   \n"),
-					syntax.Leaf(syntax.KindText, "code"),
-					syntax.Leaf(syntax.KindRawTrimmed, "\n"),
-					syntax.Leaf(syntax.KindRawDelim, "```"),
-				}),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.inner(syntax.KindRaw, []syntax.Node{
+						b.leaf(syntax.KindRawDelim, "```"),
+						b.leaf(syntax.KindRawTrimmed, "   \n"),
+						b.leaf(syntax.KindText, "code"),
+						b.leaf(syntax.KindRawTrimmed, "\n"),
+						b.leaf(syntax.KindRawDelim, "```"),
+					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 	}
@@ -674,7 +822,10 @@ func TestScanner_MarkupMode(t *testing.T) {
 				}
 			}
 
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			b := &nodeBuilder{}
+			expected := tt.expected(b)
+
+			if diff := cmp.Diff(expected, got); diff != "" {
 				t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -742,390 +893,454 @@ func TestScanner_CodeMode(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected []syntax.Node
+		expected func(b *nodeBuilder) []syntax.Node
 	}{
 		// Delimiters
 		{
 			name:  "delimiters",
 			input: "{}[](),;:",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLeftBrace, "{"),
-				syntax.Leaf(syntax.KindRightBrace, "}"),
-				syntax.Leaf(syntax.KindLeftBracket, "["),
-				syntax.Leaf(syntax.KindRightBracket, "]"),
-				syntax.Leaf(syntax.KindLeftParen, "("),
-				syntax.Leaf(syntax.KindRightParen, ")"),
-				syntax.Leaf(syntax.KindComma, ","),
-				syntax.Leaf(syntax.KindSemicolon, ";"),
-				syntax.Leaf(syntax.KindColon, ":"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLeftBrace, "{"),
+					b.leaf(syntax.KindRightBrace, "}"),
+					b.leaf(syntax.KindLeftBracket, "["),
+					b.leaf(syntax.KindRightBracket, "]"),
+					b.leaf(syntax.KindLeftParen, "("),
+					b.leaf(syntax.KindRightParen, ")"),
+					b.leaf(syntax.KindComma, ","),
+					b.leaf(syntax.KindSemicolon, ";"),
+					b.leaf(syntax.KindColon, ":"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Operators
 		{
 			name:  "arithmetic_operators",
 			input: "+ - * /",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindPlus, "+"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindMinus, "-"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindStar, "*"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindSlash, "/"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindPlus, "+"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindMinus, "-"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindStar, "*"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindSlash, "/"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "comparison_operators",
 			input: "== != < <= > >=",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEqEq, "=="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindExclEq, "!="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindLt, "<"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindLtEq, "<="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindGt, ">"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindGtEq, ">="),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEqEq, "=="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindExclEq, "!="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindLt, "<"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindLtEq, "<="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindGt, ">"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindGtEq, ">="),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "assignment_operators",
 			input: "= += -= *= /=",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindEq, "="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindPlusEq, "+="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindHyphEq, "-="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindStarEq, "*="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindSlashEq, "/="),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindEq, "="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindPlusEq, "+="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindHyphEq, "-="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindStarEq, "*="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindSlashEq, "/="),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "special_operators",
 			input: "=> .. .",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindArrow, "=>"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindDots, ".."),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindDot, "."),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindArrow, "=>"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindDots, ".."),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindDot, "."),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Keywords
 		{
 			name:  "keywords",
 			input: "let set show if else for in while",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLet, "let"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindSet, "set"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindShow, "show"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindIf, "if"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindElse, "else"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindFor, "for"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindIn, "in"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindWhile, "while"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLet, "let"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindSet, "set"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindShow, "show"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindIf, "if"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindElse, "else"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindFor, "for"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindIn, "in"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindWhile, "while"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "more_keywords",
 			input: "break continue return import include as context",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindBreak, "break"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindContinue, "continue"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindReturn, "return"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindImport, "import"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInclude, "include"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindAs, "as"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindContext, "context"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindBreak, "break"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindContinue, "continue"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindReturn, "return"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindImport, "import"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInclude, "include"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindAs, "as"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindContext, "context"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "boolean_operators",
 			input: "not and or",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindNot, "not"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindAnd, "and"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindOr, "or"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindNot, "not"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindAnd, "and"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindOr, "or"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Literals
 		{
 			name:  "literals",
 			input: "none auto true false",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindNone, "none"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindAuto, "auto"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindBool, "true"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindBool, "false"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindNone, "none"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindAuto, "auto"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindBool, "true"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindBool, "false"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Identifiers
 		{
 			name:  "identifiers",
 			input: "foo bar_baz _private",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindIdent, "foo"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindIdent, "bar_baz"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindIdent, "_private"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindIdent, "foo"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindIdent, "bar_baz"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindIdent, "_private"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "underscore_alone",
 			input: "_ + _",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindUnderscore, "_"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindPlus, "+"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindUnderscore, "_"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindUnderscore, "_"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindPlus, "+"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindUnderscore, "_"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Numbers
 		{
 			name:  "integers",
 			input: "0 42 123",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindInt, "0"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "42"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "123"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindInt, "0"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "42"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "123"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "floats",
 			input: "3.14 0.5 .25",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindFloat, "3.14"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindFloat, "0.5"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindFloat, ".25"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindFloat, "3.14"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindFloat, "0.5"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindFloat, ".25"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "scientific_notation",
 			input: "1.2e3 1e-4 1E+5",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindFloat, "1.2e3"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindFloat, "1e-4"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindFloat, "1E+5"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindFloat, "1.2e3"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindFloat, "1e-4"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindFloat, "1E+5"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "scientific_notation_invalid_suffix",
 			input: "1.2e",
-			expected: []syntax.Node{
-				syntax.Error("invalid number suffix: \"e\"", "1.2e"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid number suffix: \"e\"", "1.2e"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "hex_octal_binary",
 			input: "0xff 0o77 0b101",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindInt, "0xff"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "0o77"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "0b101"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindInt, "0xff"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "0o77"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "0b101"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "numeric_with_units",
 			input: "12pt 3.5em 90deg 50%",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindNumeric, "12pt"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindNumeric, "3.5em"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindNumeric, "90deg"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindNumeric, "50%"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindNumeric, "12pt"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindNumeric, "3.5em"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindNumeric, "90deg"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindNumeric, "50%"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "number_followed_by_dot",
 			input: "1.foo",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindInt, "1"),
-				syntax.Leaf(syntax.KindDot, "."),
-				syntax.Leaf(syntax.KindIdent, "foo"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindInt, "1"),
+					b.leaf(syntax.KindDot, "."),
+					b.leaf(syntax.KindIdent, "foo"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Strings
 		{
 			name:  "string_simple",
 			input: `"hello"`,
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStr, `"hello"`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"hello"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_with_escapes",
 			input: `"hello\nworld"`,
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStr, `"hello\nworld"`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"hello\nworld"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_unicode",
 			input: `"\u{1F600}"`,
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStr, `"\u{1F600}"`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"\u{1F600}"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_escaped_quote",
 			input: `"\""`,
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStr, `"\""`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"\""`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_escaped_backslash",
 			input: `"\\"`,
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindStr, `"\\"`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"\\"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_invalid_escape",
 			input: `"\z"`,
-			expected: []syntax.Node{
-				syntax.Error("invalid escape sequence", `"\z"`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid escape sequence", `"\z"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "string_unclosed",
 			input: `"hello`,
-			expected: []syntax.Node{
-				syntax.Error("unclosed string", `"hello`),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unclosed string", `"hello`),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Labels in code mode
 		{
 			name:  "label_in_code",
 			input: "<my-label>",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLabel, "<my-label>"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLabel, "<my-label>"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Comments work in code mode too
 		{
 			name:  "comments_in_code",
 			input: "x // comment\ny",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindIdent, "x"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindLineComment, "// comment"),
-				syntax.Leaf(syntax.KindSpace, "\n"),
-				syntax.Leaf(syntax.KindIdent, "y"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindIdent, "x"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindLineComment, "// comment"),
+					b.leaf(syntax.KindSpace, "\n"),
+					b.leaf(syntax.KindIdent, "y"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		// Mixed expression
 		{
 			name:  "expression",
 			input: "let x = 1 + 2",
-			expected: []syntax.Node{
-				syntax.Leaf(syntax.KindLet, "let"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindIdent, "x"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindEq, "="),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "1"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindPlus, "+"),
-				syntax.Leaf(syntax.KindSpace, " "),
-				syntax.Leaf(syntax.KindInt, "2"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLet, "let"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindIdent, "x"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindEq, "="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "1"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindPlus, "+"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindInt, "2"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "invalid_number_suffix",
 			input: "12invalid",
-			expected: []syntax.Node{
-				syntax.Error("invalid number suffix: \"invalid\"", "12invalid"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid number suffix: \"invalid\"", "12invalid"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "hex_with_suffix",
 			input: "0x12pt",
-			expected: []syntax.Node{
-				syntax.Error("invalid hexadecimal number", "0x12pt"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid hexadecimal number", "0x12pt"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "invalid_hex",
 			input: "0xG",
-			expected: []syntax.Node{
-				syntax.Error("invalid hexadecimal number", "0xG"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid hexadecimal number", "0xG"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 		{
 			name:  "unexpected_char",
 			input: "%",
-			expected: []syntax.Node{
-				syntax.Error("unexpected character", "%"),
-				syntax.Leaf(syntax.KindEnd, ""),
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("unexpected character", "%"),
+					b.leaf(syntax.KindEnd, ""),
+				}
 			},
 		},
 	}
@@ -1143,7 +1358,10 @@ func TestScanner_CodeMode(t *testing.T) {
 				}
 			}
 
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			b := &nodeBuilder{}
+			expected := tt.expected(b)
+
+			if diff := cmp.Diff(expected, got); diff != "" {
 				t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
 			}
 		})

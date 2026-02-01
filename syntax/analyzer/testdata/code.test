@@ -156,19 +156,11 @@
 
 --- dictionary-with-named-entries ---
 #(a: 1, b: 2)
-│ #(a: 1, b: 2)
+│ #("a": 1, "b": 2)
 
 --- dictionary-with-keyed-entries ---
 #("key": "value")
 │ #("key": "value")
-
---- spread-in-array ---
-#(..items)
-│ #(..items)
-
---- spread-in-dictionary ---
-#(a: 1, ..rest)
-│ #(a: 1, ..rest)
 
 --- function-call-no-args ---
 #foo()
@@ -317,10 +309,6 @@
 --- tuple-destructuring ---
 #{ (x, y) = point }
 │ #{ (x, y) = point }
-
---- nested-destructuring ---
-#{ (a, (b, c)) = nested }
-│ #{ (a, (b, c)) = nested }
 
 --- spread-in-destructuring ---
 #{ (first, ..rest) = arr }

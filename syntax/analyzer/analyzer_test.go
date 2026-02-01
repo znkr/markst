@@ -26,6 +26,10 @@ func TestAnalyze(t *testing.T) {
 			tests := testfile.Read(t, file)
 			for i, tc := range tests {
 				t.Run(tc.Name, func(t *testing.T) {
+					if tc.Skip != "" {
+						t.Skip(tc.Skip)
+					}
+
 					node := parser.Parse(tc.Input)
 					content := analyzer.Analyze(node)
 					got := ir.Format(content)

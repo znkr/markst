@@ -2,55 +2,55 @@ package ir
 
 import (
 	"testing"
+	"unique"
 
 	"znkr.io/diff/textdiff"
 	"znkr.io/writst/syntax"
 )
 
+// Helper functions for creating IR nodes
+func id(s string) *Ident                     { return &Ident{Name: unique.Make(s)} }
+func text(s string) *Const                   { return &Const{Value: &Text{Value: s}} }
+func str(s string) *Const                    { return &Const{Value: String(s)} }
+func num(n int) *Const                       { return &Const{Value: Int(n)} }
+func param(s string) *PositionalParam        { return &PositionalParam{id(s)} }
+func destruct(s string) *DestructIdent       { return &DestructIdent{id(s)} }
+func narg(name string, expr Expr) *NamedArg  { return &NamedArg{Name: unique.Make(name), Expr: expr} }
+
 func TestFormat(t *testing.T) {
 	tests := []struct {
 		name    string
-		content Content
+		content ContentExpr
 		want    string
 	}{
 		{
 			name:    "empty_content",
-			content: Content{},
+			content: ContentExpr{},
 			want:    "",
 		},
 		{
-			name: "text",
-			content: Content{
-				&Text{Value: "hello"},
-			},
-			want: "#text(\"hello\")\n",
+			name:    "text",
+			content: ContentExpr{text("hello")},
+			want:    "#text(\"hello\")\n",
 		},
 		{
-			name: "heading",
-			content: Content{
-				&Heading{Level: 1, Body: Content{&Text{Value: "Title"}}},
-			},
-			want: "#heading(level: 1)[#text(\"Title\")]\n",
+			name:    "heading",
+			content: ContentExpr{&HeadingExpr{Level: 1, Body: ContentExpr{text("Title")}}},
+			want:    "#heading(level: 1)[#text(\"Title\")]\n",
 		},
 		{
-			name: "strong",
-			content: Content{
-				&Strong{Body: Content{&Text{Value: "bold"}}},
-			},
-			want: "#strong[#text(\"bold\")]\n",
+			name:    "strong",
+			content: ContentExpr{&StrongExpr{Body: ContentExpr{text("bold")}}},
+			want:    "#strong[#text(\"bold\")]\n",
 		},
 		{
-			name: "emph",
-			content: Content{
-				&Emph{Body: Content{&Text{Value: "italic"}}},
-			},
-			want: "#emph[#text(\"italic\")]\n",
+			name:    "emph",
+			content: ContentExpr{&EmphExpr{Body: ContentExpr{text("italic")}}},
+			want:    "#emph[#text(\"italic\")]\n",
 		},
 		{
-			name: "raw_block",
-			content: Content{
-				&Raw{Block: true, Lang: "go", Lines: []string{"package main", "func main() {}"}},
-			},
+			name:    "raw_block",
+			content: ContentExpr{&Const{Value: &Raw{Block: true, Lang: "go", Lines: []string{"package main", "func main() {}"}}}},
 			want: `#raw(
   block: true,
   lang: "go",
@@ -60,71 +60,54 @@ func TestFormat(t *testing.T) {
 `,
 		},
 		{
-			name: "raw_inline",
-			content: Content{
-				&Raw{Block: false, Lines: []string{"code"}},
-			},
-			want: "#raw(\"code\")\n",
+			name:    "raw_inline",
+			content: ContentExpr{&Const{Value: &Raw{Block: false, Lines: []string{"code"}}}},
+			want:    "#raw(\"code\")\n",
 		},
 		{
-			name: "linebreak",
-			content: Content{
-				&Linebreak{},
-			},
-			want: "#linebreak()\n",
+			name:    "linebreak",
+			content: ContentExpr{&Const{Value: &Linebreak{}}},
+			want:    "#linebreak()\n",
 		},
 		{
-			name: "parbreak",
-			content: Content{
-				&Parbreak{},
-			},
-			want: "#parbreak()\n",
+			name:    "parbreak",
+			content: ContentExpr{&Const{Value: &Parbreak{}}},
+			want:    "#parbreak()\n",
 		},
 		{
-			name: "link",
-			content: Content{
-				&Link{Dest: "https://example.com", Body: Content{&Text{Value: "example"}}},
-			},
-			want: "#link(dest: \"https://example.com\")[#text(\"example\")]\n",
+			name:    "link",
+			content: ContentExpr{&LinkExpr{Dest: "https://example.com", Body: ContentExpr{text("example")}}},
+			want:    "#link(dest: \"https://example.com\")[#text(\"example\")]\n",
 		},
 		{
 			name: "list",
-			content: Content{
-				&List{Items: []ListItem{
-					{Body: Content{&Text{Value: "item 1"}}},
-					{Body: Content{&Text{Value: "item 2"}}},
-				}},
-			},
+			content: ContentExpr{&Const{Value: &List{Items: []ListItem{
+				{Body: &Text{Value: "item 1"}},
+				{Body: &Text{Value: "item 2"}},
+			}}}},
 			want: "#list(list.item[#text(\"item 1\")], list.item[#text(\"item 2\")])\n",
 		},
 		{
 			name: "enum",
-			content: Content{
-				&Enum{Items: []EnumItem{
-					{Number: 1, Body: Content{&Text{Value: "first"}}},
-					{Number: 2, Body: Content{&Text{Value: "second"}}},
-				}},
-			},
-			want: `#enum(enum.item(1)[#text("first")], enum.item(2)[#text("second")])
-`,
+			content: ContentExpr{&Const{Value: &Enum{Items: []EnumItem{
+				{Number: 1, Body: &Text{Value: "first"}},
+				{Number: 2, Body: &Text{Value: "second"}},
+			}}}},
+			want: "#enum(enum.item(1)[#text(\"first\")], enum.item(2)[#text(\"second\")])\n",
 		},
 		{
 			name: "terms",
-			content: Content{
-				&Terms{Items: []TermItem{
-					{Term: Content{&Text{Value: "key"}}, Description: Content{&Text{Value: "value"}}},
-				}},
-			},
+			content: ContentExpr{&Const{Value: &Terms{Items: []TermItem{
+				{Term: &Text{Value: "key"}, Description: &Text{Value: "value"}},
+			}}}},
 			want: "#terms(terms.item[#text(\"key\")][#text(\"value\")])\n",
 		},
 		{
 			name: "nested_content",
-			content: Content{
-				&Heading{Level: 1, Body: Content{
-					&Strong{Body: Content{&Text{Value: "Important"}}},
-				}},
-				&Text{Value: "Some text with "},
-				&Emph{Body: Content{&Text{Value: "emphasis"}}},
+			content: ContentExpr{
+				&HeadingExpr{Level: 1, Body: ContentExpr{&StrongExpr{Body: ContentExpr{text("Important")}}}},
+				text("Some text with "),
+				&EmphExpr{Body: ContentExpr{text("emphasis")}},
 			},
 			want: `#heading(level: 1)[#strong[#text("Important")]]
 #text("Some text with ")
@@ -133,15 +116,13 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "multi_item_content_block",
-			content: Content{
-				&List{Items: []ListItem{
-					{Body: Content{
-						&Text{Value: "first "},
-						&Strong{Body: Content{&Text{Value: "bold"}}},
-						&Text{Value: " last"},
-					}},
+			content: ContentExpr{&Const{Value: &List{Items: []ListItem{
+				{Body: Contents{
+					&Text{Value: "first "},
+					&Strong{Body: &Text{Value: "bold"}},
+					&Text{Value: " last"},
 				}},
-			},
+			}}}},
 			want: `#list(list.item[
   #text("first ")
   #strong[#text("bold")]
@@ -151,12 +132,10 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "heading_with_multi_item_body",
-			content: Content{
-				&Heading{Level: 2, Body: Content{
-					&Text{Value: "Hello "},
-					&Emph{Body: Content{&Text{Value: "world"}}},
-				}},
-			},
+			content: ContentExpr{&HeadingExpr{Level: 2, Body: ContentExpr{
+				text("Hello "),
+				&EmphExpr{Body: ContentExpr{text("world")}},
+			}}},
 			want: `#heading(level: 2)[
   #text("Hello ")
   #emph[#text("world")]
@@ -165,21 +144,17 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "deeply_nested_markup",
-			content: Content{
-				&List{Items: []ListItem{
-					{Body: Content{
-						&Text{Value: "outer"},
-						&List{Items: []ListItem{
-							{Body: Content{
-								&Text{Value: "middle"},
-								&List{Items: []ListItem{
-									{Body: Content{&Text{Value: "inner"}}},
-								}},
-							}},
+			content: ContentExpr{&Const{Value: &List{Items: []ListItem{
+				{Body: Contents{
+					&Text{Value: "outer"},
+					&List{Items: []ListItem{
+						{Body: Contents{
+							&Text{Value: "middle"},
+							&List{Items: []ListItem{{Body: &Text{Value: "inner"}}}},
 						}},
 					}},
 				}},
-			},
+			}}}},
 			want: `#list(list.item[
   #text("outer")
   #list(list.item[
@@ -191,58 +166,36 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "deeply_nested_code_expressions",
-			content: Content{
-				&FuncCall{
-					Callee: &Ident{Name: "outer"},
-					Args: []Expr{
-						&FuncCall{
-							Callee: &Ident{Name: "middle"},
-							Args: []Expr{
-								&FuncCall{
-									Callee: &Ident{Name: "inner"},
-									Args:   []Expr{&Int{Value: 42}},
-								},
-							},
-						},
-					},
-				},
-			},
+			content: ContentExpr{&FuncCall{
+				Callee: id("outer"),
+				Args: []Arg{&ExprArg{&FuncCall{
+					Callee: id("middle"),
+					Args:   []Arg{&ExprArg{&FuncCall{Callee: id("inner"), Args: []Arg{&ExprArg{num(42)}}}}},
+				}}},
+			}},
 			want: "#outer(middle(inner(42)))\n",
 		},
 		{
 			name: "nested_conditionals",
-			content: Content{
-				&Conditional{
-					Condition: &Bool{Value: true},
-					Then: &CodeBlock{Exprs: []Expr{
-						&Conditional{
-							Condition: &Bool{Value: false},
-							Then: &CodeBlock{Exprs: []Expr{
-								&Int{Value: 1},
-							}},
-							Else: &CodeBlock{Exprs: []Expr{
-								&Int{Value: 2},
-							}},
-						},
-					}},
-				},
-			},
+			content: ContentExpr{&Conditional{
+				Condition: &Const{Value: Bool(true)},
+				Then: &CodeBlock{Body: []Expr{&Conditional{
+					Condition: &Const{Value: Bool(false)},
+					Then:      &CodeBlock{Body: []Expr{num(1)}},
+					Else:      &CodeBlock{Body: []Expr{num(2)}},
+				}}},
+			}},
 			want: "#if true { if false { 1 } else { 2 } }\n",
 		},
 		{
 			name: "nested_arrays_and_dicts",
-			content: Content{
-				&Array{Items: []Expr{
-					&Array{Items: []Expr{
-						&Dict{Items: []Expr{
-							&Named{Name: "key", Value: &Array{Items: []Expr{
-								&Int{Value: 1},
-								&Int{Value: 2},
-							}}},
-						}},
+			content: ContentExpr{&ArrayExpr{Elements: []Expr{
+				&ArrayExpr{Elements: []Expr{
+					&DictExpr{Entries: []DictItemExpr{
+						{Key: id("key"), Value: &ArrayExpr{Elements: []Expr{num(1), num(2)}}},
 					}},
 				}},
-			},
+			}}},
 			want: "#(((key: (1, 2)),),)\n",
 		},
 	}
@@ -260,305 +213,282 @@ func TestFormat(t *testing.T) {
 func TestFormatCodeExpressions(t *testing.T) {
 	tests := []struct {
 		name    string
-		content Content
+		content ContentExpr
 		want    string
 	}{
 		// Literals
 		{
 			name:    "none",
-			content: Content{&None{}},
+			content: ContentExpr{&Const{Value: None{}}},
 			want:    "#none\n",
 		},
 		{
 			name:    "auto",
-			content: Content{&Auto{}},
+			content: ContentExpr{&Const{Value: Auto{}}},
 			want:    "#auto\n",
 		},
 		{
 			name:    "bool_true",
-			content: Content{&Bool{Value: true}},
+			content: ContentExpr{&Const{Value: Bool(true)}},
 			want:    "#true\n",
 		},
 		{
 			name:    "bool_false",
-			content: Content{&Bool{Value: false}},
+			content: ContentExpr{&Const{Value: Bool(false)}},
 			want:    "#false\n",
 		},
 		{
 			name:    "int",
-			content: Content{&Int{Value: 42}},
+			content: ContentExpr{num(42)},
 			want:    "#42\n",
 		},
 		{
 			name:    "float",
-			content: Content{&Float{Value: 3.14}},
+			content: ContentExpr{&Const{Value: Float(3.14)}},
 			want:    "#3.14\n",
 		},
 		{
 			name:    "numeric",
-			content: Content{&Numeric{Value: 12, Unit: UnitPt}},
+			content: ContentExpr{&Const{Value: Numeric{Value: 12, Unit: UnitPt}}},
 			want:    "#12pt\n",
 		},
 		{
 			name:    "string",
-			content: Content{&Str{Value: "hello"}},
+			content: ContentExpr{str("hello")},
 			want:    "#\"hello\"\n",
 		},
 		{
 			name:    "string_with_escapes",
-			content: Content{&Str{Value: "line1\nline2\ttab"}},
+			content: ContentExpr{str("line1\nline2\ttab")},
 			want:    "#\"line1\\nline2\\ttab\"\n",
 		},
 		{
 			name:    "ident",
-			content: Content{&Ident{Name: "foo"}},
+			content: ContentExpr{id("foo")},
 			want:    "#foo\n",
 		},
 		{
 			name:    "underscore",
-			content: Content{&Underscore{}},
+			content: ContentExpr{id("_")},
 			want:    "#_\n",
 		},
 
 		// Code blocks
 		{
 			name:    "code_block_empty",
-			content: Content{&CodeBlock{Exprs: nil}},
+			content: ContentExpr{&CodeBlock{Body: nil}},
 			want:    "#{ }\n",
 		},
 		{
 			name:    "code_block_single",
-			content: Content{&CodeBlock{Exprs: []Expr{&Int{Value: 1}}}},
+			content: ContentExpr{&CodeBlock{Body: []Expr{num(1)}}},
 			want:    "#{ 1 }\n",
 		},
 		{
 			name:    "code_block_multiple",
-			content: Content{&CodeBlock{Exprs: []Expr{&Int{Value: 1}, &Int{Value: 2}, &Int{Value: 3}}}},
+			content: ContentExpr{&CodeBlock{Body: []Expr{num(1), num(2), num(3)}}},
 			want:    "#{ 1; 2; 3 }\n",
 		},
 
 		// Content block
 		{
 			name:    "content_block",
-			content: Content{&ContentBlock{Body: Content{&Text{Value: "hello"}}}},
+			content: ContentExpr{&ContentBlock{Body: ContentExpr{text("hello")}}},
 			want:    "#[#text(\"hello\")]\n",
 		},
 
 		// Parenthesized
 		{
 			name:    "parenthesized",
-			content: Content{&Parenthesized{Body: &Int{Value: 1}}},
+			content: ContentExpr{&Parenthesized{Body: num(1)}},
 			want:    "#(1)\n",
 		},
 
 		// Arrays
 		{
 			name:    "array_empty",
-			content: Content{&Array{Items: nil}},
+			content: ContentExpr{&ArrayExpr{Elements: nil}},
 			want:    "#()\n",
 		},
 		{
 			name:    "array_single",
-			content: Content{&Array{Items: []Expr{&Int{Value: 1}}}},
+			content: ContentExpr{&ArrayExpr{Elements: []Expr{num(1)}}},
 			want:    "#(1,)\n",
 		},
 		{
 			name:    "array_multiple",
-			content: Content{&Array{Items: []Expr{&Int{Value: 1}, &Int{Value: 2}, &Int{Value: 3}}}},
+			content: ContentExpr{&ArrayExpr{Elements: []Expr{num(1), num(2), num(3)}}},
 			want:    "#(1, 2, 3)\n",
-		},
-		{
-			name:    "array_single_spread",
-			content: Content{&Array{Items: []Expr{&Spread{Expr: &Ident{Name: "items"}}}}},
-			want:    "#(..items)\n",
 		},
 
 		// Dictionaries
 		{
 			name:    "dict_empty",
-			content: Content{&Dict{Items: nil}},
+			content: ContentExpr{&DictExpr{Entries: nil}},
 			want:    "#(:)\n",
 		},
 		{
 			name:    "dict_named",
-			content: Content{&Dict{Items: []Expr{&Named{Name: "a", Value: &Int{Value: 1}}}}},
+			content: ContentExpr{&DictExpr{Entries: []DictItemExpr{{Key: id("a"), Value: num(1)}}}},
 			want:    "#(a: 1)\n",
 		},
 		{
 			name:    "dict_keyed",
-			content: Content{&Dict{Items: []Expr{&Keyed{Key: &Str{Value: "key"}, Value: &Str{Value: "value"}}}}},
+			content: ContentExpr{&DictExpr{Entries: []DictItemExpr{{Key: str("key"), Value: str("value")}}}},
 			want:    "#(\"key\": \"value\")\n",
-		},
-
-		// Spread
-		{
-			name:    "spread",
-			content: Content{&Spread{Expr: &Ident{Name: "items"}}},
-			want:    "#..items\n",
 		},
 
 		// Operators
 		{
 			name:    "unary_minus",
-			content: Content{&Unary{Op: syntax.Neg, Operand: &Int{Value: 1}}},
+			content: ContentExpr{&Unary{Op: syntax.Neg, Operand: num(1)}},
 			want:    "#-1\n",
 		},
 		{
 			name:    "unary_not",
-			content: Content{&Unary{Op: syntax.Not, Operand: &Bool{Value: true}}},
+			content: ContentExpr{&Unary{Op: syntax.Not, Operand: &Const{Value: Bool(true)}}},
 			want:    "#not true\n",
 		},
 		{
 			name:    "binary_add",
-			content: Content{&Binary{Left: &Int{Value: 1}, Op: syntax.Add, Right: &Int{Value: 2}}},
+			content: ContentExpr{&Binary{Left: num(1), Op: syntax.Add, Right: num(2)}},
 			want:    "#1 + 2\n",
 		},
 		{
 			name:    "binary_eq",
-			content: Content{&Binary{Left: &Ident{Name: "x"}, Op: syntax.Eq, Right: &Int{Value: 1}}},
+			content: ContentExpr{&Binary{Left: id("x"), Op: syntax.Eq, Right: num(1)}},
 			want:    "#x == 1\n",
 		},
 		{
 			name:    "binary_assign",
-			content: Content{&Binary{Left: &Ident{Name: "x"}, Op: syntax.Assign, Right: &Int{Value: 1}}},
+			content: ContentExpr{&Binary{Left: id("x"), Op: syntax.Assign, Right: num(1)}},
 			want:    "#x = 1\n",
 		},
 
 		// Field access
 		{
 			name:    "field_access",
-			content: Content{&FieldAccess{Target: &Ident{Name: "foo"}, Field: "bar"}},
+			content: ContentExpr{&FieldAccess{Target: id("foo"), Field: "bar"}},
 			want:    "#foo.bar\n",
 		},
 		{
 			name:    "field_access_nested",
-			content: Content{&FieldAccess{Target: &FieldAccess{Target: &Ident{Name: "a"}, Field: "b"}, Field: "c"}},
+			content: ContentExpr{&FieldAccess{Target: &FieldAccess{Target: id("a"), Field: "b"}, Field: "c"}},
 			want:    "#a.b.c\n",
 		},
 
 		// Function calls
 		{
 			name:    "func_call_no_args",
-			content: Content{&FuncCall{Callee: &Ident{Name: "foo"}, Args: nil}},
+			content: ContentExpr{&FuncCall{Callee: id("foo")}},
 			want:    "#foo()\n",
 		},
 		{
 			name:    "func_call_with_args",
-			content: Content{&FuncCall{Callee: &Ident{Name: "foo"}, Args: []Expr{&Int{Value: 1}, &Int{Value: 2}}}},
+			content: ContentExpr{&FuncCall{Callee: id("foo"), Args: []Arg{&ExprArg{num(1)}, &ExprArg{num(2)}}}},
 			want:    "#foo(1, 2)\n",
 		},
 		{
 			name:    "func_call_with_named_args",
-			content: Content{&FuncCall{Callee: &Ident{Name: "foo"}, Args: []Expr{&Named{Name: "a", Value: &Int{Value: 1}}}}},
+			content: ContentExpr{&FuncCall{Callee: id("foo"), Args: []Arg{narg("a", num(1))}}},
 			want:    "#foo(a: 1)\n",
 		},
 		{
 			name:    "func_call_with_content",
-			content: Content{&FuncCall{Callee: &Ident{Name: "foo"}, Args: nil, Content: []Content{{&Text{Value: "hello"}}}}},
+			content: ContentExpr{&FuncCall{Callee: id("foo"), Content: []ContentExpr{{text("hello")}}}},
 			want:    "#foo()[#text(\"hello\")]\n",
 		},
 		{
-			name: "func_call_with_args_and_content",
-			content: Content{&FuncCall{
-				Callee:  &Ident{Name: "foo"},
-				Args:    []Expr{&Int{Value: 1}},
-				Content: []Content{{&Text{Value: "hello"}}},
-			}},
-			want: "#foo(1)[#text(\"hello\")]\n",
+			name:    "func_call_with_args_and_content",
+			content: ContentExpr{&FuncCall{Callee: id("foo"), Args: []Arg{&ExprArg{num(1)}}, Content: []ContentExpr{{text("hello")}}}},
+			want:    "#foo(1)[#text(\"hello\")]\n",
 		},
 		{
 			name:    "method_call",
-			content: Content{&FuncCall{Callee: &FieldAccess{Target: &Ident{Name: "foo"}, Field: "bar"}, Args: nil}},
+			content: ContentExpr{&FuncCall{Callee: &FieldAccess{Target: id("foo"), Field: "bar"}}},
 			want:    "#foo.bar()\n",
 		},
 
 		// Closures
 		{
 			name:    "closure_single_param",
-			content: Content{&Closure{Params: []Expr{&Ident{Name: "x"}}, Body: &Binary{Left: &Ident{Name: "x"}, Op: syntax.Add, Right: &Int{Value: 1}}}},
+			content: ContentExpr{&Closure{Params: []Param{param("x")}, Body: &Binary{Left: id("x"), Op: syntax.Add, Right: num(1)}}},
 			want:    "#x => x + 1\n",
 		},
 		{
 			name:    "closure_multi_param",
-			content: Content{&Closure{Params: []Expr{&Ident{Name: "x"}, &Ident{Name: "y"}}, Body: &Binary{Left: &Ident{Name: "x"}, Op: syntax.Add, Right: &Ident{Name: "y"}}}},
+			content: ContentExpr{&Closure{Params: []Param{param("x"), param("y")}, Body: &Binary{Left: id("x"), Op: syntax.Add, Right: id("y")}}},
 			want:    "#(x, y) => x + y\n",
 		},
 		{
 			name:    "closure_spread_param",
-			content: Content{&Closure{Params: []Expr{&Spread{Expr: &Ident{Name: "args"}}}, Body: &Ident{Name: "args"}}},
+			content: ContentExpr{&Closure{Params: []Param{&SpreadParam{id("args")}}, Body: id("args")}},
 			want:    "#(..args) => args\n",
 		},
 		{
 			name:    "closure_named",
-			content: Content{&Closure{Name: "add", Params: []Expr{&Ident{Name: "x"}, &Ident{Name: "y"}}, Body: &Binary{Left: &Ident{Name: "x"}, Op: syntax.Add, Right: &Ident{Name: "y"}}}},
+			content: ContentExpr{&Closure{Name: id("add"), Params: []Param{param("x"), param("y")}, Body: &Binary{Left: id("x"), Op: syntax.Add, Right: id("y")}}},
 			want:    "#add(x, y) = x + y\n",
 		},
 
 		// Let bindings
 		{
 			name:    "let_simple",
-			content: Content{&LetBinding{Pattern: &Ident{Name: "x"}, Value: &Int{Value: 1}}},
+			content: ContentExpr{&LetBinding{Pattern: []DestructPattern{destruct("x")}, Value: num(1)}},
 			want:    "#let x = 1\n",
 		},
 		{
 			name:    "let_pattern",
-			content: Content{&LetBinding{Pattern: &Destructuring{Items: []Expr{&Ident{Name: "a"}, &Ident{Name: "b"}}}, Value: &Ident{Name: "pair"}}},
+			content: ContentExpr{&LetBinding{Pattern: []DestructPattern{destruct("a"), destruct("b")}, Value: id("pair")}},
 			want:    "#let (a, b) = pair\n",
 		},
 		{
-			name: "let_function",
-			content: Content{&LetBinding{
-				Pattern: &Ident{Name: "add"},
-				Value:   &Closure{Name: "add", Params: []Expr{&Ident{Name: "x"}, &Ident{Name: "y"}}, Body: &Binary{Left: &Ident{Name: "x"}, Op: syntax.Add, Right: &Ident{Name: "y"}}},
-			}},
-			want: "#let add(x, y) = x + y\n",
+			name:    "let_function",
+			content: ContentExpr{&LetBinding{Pattern: []DestructPattern{destruct("add")}, Value: &Closure{Name: id("add"), Params: []Param{param("x"), param("y")}, Body: &Binary{Left: id("x"), Op: syntax.Add, Right: id("y")}}}},
+			want:    "#let add(x, y) = x + y\n",
 		},
 
 		// Set rules
 		{
 			name:    "set_rule",
-			content: Content{&SetRule{Target: &Ident{Name: "text"}, Args: []Expr{&Named{Name: "size", Value: &Numeric{Value: 12, Unit: UnitPt}}}}},
+			content: ContentExpr{&SetRule{Target: id("text"), Args: []Arg{narg("size", &Const{Value: Numeric{Value: 12, Unit: UnitPt}})}}},
 			want:    "#set text(size: 12pt)\n",
 		},
 		{
 			name:    "set_rule_with_condition",
-			content: Content{&SetRule{Target: &Ident{Name: "text"}, Args: []Expr{&Ident{Name: "red"}}, Condition: &Ident{Name: "enabled"}}},
+			content: ContentExpr{&SetRule{Target: id("text"), Args: []Arg{&ExprArg{id("red")}}, Condition: id("enabled")}},
 			want:    "#set text(red) if enabled\n",
 		},
 
 		// Show rules
 		{
 			name:    "show_rule_no_selector",
-			content: Content{&ShowRule{Selector: nil, Transform: &Ident{Name: "emph"}}},
+			content: ContentExpr{&ShowRule{Transform: id("emph")}},
 			want:    "#show: emph\n",
 		},
 		{
 			name:    "show_rule_with_selector",
-			content: Content{&ShowRule{Selector: &Ident{Name: "heading"}, Transform: &Closure{Params: []Expr{&Ident{Name: "it"}}, Body: &FuncCall{Callee: &Ident{Name: "emph"}, Args: []Expr{&FieldAccess{Target: &Ident{Name: "it"}, Field: "body"}}}}}},
+			content: ContentExpr{&ShowRule{Selector: id("heading"), Transform: &Closure{Params: []Param{param("it")}, Body: &FuncCall{Callee: id("emph"), Args: []Arg{&ExprArg{&FieldAccess{Target: id("it"), Field: "body"}}}}}}},
 			want:    "#show heading: it => emph(it.body)\n",
 		},
 
 		// Conditionals
 		{
 			name:    "if_only",
-			content: Content{&Conditional{Condition: &Ident{Name: "x"}, Then: &CodeBlock{Exprs: []Expr{&Ident{Name: "y"}}}}},
+			content: ContentExpr{&Conditional{Condition: id("x"), Then: &CodeBlock{Body: []Expr{id("y")}}}},
 			want:    "#if x { y }\n",
 		},
 		{
 			name:    "if_else",
-			content: Content{&Conditional{Condition: &Ident{Name: "x"}, Then: &CodeBlock{Exprs: []Expr{&Ident{Name: "y"}}}, Else: &CodeBlock{Exprs: []Expr{&Ident{Name: "z"}}}}},
+			content: ContentExpr{&Conditional{Condition: id("x"), Then: &CodeBlock{Body: []Expr{id("y")}}, Else: &CodeBlock{Body: []Expr{id("z")}}}},
 			want:    "#if x { y } else { z }\n",
 		},
 		{
 			name: "if_else_if",
-			content: Content{&Conditional{
-				Condition: &Ident{Name: "a"},
-				Then:      &CodeBlock{Exprs: []Expr{&Int{Value: 1}}},
-				Else: &Conditional{
-					Condition: &Ident{Name: "b"},
-					Then:      &CodeBlock{Exprs: []Expr{&Int{Value: 2}}},
-					Else:      &CodeBlock{Exprs: []Expr{&Int{Value: 3}}},
-				},
+			content: ContentExpr{&Conditional{
+				Condition: id("a"),
+				Then:      &CodeBlock{Body: []Expr{num(1)}},
+				Else:      &Conditional{Condition: id("b"), Then: &CodeBlock{Body: []Expr{num(2)}}, Else: &CodeBlock{Body: []Expr{num(3)}}},
 			}},
 			want: "#if a { 1 } else if b { 2 } else { 3 }\n",
 		},
@@ -566,62 +496,57 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Loops
 		{
 			name:    "while_loop",
-			content: Content{&WhileLoop{Condition: &Ident{Name: "x"}, Body: &CodeBlock{Exprs: []Expr{&Ident{Name: "y"}}}}},
+			content: ContentExpr{&WhileLoop{Condition: id("x"), Body: &CodeBlock{Body: []Expr{id("y")}}}},
 			want:    "#while x { y }\n",
 		},
 		{
 			name:    "for_loop",
-			content: Content{&ForLoop{Pattern: &Ident{Name: "x"}, Iterable: &Ident{Name: "items"}, Body: &CodeBlock{Exprs: []Expr{&Ident{Name: "x"}}}}},
+			content: ContentExpr{&ForLoop{Pattern: []DestructPattern{destruct("x")}, Iterable: id("items"), Body: &CodeBlock{Body: []Expr{id("x")}}}},
 			want:    "#for x in items { x }\n",
 		},
 		{
 			name:    "for_loop_pattern",
-			content: Content{&ForLoop{Pattern: &Destructuring{Items: []Expr{&Ident{Name: "k"}, &Ident{Name: "v"}}}, Iterable: &Ident{Name: "dict"}, Body: &CodeBlock{Exprs: []Expr{&Ident{Name: "k"}}}}},
+			content: ContentExpr{&ForLoop{Pattern: []DestructPattern{destruct("k"), destruct("v")}, Iterable: id("dict"), Body: &CodeBlock{Body: []Expr{id("k")}}}},
 			want:    "#for (k, v) in dict { k }\n",
 		},
 
 		// Control flow
 		{
 			name:    "break",
-			content: Content{&LoopBreak{}},
+			content: ContentExpr{&LoopBreak{}},
 			want:    "#break\n",
 		},
 		{
 			name:    "continue",
-			content: Content{&LoopContinue{}},
+			content: ContentExpr{&LoopContinue{}},
 			want:    "#continue\n",
 		},
 		{
 			name:    "return_with_value",
-			content: Content{&FuncReturn{Value: &Int{Value: 1}}},
+			content: ContentExpr{&FuncReturn{Value: num(1)}},
 			want:    "#return 1\n",
 		},
 		{
 			name:    "return_no_value",
-			content: Content{&FuncReturn{Value: nil}},
+			content: ContentExpr{&FuncReturn{}},
 			want:    "#return\n",
 		},
 
 		// Other
 		{
 			name:    "context",
-			content: Content{&Contextual{Body: &FieldAccess{Target: &Ident{Name: "text"}, Field: "lang"}}},
+			content: ContentExpr{&Contextual{Body: &FieldAccess{Target: id("text"), Field: "lang"}}},
 			want:    "#context text.lang\n",
 		},
 		{
 			name:    "include",
-			content: Content{&ModuleInclude{Source: &Str{Value: "other.typ"}}},
+			content: ContentExpr{&ModuleInclude{Source: str("other.typ")}},
 			want:    "#include \"other.typ\"\n",
 		},
 		{
 			name:    "destruct_assign",
-			content: Content{&DestructAssignment{Pattern: &Underscore{}, Value: &Ident{Name: "expr"}}},
-			want:    "#_ = expr\n",
-		},
-		{
-			name:    "destructuring",
-			content: Content{&Destructuring{Items: []Expr{&Ident{Name: "x"}, &Ident{Name: "y"}}}},
-			want:    "#(x, y)\n",
+			content: ContentExpr{&DestructAssignment{Pattern: []DestructPattern{destruct("a"), destruct("b")}, Value: id("pair")}},
+			want:    "#(a, b) = pair\n",
 		},
 	}
 

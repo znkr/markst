@@ -13,44 +13,65 @@ import (
 
 type Test struct {
 	Name  string
+	Skip  string
 	Input string
 	Want  string
 }
 
 var testcase = regexp.MustCompile(`^--- (.+) ---$`)
-var testname = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var header = regexp.MustCompile(`^([a-z][a-z0-9-]*)(?: +\(skip: (.*)\))?$`)
 
 func Read(t *testing.T, path string) []Test {
 	t.Helper()
 	var tests []Test
 	var name string
-	var input strings.Builder
-	var want strings.Builder
+	var skip string
+	var input []string
+	var want []string
 	commit := func() {
 		if name == "" {
 			return
 		}
-		tests = append(tests, Test{
+		if len(want) == 0 {
+			for len(input) > 0 && input[len(input)-1] == "" {
+				input = input[:len(input)-1]
+			}
+		}
+		test := Test{
 			Name:  name,
-			Input: input.String(),
-			Want:  want.String(),
-		})
-		input.Reset()
-		want.Reset()
+			Skip:  skip,
+			Input: strings.Join(input, "\n"),
+			Want:  strings.Join(want, "\n"),
+		}
+		if len(input) > 0 {
+			test.Input += "\n"
+		}
+		if len(want) > 0 {
+			test.Want += "\n"
+		}
+		tests = append(tests, test)
+		input = input[:0]
+		want = want[:0]
+		skip = ""
 	}
 	for token := range scan(t, path) {
 		switch token.kind {
 		case kindSpace, kindComment:
 			continue
-		case kindName:
+		case kindHeader:
 			commit()
-			name = token.text
+			m := header.FindStringSubmatch(token.text)
+			if m == nil {
+				t.Fatalf("invalid test file format in %s:%d: test case name must match %s, got %q", path, token.lineno, header, token.text)
+			}
+			name = m[1]
+			if len(m) > 2 {
+				skip = m[2]
+			}
 		case kindInput:
-			input.WriteString(token.text)
-			input.WriteString("\n")
+			input = append(input, token.text)
 		case kindWant:
-			want.WriteString(token.text)
-			want.WriteString("\n")
+			want = append(want, token.text)
 		}
 	}
 	if name != "" {
@@ -71,9 +92,13 @@ func Update(t *testing.T, path string, tests []Test) {
 				buf.WriteString(token.text)
 				buf.WriteString("\n")
 			}
-		case kindName:
-			if tests[cur].Name != token.text {
-				t.Fatalf("test case name mismatch when updating %s: expected %q, got %q", path, tests[cur].Name, token.text)
+		case kindHeader:
+			header := tests[cur].Name
+			if tests[cur].Skip != "" {
+				header += " (skip: " + tests[cur].Skip + ")"
+			}
+			if token.text != header {
+				t.Fatalf("test case name mismatch when updating %s: expected %q, got %q", path, header, token.text)
 			}
 			if seenTest {
 				buf.WriteString("\n")
@@ -89,7 +114,11 @@ func Update(t *testing.T, path string, tests []Test) {
 }
 
 func writeTest(buf *bytes.Buffer, test Test) {
-	buf.WriteString("--- " + test.Name + " ---\n")
+	var skip string
+	if test.Skip != "" {
+		skip = " (skip: " + test.Skip + ")"
+	}
+	buf.WriteString("--- " + test.Name + skip + " ---\n")
 	buf.WriteString(test.Input)
 	if !strings.HasSuffix(test.Input, "\n") {
 		buf.WriteString("\n")
@@ -104,14 +133,15 @@ type kind int
 const (
 	kindSpace kind = iota
 	kindComment
-	kindName
+	kindHeader
 	kindInput
 	kindWant
 )
 
 type token struct {
-	kind kind
-	text string
+	kind   kind
+	text   string
+	lineno int
 }
 
 func scan(t *testing.T, path string) iter.Seq[token] {
@@ -162,10 +192,7 @@ func scan(t *testing.T, path string) iter.Seq[token] {
 				if m == nil {
 					t.Fatalf("invalid test file format in %s:%d: expected test case header matching %s, got %q", path, lineno, testcase, line)
 				}
-				if !testname.MatchString(m[1]) {
-					t.Fatalf("invalid test file format in %s:%d: test case name must match %s, got %q", path, lineno, testname, m[1])
-				}
-				if !yield(token{kind: kindName, text: m[1]}) {
+				if !yield(token{kind: kindHeader, text: m[1], lineno: lineno}) {
 					return
 				}
 				state = body
@@ -178,7 +205,7 @@ func scan(t *testing.T, path string) iter.Seq[token] {
 					state = preamble
 					goto Start
 				}
-				if !yield(token{kind: kindInput, text: line}) {
+				if !yield(token{kind: kindInput, text: line, lineno: lineno}) {
 					return
 				}
 			case expectation:
@@ -190,7 +217,7 @@ func scan(t *testing.T, path string) iter.Seq[token] {
 				if !ok {
 					t.Fatalf("invalid test file format in %s:%d: expected expectation line starting with `│ `, got %q", path, lineno, line)
 				}
-				if !yield(token{kind: kindWant, text: after}) {
+				if !yield(token{kind: kindWant, text: after, lineno: lineno}) {
 					return
 				}
 			}

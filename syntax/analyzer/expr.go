@@ -8,14 +8,18 @@ import (
 	"znkr.io/writst/syntax"
 )
 
-func (a *analyzer) analyzeContent(n syntax.Node) ir.Content {
-	var body ir.Content
+func (a *analyzer) analyzeContent(n syntax.Node) ir.ContentExpr {
+	var body ir.ContentExpr
 	for n := range inner(n, syntax.KindMarkup).all() {
 		switch n.Kind {
 		case syntax.KindHash:
 			// skip hash markers
 		default:
-			body = append(body, a.analyzeExpr(n))
+			n0 := a.analyzeExpr(n)
+			if n0 == nil {
+				continue
+			}
+			body = append(body, n0)
 		}
 	}
 	return body
@@ -26,7 +30,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindLabel:
 		label := leaf(n, syntax.KindLabel)
 		label = label[1 : len(label)-1] // trim '<>'
-		return &ir.Label{Name: unique.Make(label)}
+		return &ir.Const{Value: &ir.Label{Name: unique.Make(label)}}
 	case syntax.KindHeading:
 		return a.analyzeHeading(n)
 	case syntax.KindListItem:
@@ -36,39 +40,39 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindTermItem:
 		return a.analyzeTermItem(n)
 	case syntax.KindText:
-		return &ir.Text{Value: strings.TrimSpace(n.AsLeaf().Literal)}
+		return &ir.Const{Value: &ir.Text{Value: strings.TrimSpace(n.AsLeaf().Literal)}}
 	case syntax.KindEscape:
-		return &ir.Text{Value: unescape(n.AsLeaf().Literal)}
+		return &ir.Const{Value: &ir.Text{Value: unescape(n.AsLeaf().Literal)}}
 	case syntax.KindShorthand:
-		return &ir.Text{Value: unshorthand(n.AsLeaf().Literal)}
+		return &ir.Const{Value: &ir.Text{Value: unshorthand(n.AsLeaf().Literal)}}
 	case syntax.KindSmartQuote:
 		// TODO: implement smart quotes properly.
-		return &ir.Text{Value: n.AsLeaf().Literal}
+		return &ir.Const{Value: &ir.Text{Value: n.AsLeaf().Literal}}
 	case syntax.KindLinebreak:
-		return &ir.Linebreak{}
+		return &ir.Const{Value: &ir.Linebreak{}}
 	case syntax.KindParbreak:
-		return &ir.Parbreak{}
+		return &ir.Const{Value: &ir.Parbreak{}}
 	case syntax.KindStrong:
 		ns := inner(n, syntax.KindStrong)
 		defer ns.finish()
 		ns.take(syntax.KindStar)
 		n0 := ns.node()
 		ns.take(syntax.KindStar)
-		return &ir.Strong{Body: a.analyzeContent(n0)}
+		return &ir.StrongExpr{Body: a.analyzeContent(n0)}
 	case syntax.KindEmph:
 		ns := inner(n, syntax.KindEmph)
 		defer ns.finish()
 		ns.take(syntax.KindUnderscore)
 		n0 := ns.node()
 		ns.take(syntax.KindUnderscore)
-		return &ir.Emph{Body: a.analyzeContent(n0)}
+		return &ir.EmphExpr{Body: a.analyzeContent(n0)}
 	case syntax.KindRaw:
 		return a.analyzeRaw(n)
 	case syntax.KindLink:
 		lit := n.AsLeaf().Literal
-		return &ir.Link{
+		return &ir.LinkExpr{
 			Dest: lit,
-			Body: ir.Content{&ir.Text{Value: lit}},
+			Body: ir.ContentExpr{&ir.Const{Value: &ir.Text{Value: lit}}},
 		}
 	case syntax.KindRef:
 		return a.analyzeRef(n)
@@ -98,12 +102,6 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		return a.analyzeArray(n)
 	case syntax.KindDict:
 		return a.analyzeDict(n)
-	case syntax.KindNamed:
-		return a.analyzeNamed(n)
-	case syntax.KindKeyed:
-		return a.analyzeKeyed(n)
-	case syntax.KindSpread:
-		return a.analyzeSpread(n)
 	case syntax.KindUnary:
 		return a.analyzeUnary(n)
 	case syntax.KindBinary:
@@ -138,14 +136,16 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		return a.analyzeModuleInclude(n)
 	case syntax.KindDestructAssignment:
 		return a.analyzeDestructAssignment(n)
-	case syntax.KindDestructuring:
-		return a.analyzeDestructuring(n)
 	case syntax.KindUnderscore:
-		return &ir.Underscore{}
+		return underscore
+	case syntax.KindError:
+		a.error(n.Span, n.AsError())
+		return nil
 	default:
 		panic("unsupported syntax kind: " + n.Kind.String())
 	}
 }
 
-var none = &ir.None{}
-var auto = &ir.Auto{}
+var none = &ir.Const{Value: ir.None{}}
+var auto = &ir.Const{Value: ir.Auto{}}
+var underscore = &ir.Ident{Name: unique.Make("_")}

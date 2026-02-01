@@ -128,4 +128,4 @@ code
 `unclosed
 │ Markup
 │   Error: "`unclosed\n"
-│     Msg: "unexpected"
+│     Msg: "unclosed raw text"

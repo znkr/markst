@@ -531,3 +531,127 @@ func TestFromUpto(t *testing.T) {
 		t.Errorf("From(5) = %q, want %q", got, " ")
 	}
 }
+
+func TestNewlines(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want []uint32
+	}{
+		{
+			name: "no_newlines",
+			in:   "hello",
+			want: []uint32{5}, // EOF position only
+		},
+		{
+			name: "single_newline",
+			in:   "a\nb",
+			want: []uint32{2, 3}, // after '\n' at offset 2, EOF at 3
+		},
+		{
+			name: "multiple_newlines",
+			in:   "a\nb\nc",
+			want: []uint32{2, 4, 5}, // '\n' at 2, '\n' at 4, EOF at 5
+		},
+		{
+			name: "consecutive_newlines",
+			in:   "a\n\nb",
+			want: []uint32{2, 3, 4}, // '\n' at 2, '\n' at 3, EOF at 4
+		},
+		{
+			name: "starts_with_newline",
+			in:   "\na",
+			want: []uint32{1, 2}, // '\n' at 1, EOF at 2
+		},
+		{
+			name: "ends_with_newline",
+			in:   "a\n",
+			want: []uint32{2}, // '\n' at 2, EOF also at 2 (deduped)
+		},
+		{
+			name: "only_newlines",
+			in:   "\n\n",
+			want: []uint32{1, 2}, // '\n' at 1, '\n' at 2, EOF at 2 (deduped)
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: []uint32{0}, // EOF at 0
+		},
+		{
+			name: "unicode_with_newlines",
+			in:   "世\n界",
+			want: []uint32{4, 7}, // '\n' after 世 (3 bytes) at 4, EOF at 7
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := New(tt.in)
+			// Consume entire input to populate newlines
+			for r.Next() != EOF {
+			}
+			got := r.Newlines()
+			if diff := cmp.Diff(got, tt.want); diff != "" {
+				t.Errorf("Newlines() mismatch [-got,+want]:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestNewlines_NoDuplicates(t *testing.T) {
+	tests := []struct {
+		name   string
+		in     string
+		action func(*Reader)
+		want   []uint32
+	}{
+		{
+			name: "multiple_eof",
+			in:   "a",
+			action: func(r *Reader) {
+				r.Next() // 'a'
+				r.Next() // EOF
+				r.Next() // EOF again
+				r.Next() // EOF again
+			},
+			want: []uint32{1},
+		},
+		{
+			name: "backup_and_re_read_newline",
+			in:   "a\nb",
+			action: func(r *Reader) {
+				r.Next()   // 'a'
+				r.Next()   // '\n'
+				r.Next()   // 'b'
+				r.Backup() // back to '\n'
+				r.Backup() // back to 'a'
+				r.Next()   // 'a' again
+				r.Next()   // '\n' again
+			},
+			want: []uint32{2},
+		},
+		{
+			name: "seek_and_re_read_newline",
+			in:   "a\nb\nc",
+			action: func(r *Reader) {
+				for r.Next() != EOF {
+				}
+				r.Seek(0)
+				for r.Next() != EOF {
+				}
+			},
+			want: []uint32{2, 4, 5},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := New(tt.in)
+			tt.action(r)
+			if diff := cmp.Diff(r.Newlines(), tt.want); diff != "" {
+				t.Errorf("Newlines() mismatch [-got,+want]:\n%s", diff)
+			}
+		})
+	}
+}

@@ -3,17 +3,19 @@ package analyzer
 import (
 	"strconv"
 	"strings"
+	"unique"
 
 	"znkr.io/writst/model/ir"
 	"znkr.io/writst/syntax"
+	"znkr.io/writst/syntax/convert"
 )
 
-var bools = map[string]*ir.Bool{
-	"true":  {Value: true},
-	"false": {Value: false},
+var bools = map[string]*ir.Const{
+	"true":  {Value: ir.Bool(true)},
+	"false": {Value: ir.Bool(false)},
 }
 
-func (a *analyzer) analyzeBool(n syntax.Node) *ir.Bool {
+func (a *analyzer) analyzeBool(n syntax.Node) *ir.Const {
 	val := leaf(n, syntax.KindBool)
 	ret := bools[val]
 	if ret == nil {
@@ -22,39 +24,25 @@ func (a *analyzer) analyzeBool(n syntax.Node) *ir.Bool {
 	return ret
 }
 
-func (a *analyzer) analyzeInt(n syntax.Node) *ir.Int {
+func (a *analyzer) analyzeInt(n syntax.Node) *ir.Const {
 	val := leaf(n, syntax.KindInt)
-	base := 10
-	if len(val) >= 2 && val[0] == '0' {
-		switch val[1] {
-		case 'b':
-			base = 2
-			val = val[2:]
-		case 'o':
-			base = 8
-			val = val[2:]
-		case 'x':
-			base = 16
-			val = val[2:]
-		}
-	}
-	iv, err := strconv.ParseInt(val, base, 64)
+	iv, err := convert.ParseInt(val)
 	if err != nil {
-		panic("invalid int literal: " + val)
+		panic(err.Error())
 	}
-	return &ir.Int{Value: iv}
+	return &ir.Const{Value: ir.Int(iv)}
 }
 
-func (a *analyzer) analyzeFloat(n syntax.Node) *ir.Float {
+func (a *analyzer) analyzeFloat(n syntax.Node) *ir.Const {
 	val := leaf(n, syntax.KindFloat)
 	fv, err := strconv.ParseFloat(val, 64)
 	if err != nil {
 		panic("invalid float literal: " + val)
 	}
-	return &ir.Float{Value: fv}
+	return &ir.Const{Value: ir.Float(fv)}
 }
 
-func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Numeric {
+func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Const {
 	val := leaf(n, syntax.KindNumeric)
 	// Find where the numeric part ends and unit begins
 	idx := strings.IndexFunc(val, func(r rune) bool { return (r < '0' || r > '9') && r != '.' })
@@ -70,16 +58,17 @@ func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Numeric {
 	if !ok {
 		panic("invalid unit literal: " + val)
 	}
-	return &ir.Numeric{Value: fv, Unit: u}
+	return &ir.Const{Value: ir.Numeric{Value: fv, Unit: u}}
 }
 
-func (a *analyzer) analyzeStr(n syntax.Node) *ir.Str {
+func (a *analyzer) analyzeStr(n syntax.Node) *ir.Const {
 	val := leaf(n, syntax.KindStr)
-	return &ir.Str{Value: unquote(val)}
+	return &ir.Const{Value: ir.String(unquote(val))}
 }
 
 func (a *analyzer) analyzeIdent(n syntax.Node) *ir.Ident {
-	return &ir.Ident{Name: leaf(n, syntax.KindIdent)}
+	name := unique.Make(leaf(n, syntax.KindIdent))
+	return &ir.Ident{Name: name}
 }
 
 func (a *analyzer) analyzeCode(n syntax.Node) []ir.Expr {
@@ -105,7 +94,7 @@ func (a *analyzer) analyzeCodeBlock(n syntax.Node) *ir.CodeBlock {
 			exprs = append(exprs, a.analyzeExpr(child))
 		}
 	}
-	return &ir.CodeBlock{Exprs: exprs}
+	return &ir.CodeBlock{Body: exprs}
 }
 
 func (a *analyzer) analyzeCodeContentBlock(n syntax.Node) *ir.ContentBlock {
@@ -121,7 +110,7 @@ func (a *analyzer) analyzeParenthesized(n syntax.Node) *ir.Parenthesized {
 	return &ir.Parenthesized{Body: a.analyzeExpr(n0)}
 }
 
-func (a *analyzer) analyzeArray(n syntax.Node) *ir.Array {
+func (a *analyzer) analyzeArray(n syntax.Node) *ir.ArrayExpr {
 	ns := inner(n, syntax.KindArray)
 	defer ns.finish()
 	var items []ir.Expr
@@ -131,48 +120,42 @@ func (a *analyzer) analyzeArray(n syntax.Node) *ir.Array {
 		}
 		items = append(items, a.analyzeExpr(child))
 	}
-	return &ir.Array{Items: items}
+	return &ir.ArrayExpr{Elements: items}
 }
 
-func (a *analyzer) analyzeDict(n syntax.Node) *ir.Dict {
+func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
 	ns := inner(n, syntax.KindDict)
 	defer ns.finish()
-	var items []ir.Expr
+	var entries []ir.DictItemExpr
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind {
 		case syntax.KindComma, syntax.KindColon:
 			continue
+		case syntax.KindNamed:
+			entry := inner(child, syntax.KindNamed)
+			key := entry.take(syntax.KindIdent)
+			entry.take(syntax.KindColon)
+			value := a.analyzeExpr(entry.node())
+			entry.finish()
+			entries = append(entries, ir.DictItemExpr{
+				Key:   &ir.Const{Value: ir.String(key)},
+				Value: value,
+			})
+		case syntax.KindKeyed:
+			entry := inner(child, syntax.KindKeyed)
+			key := a.analyzeExpr(entry.node())
+			entry.take(syntax.KindColon)
+			value := a.analyzeExpr(entry.node())
+			entry.finish()
+			entries = append(entries, ir.DictItemExpr{
+				Key:   key,
+				Value: value,
+			})
 		default:
-			items = append(items, a.analyzeExpr(child))
+			panic("invalid dict entry: " + child.Kind.String())
 		}
 	}
-	return &ir.Dict{Items: items}
-}
-
-func (a *analyzer) analyzeNamed(n syntax.Node) *ir.Named {
-	ns := inner(n, syntax.KindNamed)
-	defer ns.finish()
-	name := ns.take(syntax.KindIdent)
-	ns.take(syntax.KindColon)
-	value := a.analyzeExpr(ns.node())
-	return &ir.Named{Name: name, Value: value}
-}
-
-func (a *analyzer) analyzeKeyed(n syntax.Node) *ir.Keyed {
-	ns := inner(n, syntax.KindKeyed)
-	defer ns.finish()
-	key := a.analyzeExpr(ns.node())
-	ns.take(syntax.KindColon)
-	value := a.analyzeExpr(ns.node())
-	return &ir.Keyed{Key: key, Value: value}
-}
-
-func (a *analyzer) analyzeSpread(n syntax.Node) *ir.Spread {
-	ns := inner(n, syntax.KindSpread)
-	defer ns.finish()
-	ns.take(syntax.KindDots)
-	expr := a.analyzeExpr(ns.node())
-	return &ir.Spread{Expr: expr}
+	return &ir.DictExpr{Entries: entries}
 }
 
 func (a *analyzer) analyzeUnary(n syntax.Node) *ir.Unary {
@@ -218,20 +201,38 @@ func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {
 	return &ir.FuncCall{Callee: callee, Args: args, Content: content}
 }
 
-func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Expr, []ir.Content) {
-	var args []ir.Expr
-	var content []ir.Content
-	// Args may or may not have parentheses - e.g. foo(1) vs foo[content]
-	// Content blocks can appear after the closing paren: foo(1)[hello]
-	for child := range inner(n, syntax.KindArgs).all() {
-		switch child.Kind {
-		case syntax.KindLeftParen, syntax.KindRightParen, syntax.KindComma:
-			continue
-		case syntax.KindContentBlock:
-			content = append(content, a.analyzeContentBlock(child))
-		default:
-			args = append(args, a.analyzeExpr(child))
+func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []ir.ContentExpr) {
+	ns := inner(n, syntax.KindArgs)
+	defer ns.finish()
+
+	var args []ir.Arg
+	if ns.at(syntax.KindLeftParen) {
+		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
+			switch child.Kind {
+			case syntax.KindComma:
+				continue
+			case syntax.KindSpread:
+				ns := inner(child, syntax.KindSpread)
+				defer ns.finish()
+				ns.take(syntax.KindDots)
+				expr := a.analyzeExpr(ns.node())
+				args = append(args, &ir.SpreadArg{Expr: expr})
+			case syntax.KindNamed:
+				named := inner(child, syntax.KindNamed)
+				key := unique.Make(named.take(syntax.KindIdent))
+				named.take(syntax.KindColon)
+				value := a.analyzeExpr(named.node())
+				named.finish()
+				args = append(args, &ir.NamedArg{Name: key, Expr: value})
+			default:
+				args = append(args, &ir.ExprArg{Expr: a.analyzeExpr(child)})
+			}
 		}
+	}
+
+	var content []ir.ContentExpr
+	for ns.at(syntax.KindContentBlock) {
+		content = append(content, a.analyzeContentBlock(ns.node()))
 	}
 	return args, content
 }
@@ -244,23 +245,25 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	// - Named function: name(params) = body
 	// - Anonymous with parens: (params) => body
 	// - Anonymous single param: param => body
-	var name string
-	var params []ir.Expr
+	var name *ir.Ident
+	var params []ir.Param
 	switch n := ns.node(); n.Kind {
 	case syntax.KindIdent:
 		if ns.at(syntax.KindParams) {
 			// Named function: name(params) = body
-			name = leaf(n, syntax.KindIdent)
+			name = a.analyzeIdent(n)
 			params = a.analyzeParams(ns.node())
 		} else {
 			// Single param: param => body
-			params = []ir.Expr{a.analyzeIdent(n)}
+			params = []ir.Param{&ir.PositionalParam{Ident: a.analyzeIdent(n)}}
 		}
+	case syntax.KindUnderscore:
+		// _ => body
+		params = []ir.Param{&ir.PositionalParam{Ident: underscore}}
 	case syntax.KindParams:
 		params = a.analyzeParams(n)
 	default:
-		// Single expression as param (e.g., underscore)
-		params = []ir.Expr{a.analyzeExpr(n)}
+		panic("invalid closure syntax: " + n.Kind.String())
 	}
 
 	// Skip arrow or eq
@@ -271,22 +274,49 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	return &ir.Closure{Name: name, Params: params, Body: body}
 }
 
-func (a *analyzer) analyzeParams(n syntax.Node) []ir.Expr {
+func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 	ns := inner(n, syntax.KindParams)
 	defer ns.finish()
-	var params []ir.Expr
-	// Params may or may not have parentheses - single param closures don't need them
-	if ns.at(syntax.KindLeftParen) {
-		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-			if child.Kind == syntax.KindComma {
-				continue
-			}
-			params = append(params, a.analyzeExpr(child))
-		}
-	} else {
+	var params []ir.Param
+	if !ns.at(syntax.KindLeftParen) {
 		// Single param without parens
 		for child := range ns.all() {
-			params = append(params, a.analyzeExpr(child))
+			switch child.Kind {
+			case syntax.KindUnderscore:
+				params = append(params, &ir.PositionalParam{Ident: underscore})
+			default:
+				params = append(params, &ir.PositionalParam{Ident: a.analyzeIdent(child)})
+			}
+		}
+
+	} else {
+		hasSink := false
+		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
+			switch child.Kind {
+			case syntax.KindComma:
+				continue
+			case syntax.KindIdent:
+				params = append(params, &ir.PositionalParam{Ident: a.analyzeIdent(child)})
+			case syntax.KindNamed:
+				named := inner(child, syntax.KindNamed)
+				name := unique.Make(named.take(syntax.KindIdent))
+				named.take(syntax.KindColon)
+				defaultExpr := a.analyzeExpr(named.node())
+				named.finish()
+				params = append(params, &ir.NamedParam{Name: name, Default: defaultExpr})
+			case syntax.KindSpread:
+				if hasSink {
+					panic("only one sink parameter allowed")
+				}
+				hasSink = true
+				ns := inner(child, syntax.KindSpread)
+				defer ns.finish()
+				ns.take(syntax.KindDots)
+				ident := a.analyzeIdent(ns.node())
+				params = append(params, &ir.SpreadParam{Ident: ident})
+			default:
+				panic("invalid parameter: " + child.Kind.String())
+			}
 		}
 	}
 	return params
@@ -299,11 +329,11 @@ func (a *analyzer) analyzeLetBinding(n syntax.Node) *ir.LetBinding {
 	if ns.at(syntax.KindClosure) {
 		closure := a.analyzeClosure(ns.node())
 		return &ir.LetBinding{
-			Pattern: &ir.Ident{Name: closure.Name},
+			Pattern: []ir.DestructPattern{&ir.DestructIdent{Ident: closure.Name}},
 			Value:   closure,
 		}
 	}
-	pattern := a.analyzeExpr(ns.node())
+	pattern := a.unpackDestructuringPattern(ns.node())
 	var value ir.Expr
 	if ns.at(syntax.KindEq) {
 		ns.node() // consume eq
@@ -366,7 +396,7 @@ func (a *analyzer) analyzeForLoop(n syntax.Node) *ir.ForLoop {
 	ns := inner(n, syntax.KindForLoop)
 	defer ns.finish()
 	ns.take(syntax.KindFor)
-	pattern := a.analyzeExpr(ns.node())
+	pattern := a.unpackDestructuringPattern(ns.node())
 	ns.take(syntax.KindIn)
 	iterable := a.analyzeExpr(ns.node())
 	body := a.analyzeExpr(ns.node())
@@ -417,21 +447,53 @@ func (a *analyzer) analyzeModuleInclude(n syntax.Node) *ir.ModuleInclude {
 func (a *analyzer) analyzeDestructAssignment(n syntax.Node) *ir.DestructAssignment {
 	ns := inner(n, syntax.KindDestructAssignment)
 	defer ns.finish()
-	pattern := a.analyzeExpr(ns.node())
+	pattern := a.unpackDestructuringPattern(ns.node())
 	ns.take(syntax.KindEq)
 	value := a.analyzeExpr(ns.node())
 	return &ir.DestructAssignment{Pattern: pattern, Value: value}
 }
 
-func (a *analyzer) analyzeDestructuring(n syntax.Node) *ir.Destructuring {
-	ns := inner(n, syntax.KindDestructuring)
-	defer ns.finish()
-	var items []ir.Expr
-	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		if child.Kind == syntax.KindComma {
-			continue
-		}
-		items = append(items, a.analyzeExpr(child))
+func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPattern {
+	switch n.Kind {
+	case syntax.KindIdent:
+		return []ir.DestructPattern{&ir.DestructIdent{Ident: a.analyzeIdent(n)}}
+	case syntax.KindUnderscore:
+		return []ir.DestructPattern{&ir.DestructIdent{Ident: underscore}}
+	default:
+		// continue below
 	}
-	return &ir.Destructuring{Items: items}
+
+	ns := inner(n, syntax.KindDestructuring)
+	var pattern []ir.DestructPattern
+	haveSink := false
+	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
+		switch child.Kind {
+		case syntax.KindComma:
+			continue
+		case syntax.KindUnderscore:
+			pattern = append(pattern, &ir.DestructIdent{Ident: underscore})
+		case syntax.KindIdent:
+			pattern = append(pattern, &ir.DestructIdent{Ident: a.analyzeIdent(child)})
+		case syntax.KindNamed:
+			named := inner(child, syntax.KindNamed)
+			name := unique.Make(named.take(syntax.KindIdent))
+			named.take(syntax.KindColon)
+			patternIdent := a.analyzeIdent(named.node())
+			named.finish()
+			pattern = append(pattern, &ir.DestructNamed{Name: name, Pattern: patternIdent})
+		case syntax.KindSpread:
+			if haveSink {
+				panic("only one destruct sink allowed in destruct pattern")
+			}
+			haveSink = true
+			ns := inner(child, syntax.KindSpread)
+			defer ns.finish()
+			ns.take(syntax.KindDots)
+			ident := a.analyzeIdent(ns.node())
+			pattern = append(pattern, &ir.DestructSink{Ident: ident})
+		default:
+			panic("invalid destruct pattern: " + child.Kind.String())
+		}
+	}
+	return pattern
 }

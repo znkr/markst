@@ -6,7 +6,13 @@ import (
 
 type Node struct {
 	Kind  Kind
+	Span  Span
 	Value Value
+}
+
+type RootNode struct {
+	Source Source
+	Node
 }
 
 func (n Node) AsLeaf() *LeafValue {
@@ -39,8 +45,8 @@ type LeafValue struct {
 	Literal string
 }
 
-func Leaf(kind Kind, literal string) Node {
-	return Node{kind, &LeafValue{Literal: literal}}
+func Leaf(kind Kind, span Span, literal string) Node {
+	return Node{kind, span, &LeafValue{Literal: literal}}
 }
 
 func (v *LeafValue) Text() string {
@@ -53,8 +59,8 @@ type InnerValue struct {
 	Children []Node
 }
 
-func Inner(kind Kind, children []Node) Node {
-	return Node{kind, &InnerValue{Children: children}}
+func Inner(kind Kind, span Span, children []Node) Node {
+	return Node{kind, span, &InnerValue{Children: children}}
 }
 
 func (v *InnerValue) Text() string {
@@ -73,8 +79,8 @@ type ErrorValue struct {
 	Literal string
 }
 
-func Error(msg string, literal string) Node {
-	return Node{KindError, &ErrorValue{Message: msg, Literal: literal}}
+func Error(msg string, span Span, literal string) Node {
+	return Node{KindError, span, &ErrorValue{Message: msg, Literal: literal}}
 }
 
 func (v *ErrorValue) AddHint(hint string) {

@@ -33,6 +33,13 @@ func (s *Scanner) SetMode(mode syntax.Mode) {
 	s.mode = mode
 }
 
+func (s *Scanner) Source() syntax.Source {
+	return &source{
+		content:  s.r.Source(),
+		newlines: s.r.Newlines(),
+	}
+}
+
 func (s *Scanner) Offset() int {
 	return s.r.Offset()
 }
@@ -52,12 +59,13 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 
 	kind := s.scan(ch, start)
 	text := s.r.From(start)
+	span := s.spanFrom(start)
 	if err := s.err; err != nil {
 		s.err = nil
 		err.Literal = text
-		return kind, syntax.Node{Kind: syntax.KindError, Value: err}
+		return kind, syntax.Node{Kind: syntax.KindError, Span: span, Value: err}
 	} else {
-		return kind, syntax.Leaf(kind, text)
+		return kind, syntax.Leaf(kind, span, text)
 	}
 }
 
@@ -72,6 +80,13 @@ func (s *Scanner) Newline() bool {
 func (s *Scanner) error(msg string, hints ...string) syntax.Kind {
 	s.err = &syntax.ErrorValue{Message: msg, Hints: hints}
 	return syntax.KindError
+}
+
+func (s *Scanner) spanFrom(start int) syntax.Span {
+	if start > math.MaxUint32 || s.r.Offset() > math.MaxUint32 {
+		panic("span offset out of uint32 range")
+	}
+	return syntax.Span{Start: uint32(start), End: uint32(s.r.Offset())}
 }
 
 func (s *Scanner) scan(ch rune, start int) syntax.Kind {
@@ -194,9 +209,13 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 
 	// Special case for ``.
 	if backticks == 2 {
-		return syntax.KindRaw, syntax.Inner(syntax.KindRaw, []syntax.Node{
-			syntax.Leaf(syntax.KindRawDelim, "`"),
-			syntax.Leaf(syntax.KindRawDelim, "`"),
+		span := s.spanFrom(start)
+		span0, span1 := span, span
+		span0.End = span0.Start + 1
+		span1.Start = span1.End - 1
+		return syntax.KindRaw, syntax.Inner(syntax.KindRaw, span, []syntax.Node{
+			syntax.Leaf(syntax.KindRawDelim, span0, "`"),
+			syntax.Leaf(syntax.KindRawDelim, span1, "`"),
 		})
 	}
 
@@ -205,7 +224,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	for found < backticks {
 		switch s.r.Next() {
 		case reader.EOF:
-			return syntax.KindError, syntax.Error("unclosed raw text", s.r.From(start))
+			return syntax.KindError, syntax.Error("unclosed raw text", s.spanFrom(start), s.r.From(start))
 		case '`':
 			found++
 		default:
@@ -217,7 +236,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	var nodes []syntax.Node
 	prevStart := start
 	push := func(kind syntax.Kind) {
-		nodes = append(nodes, syntax.Leaf(kind, s.r.From(prevStart)))
+		nodes = append(nodes, syntax.Leaf(kind, s.spanFrom(prevStart), s.r.From(prevStart)))
 		prevStart = s.r.Offset()
 	}
 
@@ -235,7 +254,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	s.r.Seek(end)
 	push(syntax.KindRawDelim)
 
-	return syntax.KindRaw, syntax.Inner(syntax.KindRaw, nodes)
+	return syntax.KindRaw, syntax.Inner(syntax.KindRaw, s.spanFrom(start), nodes)
 }
 
 // scanBlockyRaw parses a language tag, has smart behavior for trimming whitespace in the start/end
@@ -641,7 +660,7 @@ func (s *Scanner) scanCode(start int, ch rune) syntax.Kind {
 			return syntax.KindPlusEq
 		}
 		return syntax.KindPlus
-	case '-':
+	case '-', '\u2212':
 		if s.r.ConsumeIf("=") {
 			return syntax.KindHyphEq
 		}
