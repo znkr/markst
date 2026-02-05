@@ -10,13 +10,8 @@ import (
 	"znkr.io/writst/syntax/convert"
 )
 
-var bools = map[string]*ir.Const{
-	"true":  {Value: ir.Bool(true)},
-	"false": {Value: ir.Bool(false)},
-}
-
 func (a *analyzer) analyzeBool(n syntax.Node) *ir.Const {
-	val := leaf(n, syntax.KindBool)
+	val := a.leaf(n, syntax.KindBool)
 	ret := bools[val]
 	if ret == nil {
 		panic("invalid bool literal: " + val)
@@ -25,7 +20,7 @@ func (a *analyzer) analyzeBool(n syntax.Node) *ir.Const {
 }
 
 func (a *analyzer) analyzeInt(n syntax.Node) *ir.Const {
-	val := leaf(n, syntax.KindInt)
+	val := a.leaf(n, syntax.KindInt)
 	iv, err := convert.ParseInt(val)
 	if err != nil {
 		panic(err.Error())
@@ -34,7 +29,7 @@ func (a *analyzer) analyzeInt(n syntax.Node) *ir.Const {
 }
 
 func (a *analyzer) analyzeFloat(n syntax.Node) *ir.Const {
-	val := leaf(n, syntax.KindFloat)
+	val := a.leaf(n, syntax.KindFloat)
 	fv, err := strconv.ParseFloat(val, 64)
 	if err != nil {
 		panic("invalid float literal: " + val)
@@ -43,7 +38,7 @@ func (a *analyzer) analyzeFloat(n syntax.Node) *ir.Const {
 }
 
 func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Const {
-	val := leaf(n, syntax.KindNumeric)
+	val := a.leaf(n, syntax.KindNumeric)
 	// Find where the numeric part ends and unit begins
 	idx := strings.IndexFunc(val, func(r rune) bool { return (r < '0' || r > '9') && r != '.' })
 	if idx == -1 {
@@ -62,19 +57,19 @@ func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Const {
 }
 
 func (a *analyzer) analyzeStr(n syntax.Node) *ir.Const {
-	val := leaf(n, syntax.KindStr)
+	val := a.leaf(n, syntax.KindStr)
 	return &ir.Const{Value: ir.String(unquote(val))}
 }
 
 func (a *analyzer) analyzeIdent(n syntax.Node) *ir.Ident {
-	name := unique.Make(leaf(n, syntax.KindIdent))
+	name := unique.Make(a.leaf(n, syntax.KindIdent))
 	return &ir.Ident{Name: name}
 }
 
 func (a *analyzer) analyzeCode(n syntax.Node) []ir.Expr {
 	var exprs []ir.Expr
-	for child := range inner(n, syntax.KindCode).all() {
-		if child.Kind == syntax.KindSemicolon {
+	for child := range a.inner(n, syntax.KindCode).all() {
+		if child.Kind() == syntax.KindSemicolon {
 			continue
 		}
 		exprs = append(exprs, a.analyzeExpr(child))
@@ -83,11 +78,11 @@ func (a *analyzer) analyzeCode(n syntax.Node) []ir.Expr {
 }
 
 func (a *analyzer) analyzeCodeBlock(n syntax.Node) *ir.CodeBlock {
-	ns := inner(n, syntax.KindCodeBlock)
+	ns := a.inner(n, syntax.KindCodeBlock)
 	defer ns.finish()
 	var exprs []ir.Expr
 	for child := range ns.inside(syntax.KindLeftBrace, syntax.KindRightBrace) {
-		switch child.Kind {
+		switch child.Kind() {
 		case syntax.KindCode:
 			exprs = append(exprs, a.analyzeCode(child)...)
 		default:
@@ -102,7 +97,7 @@ func (a *analyzer) analyzeCodeContentBlock(n syntax.Node) *ir.ContentBlock {
 }
 
 func (a *analyzer) analyzeParenthesized(n syntax.Node) *ir.Parenthesized {
-	ns := inner(n, syntax.KindParenthesized)
+	ns := a.inner(n, syntax.KindParenthesized)
 	defer ns.finish()
 	ns.take(syntax.KindLeftParen)
 	n0 := ns.node()
@@ -111,11 +106,11 @@ func (a *analyzer) analyzeParenthesized(n syntax.Node) *ir.Parenthesized {
 }
 
 func (a *analyzer) analyzeArray(n syntax.Node) *ir.ArrayExpr {
-	ns := inner(n, syntax.KindArray)
+	ns := a.inner(n, syntax.KindArray)
 	defer ns.finish()
 	var items []ir.Expr
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		if child.Kind == syntax.KindComma {
+		if child.Kind() == syntax.KindComma {
 			continue
 		}
 		items = append(items, a.analyzeExpr(child))
@@ -124,15 +119,15 @@ func (a *analyzer) analyzeArray(n syntax.Node) *ir.ArrayExpr {
 }
 
 func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
-	ns := inner(n, syntax.KindDict)
+	ns := a.inner(n, syntax.KindDict)
 	defer ns.finish()
 	var entries []ir.DictItemExpr
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		switch child.Kind {
+		switch child.Kind() {
 		case syntax.KindComma, syntax.KindColon:
 			continue
 		case syntax.KindNamed:
-			entry := inner(child, syntax.KindNamed)
+			entry := a.inner(child, syntax.KindNamed)
 			key := entry.take(syntax.KindIdent)
 			entry.take(syntax.KindColon)
 			value := a.analyzeExpr(entry.node())
@@ -142,7 +137,7 @@ func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
 				Value: value,
 			})
 		case syntax.KindKeyed:
-			entry := inner(child, syntax.KindKeyed)
+			entry := a.inner(child, syntax.KindKeyed)
 			key := a.analyzeExpr(entry.node())
 			entry.take(syntax.KindColon)
 			value := a.analyzeExpr(entry.node())
@@ -152,22 +147,22 @@ func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
 				Value: value,
 			})
 		default:
-			panic("invalid dict entry: " + child.Kind.String())
+			panic("invalid dict entry: " + child.Kind().String())
 		}
 	}
 	return &ir.DictExpr{Entries: entries}
 }
 
 func (a *analyzer) analyzeUnary(n syntax.Node) *ir.Unary {
-	ns := inner(n, syntax.KindUnary)
+	ns := a.inner(n, syntax.KindUnary)
 	defer ns.finish()
-	op := syntax.UnaryOpFromKind(ns.node().Kind)
+	op := syntax.UnaryOpFromKind(ns.node().Kind())
 	operand := a.analyzeExpr(ns.node())
 	return &ir.Unary{Op: op, Operand: operand}
 }
 
 func (a *analyzer) analyzeBinary(n syntax.Node) *ir.Binary {
-	ns := inner(n, syntax.KindBinary)
+	ns := a.inner(n, syntax.KindBinary)
 	defer ns.finish()
 	left := a.analyzeExpr(ns.node())
 	// Check for "not in" operator (two tokens)
@@ -178,14 +173,14 @@ func (a *analyzer) analyzeBinary(n syntax.Node) *ir.Binary {
 		ns.take(syntax.KindIn)
 		op = syntax.NotIn
 	} else {
-		op = syntax.BinaryOpFromKind(ns.node().Kind)
+		op = syntax.BinaryOpFromKind(ns.node().Kind())
 	}
 	right := a.analyzeExpr(ns.node())
 	return &ir.Binary{Left: left, Op: op, Right: right}
 }
 
 func (a *analyzer) analyzeFieldAccess(n syntax.Node) *ir.FieldAccess {
-	ns := inner(n, syntax.KindFieldAccess)
+	ns := a.inner(n, syntax.KindFieldAccess)
 	defer ns.finish()
 	target := a.analyzeExpr(ns.node())
 	ns.take(syntax.KindDot)
@@ -194,7 +189,7 @@ func (a *analyzer) analyzeFieldAccess(n syntax.Node) *ir.FieldAccess {
 }
 
 func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {
-	ns := inner(n, syntax.KindFuncCall)
+	ns := a.inner(n, syntax.KindFuncCall)
 	defer ns.finish()
 	callee := a.analyzeExpr(ns.node())
 	args, content := a.analyzeArgs(ns.node())
@@ -202,23 +197,23 @@ func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {
 }
 
 func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []ir.ContentExpr) {
-	ns := inner(n, syntax.KindArgs)
+	ns := a.inner(n, syntax.KindArgs)
 	defer ns.finish()
 
 	var args []ir.Arg
 	if ns.at(syntax.KindLeftParen) {
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-			switch child.Kind {
+			switch child.Kind() {
 			case syntax.KindComma:
 				continue
 			case syntax.KindSpread:
-				ns := inner(child, syntax.KindSpread)
+				ns := a.inner(child, syntax.KindSpread)
 				defer ns.finish()
 				ns.take(syntax.KindDots)
 				expr := a.analyzeExpr(ns.node())
 				args = append(args, &ir.SpreadArg{Expr: expr})
 			case syntax.KindNamed:
-				named := inner(child, syntax.KindNamed)
+				named := a.inner(child, syntax.KindNamed)
 				key := unique.Make(named.take(syntax.KindIdent))
 				named.take(syntax.KindColon)
 				value := a.analyzeExpr(named.node())
@@ -238,7 +233,7 @@ func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []ir.ContentExpr) {
 }
 
 func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
-	ns := inner(n, syntax.KindClosure)
+	ns := a.inner(n, syntax.KindClosure)
 	defer ns.finish()
 
 	// Handle different closure forms:
@@ -247,7 +242,7 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	// - Anonymous single param: param => body
 	var name *ir.Ident
 	var params []ir.Param
-	switch n := ns.node(); n.Kind {
+	switch n := ns.node(); n.Kind() {
 	case syntax.KindIdent:
 		if ns.at(syntax.KindParams) {
 			// Named function: name(params) = body
@@ -263,7 +258,7 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	case syntax.KindParams:
 		params = a.analyzeParams(n)
 	default:
-		panic("invalid closure syntax: " + n.Kind.String())
+		panic("invalid closure syntax: " + n.Kind().String())
 	}
 
 	// Skip arrow or eq
@@ -275,13 +270,13 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 }
 
 func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
-	ns := inner(n, syntax.KindParams)
+	ns := a.inner(n, syntax.KindParams)
 	defer ns.finish()
 	var params []ir.Param
 	if !ns.at(syntax.KindLeftParen) {
 		// Single param without parens
 		for child := range ns.all() {
-			switch child.Kind {
+			switch child.Kind() {
 			case syntax.KindUnderscore:
 				params = append(params, &ir.PositionalParam{Ident: underscore})
 			default:
@@ -292,13 +287,13 @@ func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 	} else {
 		hasSink := false
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-			switch child.Kind {
+			switch child.Kind() {
 			case syntax.KindComma:
 				continue
 			case syntax.KindIdent:
 				params = append(params, &ir.PositionalParam{Ident: a.analyzeIdent(child)})
 			case syntax.KindNamed:
-				named := inner(child, syntax.KindNamed)
+				named := a.inner(child, syntax.KindNamed)
 				name := unique.Make(named.take(syntax.KindIdent))
 				named.take(syntax.KindColon)
 				defaultExpr := a.analyzeExpr(named.node())
@@ -309,13 +304,13 @@ func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 					panic("only one sink parameter allowed")
 				}
 				hasSink = true
-				ns := inner(child, syntax.KindSpread)
+				ns := a.inner(child, syntax.KindSpread)
 				defer ns.finish()
 				ns.take(syntax.KindDots)
 				ident := a.analyzeIdent(ns.node())
 				params = append(params, &ir.SpreadParam{Ident: ident})
 			default:
-				panic("invalid parameter: " + child.Kind.String())
+				panic("invalid parameter: " + child.Kind().String())
 			}
 		}
 	}
@@ -323,7 +318,7 @@ func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 }
 
 func (a *analyzer) analyzeLetBinding(n syntax.Node) *ir.LetBinding {
-	ns := inner(n, syntax.KindLetBinding)
+	ns := a.inner(n, syntax.KindLetBinding)
 	defer ns.finish()
 	ns.take(syntax.KindLet)
 	if ns.at(syntax.KindClosure) {
@@ -343,7 +338,7 @@ func (a *analyzer) analyzeLetBinding(n syntax.Node) *ir.LetBinding {
 }
 
 func (a *analyzer) analyzeSetRule(n syntax.Node) *ir.SetRule {
-	ns := inner(n, syntax.KindSetRule)
+	ns := a.inner(n, syntax.KindSetRule)
 	defer ns.finish()
 	ns.take(syntax.KindSet)
 	target := a.analyzeExpr(ns.node())
@@ -357,7 +352,7 @@ func (a *analyzer) analyzeSetRule(n syntax.Node) *ir.SetRule {
 }
 
 func (a *analyzer) analyzeShowRule(n syntax.Node) *ir.ShowRule {
-	ns := inner(n, syntax.KindShowRule)
+	ns := a.inner(n, syntax.KindShowRule)
 	defer ns.finish()
 	ns.take(syntax.KindShow)
 	var selector ir.Expr
@@ -370,7 +365,7 @@ func (a *analyzer) analyzeShowRule(n syntax.Node) *ir.ShowRule {
 }
 
 func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
-	ns := inner(n, syntax.KindConditional)
+	ns := a.inner(n, syntax.KindConditional)
 	defer ns.finish()
 	ns.take(syntax.KindIf)
 	condition := a.analyzeExpr(ns.node())
@@ -384,7 +379,7 @@ func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
 }
 
 func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {
-	ns := inner(n, syntax.KindWhileLoop)
+	ns := a.inner(n, syntax.KindWhileLoop)
 	defer ns.finish()
 	ns.take(syntax.KindWhile)
 	condition := a.analyzeExpr(ns.node())
@@ -393,7 +388,7 @@ func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {
 }
 
 func (a *analyzer) analyzeForLoop(n syntax.Node) *ir.ForLoop {
-	ns := inner(n, syntax.KindForLoop)
+	ns := a.inner(n, syntax.KindForLoop)
 	defer ns.finish()
 	ns.take(syntax.KindFor)
 	pattern := a.unpackDestructuringPattern(ns.node())
@@ -404,21 +399,21 @@ func (a *analyzer) analyzeForLoop(n syntax.Node) *ir.ForLoop {
 }
 
 func (a *analyzer) analyzeLoopBreak(n syntax.Node) *ir.LoopBreak {
-	ns := inner(n, syntax.KindLoopBreak)
+	ns := a.inner(n, syntax.KindLoopBreak)
 	defer ns.advance()
 	ns.take(syntax.KindBreak)
 	return &ir.LoopBreak{}
 }
 
 func (a *analyzer) analyzeLoopContinue(n syntax.Node) *ir.LoopContinue {
-	ns := inner(n, syntax.KindLoopContinue)
+	ns := a.inner(n, syntax.KindLoopContinue)
 	defer ns.finish()
 	ns.take(syntax.KindContinue)
 	return &ir.LoopContinue{}
 }
 
 func (a *analyzer) analyzeFuncReturn(n syntax.Node) *ir.FuncReturn {
-	ns := inner(n, syntax.KindFuncReturn)
+	ns := a.inner(n, syntax.KindFuncReturn)
 	defer ns.finish()
 	ns.take(syntax.KindReturn)
 	var value ir.Expr
@@ -429,7 +424,7 @@ func (a *analyzer) analyzeFuncReturn(n syntax.Node) *ir.FuncReturn {
 }
 
 func (a *analyzer) analyzeContextual(n syntax.Node) *ir.Contextual {
-	ns := inner(n, syntax.KindContextual)
+	ns := a.inner(n, syntax.KindContextual)
 	defer ns.finish()
 	ns.take(syntax.KindContext)
 	body := a.analyzeExpr(ns.node())
@@ -437,7 +432,7 @@ func (a *analyzer) analyzeContextual(n syntax.Node) *ir.Contextual {
 }
 
 func (a *analyzer) analyzeModuleInclude(n syntax.Node) *ir.ModuleInclude {
-	ns := inner(n, syntax.KindModuleInclude)
+	ns := a.inner(n, syntax.KindModuleInclude)
 	defer ns.finish()
 	ns.take(syntax.KindInclude)
 	source := a.analyzeExpr(ns.node())
@@ -445,7 +440,7 @@ func (a *analyzer) analyzeModuleInclude(n syntax.Node) *ir.ModuleInclude {
 }
 
 func (a *analyzer) analyzeDestructAssignment(n syntax.Node) *ir.DestructAssignment {
-	ns := inner(n, syntax.KindDestructAssignment)
+	ns := a.inner(n, syntax.KindDestructAssignment)
 	defer ns.finish()
 	pattern := a.unpackDestructuringPattern(ns.node())
 	ns.take(syntax.KindEq)
@@ -454,7 +449,7 @@ func (a *analyzer) analyzeDestructAssignment(n syntax.Node) *ir.DestructAssignme
 }
 
 func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPattern {
-	switch n.Kind {
+	switch n.Kind() {
 	case syntax.KindIdent:
 		return []ir.DestructPattern{&ir.DestructIdent{Ident: a.analyzeIdent(n)}}
 	case syntax.KindUnderscore:
@@ -463,11 +458,11 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPatter
 		// continue below
 	}
 
-	ns := inner(n, syntax.KindDestructuring)
+	ns := a.inner(n, syntax.KindDestructuring)
 	var pattern []ir.DestructPattern
 	haveSink := false
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		switch child.Kind {
+		switch child.Kind() {
 		case syntax.KindComma:
 			continue
 		case syntax.KindUnderscore:
@@ -475,7 +470,7 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPatter
 		case syntax.KindIdent:
 			pattern = append(pattern, &ir.DestructIdent{Ident: a.analyzeIdent(child)})
 		case syntax.KindNamed:
-			named := inner(child, syntax.KindNamed)
+			named := a.inner(child, syntax.KindNamed)
 			name := unique.Make(named.take(syntax.KindIdent))
 			named.take(syntax.KindColon)
 			patternIdent := a.analyzeIdent(named.node())
@@ -486,13 +481,13 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPatter
 				panic("only one destruct sink allowed in destruct pattern")
 			}
 			haveSink = true
-			ns := inner(child, syntax.KindSpread)
+			ns := a.inner(child, syntax.KindSpread)
 			defer ns.finish()
 			ns.take(syntax.KindDots)
 			ident := a.analyzeIdent(ns.node())
 			pattern = append(pattern, &ir.DestructSink{Ident: ident})
 		default:
-			panic("invalid destruct pattern: " + child.Kind.String())
+			panic("invalid destruct pattern: " + child.Kind().String())
 		}
 	}
 	return pattern

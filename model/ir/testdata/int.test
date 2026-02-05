@@ -4,11 +4,11 @@
 #test(0b1101, 13)
 #test(0xA + 0xa, 0x14)
 
---- int-base-binary-invalid (skip: not implemented yet) ---
+--- int-base-binary-invalid ---
 // Error: 2-7 invalid binary number: 0b123
 #0b123
 
---- int-base-hex-invalid (skip: not implemented yet) ---
+--- int-base-hex-invalid ---
 // Error: 2-8 invalid hexadecimal number: 0x123z
 #0x123z
 

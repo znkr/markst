@@ -2,7 +2,7 @@
 ]
 │ Markup
 │   Error: "]"
-│     Msg: "unexpected"
+│     Msg: "unexpected ]"
 │     Hint: "try using a backslash escape: \\]"
 │   Space: "\n"
 
@@ -15,7 +15,7 @@
 │     Code
 │       Space: " "
 │       Error: "@"
-│         Msg: "unexpected character"
+│         Msg: "unexpected character: @"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -41,7 +41,7 @@
 │         Dot: "."
 │         Space: " "
 │       Error: "}"
-│         Msg: "expected KindIdent"
+│         Msg: "expected identifier"
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -82,7 +82,7 @@ _hello
 │         ImportItems
 │           ImportItemPath
 │             Error: "123"
-│               Msg: "unexpected"
+│               Msg: "unexpected int"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -97,10 +97,11 @@ _hello
 │       Space: " "
 │       ShowRule
 │         Show: "show"
-│         Error: " "
+│         Error
 │           Msg: "expected colon"
+│         Space: " "
 │         Ident: "heading"
-│       Error: "it"
+│       Error
 │         Msg: "expected semicolon or line break"
 │       Space: " "
 │       Ident: "it"
@@ -121,7 +122,7 @@ _hello
 │         Space: " "
 │         Ident: "a"
 │         Error: ","
-│           Msg: "unexpected"
+│           Msg: "unexpected comma"
 │           Hint: "destructuring patterns must be wrapped in parentheses"
 │         Space: " "
 │         Ident: "b"
@@ -148,7 +149,7 @@ _hello
 │     Code
 │       Space: " "
 │       Ident: "foo"
-│       Error: "("
+│       Error
 │         Msg: "expected semicolon or line break"
 │       Space: " "
 │       Parenthesized
@@ -175,7 +176,7 @@ _hello
 │         As: "as"
 │         Space: " "
 │       Error: "}"
-│         Msg: "expected KindIdent"
+│         Msg: "expected identifier"
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -190,7 +191,7 @@ _hello
 │       Ident: "x"
 │       Space: " "
 │       Not: "not"
-│       Error: "y"
+│       Error
 │         Msg: "expected keyword `in`"
 │       Space: " "
 │       Ident: "y"
@@ -276,12 +277,725 @@ _hello
 │     Code
 │       Space: " "
 │       Ident: "foo"
-│       Error: "<label>"
+│       Error
 │         Msg: "expected semicolon or line break"
 │         Hint: "labels can only be applied in markup mode"
 │         Hint: "try wrapping your code in a markup block (`[ ]`)"
 │       Space: " "
 │       Label: "<label>"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- expected-block-in-conditional ---
+#{ if true 1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Conditional
+│         If: "if"
+│         Space: " "
+│         Bool: "true"
+│         Error
+│           Msg: "expected block"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       Int: "1"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- bare-underscore-in-code ---
+#{ _ }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Error
+│         Msg: "expected expression"
+│       Underscore: "_"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- expected-expression-after-if ---
+#{ if }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Conditional
+│         If: "if"
+│         Error
+│           Msg: "expected expression"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-in-in-for-loop ---
+#{ for x items { } }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ForLoop
+│         For: "for"
+│         Space: " "
+│         Ident: "x"
+│         Space: " "
+│         Error: "items"
+│           Msg: "expected in"
+│         Ident: "items"
+│         Space: " "
+│         CodeBlock
+│           LeftBrace: "{"
+│           Code
+│             Space: " "
+│           RightBrace: "}"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-eq-in-let-destructuring ---
+#{ let (a, b) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Destructuring
+│           LeftParen: "("
+│           Ident: "a"
+│           Comma: ","
+│           Space: " "
+│           Ident: "b"
+│           RightParen: ")"
+│         Space: " "
+│       Error: "}"
+│         Msg: "expected ="
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-ident-in-set-rule ---
+#{ set 123(1) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       SetRule
+│         Set: "set"
+│         Space: " "
+│         Error
+│           Msg: "expected argument list"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Error: "123"
+│         Msg: "expected identifier"
+│       FuncCall
+│         Int: "123"
+│         Args
+│           LeftParen: "("
+│           Int: "1"
+│           RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- duplicate-args-sink-in-params ---
+#{ let f(..a, ..b) = 1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Closure
+│           Ident: "f"
+│           Params
+│             LeftParen: "("
+│             Spread
+│               Dots: ".."
+│               Ident: "a"
+│             Comma: ","
+│             Space: " "
+│             Error
+│               Msg: "expected only one arguments sink is allowed"
+│             Spread
+│               Dots: ".."
+│               Ident: "b"
+│             RightParen: ")"
+│           Space: " "
+│           Eq: "="
+│           Space: " "
+│           Int: "1"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- duplicate-sink-in-destructuring ---
+#{ let (..a, ..b) = x }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Destructuring
+│           LeftParen: "("
+│           Spread
+│             Dots: ".."
+│             Ident: "a"
+│           Comma: ","
+│           Space: " "
+│           Error
+│             Msg: "expected only one destructuring sink is allowed"
+│           Spread
+│             Dots: ".."
+│             Ident: "b"
+│           RightParen: ")"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Ident: "x"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- keyed-pair-in-array ---
+#{ (1, "a": 2) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Array
+│         LeftParen: "("
+│         Int: "1"
+│         Comma: ","
+│         Space: " "
+│         Error
+│           Msg: "expected expression"
+│         Keyed
+│           Str: "\"a\""
+│           Colon: ":"
+│           Space: " "
+│           Int: "2"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- plain-value-in-dict ---
+#{ (a: 1, 2) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Dict
+│         LeftParen: "("
+│         Named
+│           Ident: "a"
+│           Colon: ":"
+│           Space: " "
+│           Int: "1"
+│         Comma: ","
+│         Space: " "
+│         Error
+│           Msg: "expected named or keyed pair"
+│         Int: "2"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- non-ident-named-param ---
+#{ let f(1: 2) = 1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Closure
+│           Ident: "f"
+│           Params
+│             LeftParen: "("
+│             Named
+│               Error
+│                 Msg: "expected identifier"
+│               Error
+│                 Msg: "expected pattern"
+│               Int: "1"
+│               Colon: ":"
+│               Space: " "
+│               Int: "2"
+│             RightParen: ")"
+│           Space: " "
+│           Eq: "="
+│           Space: " "
+│           Int: "1"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- keyword-as-pattern ---
+#{ for else items { } }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ForLoop
+│         For: "for"
+│         Error
+│           Msg: "expected pattern"
+│         Space: " "
+│         Error
+│           Msg: "expected expression"
+│       Error: "else"
+│         Msg: "expected in"
+│       Error: "else"
+│         Msg: "unexpected else"
+│       Space: " "
+│       Ident: "items"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       CodeBlock
+│         LeftBrace: "{"
+│         Code
+│           Space: " "
+│         RightBrace: "}"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-args-in-set-rule ---
+#{ set text }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       SetRule
+│         Set: "set"
+│         Space: " "
+│         Ident: "text"
+│         Error
+│           Msg: "expected argument list"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- set-rule-space-before-args ---
+#{ set text (12pt) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       SetRule
+│         Set: "set"
+│         Space: " "
+│         Ident: "text"
+│         Error
+│           Msg: "expected argument list"
+│           Hint: "there may not be any spaces between the function name and the argument list"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       Parenthesized
+│         LeftParen: "("
+│         Numeric: "12pt"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- unclosed-paren-in-params ---
+#{ let f(x, y }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Closure
+│           Ident: "f"
+│           Params
+│             Error: "("
+│               Msg: "unclosed delimiter"
+│             Ident: "x"
+│             Comma: ","
+│             Space: " "
+│             Ident: "y"
+│           Space: " "
+│       Error: "}"
+│         Msg: "expected ="
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- unclosed-paren-in-import-items ---
+#{ import "foo": (a, b }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"foo\""
+│         Colon: ":"
+│         Space: " "
+│         Error: "("
+│           Msg: "unclosed delimiter"
+│         ImportItems
+│           ImportItemPath
+│             Ident: "a"
+│           Comma: ","
+│           Space: " "
+│           ImportItemPath
+│             Ident: "b"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-semicolon-in-embedded-code ---
+#let x = 1 hello
+│ Markup
+│   Hash: "#"
+│   LetBinding
+│     Let: "let"
+│     Space: " "
+│     Ident: "x"
+│     Space: " "
+│     Eq: "="
+│     Space: " "
+│     Int: "1"
+│   Error
+│     Msg: "expected semicolon or line break"
+│   Space: " "
+│   Text: "hello"
+│   Space: "\n"
+
+--- term-item-missing-colon ---
+/ term
+│ Markup
+│   TermItem
+│     TermMarker: "/"
+│     Space: " "
+│     Markup
+│       Text: "term"
+│     Space: "\n"
+│     Markup
+│   Error
+│     Msg: "expected colon"
+
+--- non-ident-named-arg ---
+#{ foo(1: 2) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       FuncCall
+│         Ident: "foo"
+│         Args
+│           LeftParen: "("
+│           Named
+│             Error
+│               Msg: "expected identifier"
+│             Int: "1"
+│             Colon: ":"
+│             Space: " "
+│             Int: "2"
+│           RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- keyword-where-ident-expected ---
+#{ import "foo" as let }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ModuleImport
+│         Import: "import"
+│         Space: " "
+│         Str: "\"foo\""
+│         Space: " "
+│         As: "as"
+│         Error
+│           Msg: "expected identifier"
+│         Space: " "
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- scanner-error-after-hash ---
+#0xG
+│ Markup
+│   Hash: "#"
+│   Error: "0xG"
+│     Msg: "invalid hexadecimal number: 0xG"
+│   Space: "\n"
+
+--- content-block-as-body ---
+#{ if true [hello] }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Conditional
+│         If: "if"
+│         Space: " "
+│         Bool: "true"
+│         Space: " "
+│         ContentBlock
+│           LeftBracket: "["
+│           Markup
+│             Text: "hello"
+│           RightBracket: "]"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- atomic-field-access-non-ident ---
+#foo.1 hello
+│ Markup
+│   Hash: "#"
+│   Ident: "foo"
+│   Text: ".1 hello"
+│   Space: "\n"
+
+--- raw-in-code-mode ---
+#{ `hello` }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Raw
+│         RawDelim: "`"
+│         Text: "hello"
+│         RawDelim: "`"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- invalid-token-in-params ---
+#{ let f(@) = 1 }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Closure
+│           Ident: "f"
+│           Params
+│             LeftParen: "("
+│             Error: "@"
+│               Msg: "unexpected character: @"
+│             RightParen: ")"
+│           Space: " "
+│           Eq: "="
+│           Space: " "
+│           Int: "1"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- invalid-token-in-destructuring ---
+#{ let (@) = x }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Destructuring
+│           LeftParen: "("
+│           Error: "@"
+│             Msg: "unexpected character: @"
+│           RightParen: ")"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Ident: "x"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- parenthesized-let-pattern ---
+#{ let (a) = x }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Parenthesized
+│           LeftParen: "("
+│           Ident: "a"
+│           RightParen: ")"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Ident: "x"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- non-ident-destructuring-key ---
+#{ let (1: a) = x }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Destructuring
+│           LeftParen: "("
+│           Named
+│             Error
+│               Msg: "expected identifier"
+│             Error
+│               Msg: "expected pattern"
+│             Int: "1"
+│             Colon: ":"
+│             Space: " "
+│             Ident: "a"
+│           RightParen: ")"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Ident: "x"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- non-pattern-token-in-pattern ---
+#{ for + in x { } }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       ForLoop
+│         For: "for"
+│         Error
+│           Msg: "expected pattern"
+│         Space: " "
+│         Error: "+"
+│           Msg: "expected in"
+│         Binary
+│           Unary
+│             Plus: "+"
+│             Error
+│               Msg: "expected expression"
+│           Space: " "
+│           In: "in"
+│           Space: " "
+│           Ident: "x"
+│         Space: " "
+│         CodeBlock
+│           LeftBrace: "{"
+│           Code
+│             Space: " "
+│           RightBrace: "}"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- invalid-token-in-array-or-dict ---
+#{ (@) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       Array
+│         LeftParen: "("
+│         Error: "@"
+│           Msg: "unexpected character: @"
+│         RightParen: ")"
+│       Space: " "
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- invalid-token-in-func-args ---
+#{ foo(@) }
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       Space: " "
+│       FuncCall
+│         Ident: "foo"
+│         Args
+│           LeftParen: "("
+│           Error: "@"
+│             Msg: "unexpected character: @"
+│           RightParen: ")"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"

@@ -18,7 +18,12 @@ type Scanner struct {
 	// state
 	mode    syntax.Mode
 	newline bool
-	err     *syntax.ErrorValue
+	err     *protoerr
+}
+
+type protoerr struct {
+	message string
+	hints   []string
 }
 
 func New(src string) *Scanner {
@@ -62,10 +67,9 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	span := s.spanFrom(start)
 	if err := s.err; err != nil {
 		s.err = nil
-		err.Literal = text
-		return kind, syntax.Node{Kind: syntax.KindError, Span: span, Value: err}
+		return syntax.KindError, syntax.NewError(span, err.message, text, err.hints...)
 	} else {
-		return kind, syntax.Leaf(kind, span, text)
+		return kind, syntax.NewLeaf(kind, span, text)
 	}
 }
 
@@ -78,7 +82,12 @@ func (s *Scanner) Newline() bool {
 }
 
 func (s *Scanner) error(msg string, hints ...string) syntax.Kind {
-	s.err = &syntax.ErrorValue{Message: msg, Hints: hints}
+	s.err = &protoerr{message: msg, hints: hints}
+	return syntax.KindError
+}
+
+func (s *Scanner) errorf(format string, args ...any) syntax.Kind {
+	s.err = &protoerr{message: fmt.Sprintf(format, args...)}
 	return syntax.KindError
 }
 
@@ -96,7 +105,7 @@ func (s *Scanner) scan(ch rune, start int) syntax.Kind {
 	case '/':
 		if ch := s.r.Peek(); ch == '/' {
 			s.r.Next()
-			return s.scalLineComment()
+			return s.scanLineComment()
 		} else if ch == '*' {
 			s.r.Next()
 			return s.scanBlockComment()
@@ -210,12 +219,9 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	// Special case for ``.
 	if backticks == 2 {
 		span := s.spanFrom(start)
-		span0, span1 := span, span
-		span0.End = span0.Start + 1
-		span1.Start = span1.End - 1
-		return syntax.KindRaw, syntax.Inner(syntax.KindRaw, span, []syntax.Node{
-			syntax.Leaf(syntax.KindRawDelim, span0, "`"),
-			syntax.Leaf(syntax.KindRawDelim, span1, "`"),
+		return syntax.KindRaw, syntax.NewInner(syntax.KindRaw, []syntax.Node{
+			syntax.NewLeaf(syntax.KindRawDelim, syntax.Span{Start: span.Start, End: span.Start + 1}, "`"),
+			syntax.NewLeaf(syntax.KindRawDelim, syntax.Span{Start: span.End - 1, End: span.End}, "`"),
 		})
 	}
 
@@ -224,7 +230,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	for found < backticks {
 		switch s.r.Next() {
 		case reader.EOF:
-			return syntax.KindError, syntax.Error("unclosed raw text", s.spanFrom(start), s.r.From(start))
+			return syntax.KindError, syntax.NewError(s.spanFrom(start), "unclosed raw text", s.r.From(start))
 		case '`':
 			found++
 		default:
@@ -236,7 +242,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	var nodes []syntax.Node
 	prevStart := start
 	push := func(kind syntax.Kind) {
-		nodes = append(nodes, syntax.Leaf(kind, s.spanFrom(prevStart), s.r.From(prevStart)))
+		nodes = append(nodes, syntax.NewLeaf(kind, s.spanFrom(prevStart), s.r.From(prevStart)))
 		prevStart = s.r.Offset()
 	}
 
@@ -254,7 +260,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	s.r.Seek(end)
 	push(syntax.KindRawDelim)
 
-	return syntax.KindRaw, syntax.Inner(syntax.KindRaw, s.spanFrom(start), nodes)
+	return syntax.KindRaw, syntax.NewInner(syntax.KindRaw, nodes)
 }
 
 // scanBlockyRaw parses a language tag, has smart behavior for trimming whitespace in the start/end
@@ -458,7 +464,7 @@ Finish:
 	return syntax.KindText
 }
 
-func (s *Scanner) scalLineComment() syntax.Kind {
+func (s *Scanner) scanLineComment() syntax.Kind {
 	s.r.ConsumeWhile(func(ch rune) bool { return !isNewline(ch) })
 	return syntax.KindLineComment
 }
@@ -530,7 +536,7 @@ func (s *Scanner) scanNumbering(start int) syntax.Kind {
 	if s.r.ConsumeIf(".") && s.spaceOrEnd() {
 		_, err := strconv.ParseInt(number, 10, 64)
 		if err != nil {
-			return s.error("invalid list numbering")
+			return s.errorf("invalid list numbering: %s", s.r.From(start))
 		}
 		return syntax.KindEnumMarker
 	}
@@ -541,7 +547,7 @@ func (s *Scanner) scanBackslash() syntax.Kind {
 	if s.r.ConsumeIf("u{") {
 		seq := s.r.ConsumeWhile(isASCIIAlphanumeric)
 		if !s.r.ConsumeIf("}") {
-			return s.error("unclosed Unicode escape sequence")
+			return s.errorf("unclosed Unicode escape sequence")
 		}
 		x, err := strconv.ParseInt(seq, 16, 64)
 		if err != nil || x > unicode.MaxRune || (0xD800 <= x && x < 0xE000) {
@@ -718,7 +724,7 @@ func (s *Scanner) scanCode(start int, ch rune) syntax.Kind {
 		return s.scanIdent(start)
 	}
 Unexpected:
-	return s.error("unexpected character")
+	return s.errorf("unexpected character: %s", string(ch))
 }
 
 var keywords = map[string]syntax.Kind{
@@ -894,7 +900,7 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 	switch {
 	case isFloat:
 		if _, err := strconv.ParseFloat(number, 64); err != nil {
-			numberErr = "invalid floating point number"
+			numberErr = fmt.Sprintf("invalid floating point number: %s", number)
 		}
 	default:
 		var name string
@@ -910,7 +916,7 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 		}
 		value, err := strconv.ParseInt(number[prefix:], base, 64)
 		if err != nil {
-			numberErr = fmt.Sprintf("invalid %s number", name)
+			numberErr = fmt.Sprintf("invalid %s number: %s", name, number)
 			break
 		}
 		if suffix != "" && base != 10 {

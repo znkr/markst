@@ -7,6 +7,7 @@ import (
 
 	"znkr.io/diff/textdiff"
 
+	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/model/ir"
 	"znkr.io/writst/syntax/analyzer"
@@ -31,9 +32,15 @@ func TestAnalyze(t *testing.T) {
 					}
 
 					node := parser.Parse(tc.Input)
-					content := analyzer.Analyze(node)
-					got := ir.Format(content)
+					content, err := analyzer.Analyze(node)
+					if err != nil {
+						if diff := errcmp.Diff(node, err); diff != "" {
+							t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
+						}
+						return
+					}
 
+					got := ir.Format(content)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}

@@ -30,7 +30,7 @@ func TestParse(t *testing.T) {
 					}
 
 					node := parser.Parse(tc.Input)
-					got := format.Format(node.Node)
+					got := format.Format(node)
 
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Parse() mismatch (-want +got):\n%s", diff)

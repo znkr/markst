@@ -8,17 +8,19 @@ import (
 )
 
 func TestFormat(t *testing.T) {
-	errNode := syntax.Error("something went wrong", syntax.Span{Start: 12, End: 19}, "literal")
-	errNode.AsError().AddHint("try again")
-
-	node := syntax.Inner(syntax.KindMarkup, syntax.Span{Start: 0, End: 19}, []syntax.Node{
-		syntax.Leaf(syntax.KindText, syntax.Span{Start: 0, End: 5}, "hello"),
-		syntax.Inner(syntax.KindStrong, syntax.Span{Start: 5, End: 12}, []syntax.Node{
-			syntax.Leaf(syntax.KindStar, syntax.Span{Start: 5, End: 6}, "*"),
-			syntax.Leaf(syntax.KindText, syntax.Span{Start: 6, End: 11}, "world"),
-			syntax.Leaf(syntax.KindStar, syntax.Span{Start: 11, End: 12}, "*"),
+	node := syntax.NewInner(syntax.KindMarkup, []syntax.Node{
+		syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 0, End: 5}, "hello"),
+		syntax.NewInner(syntax.KindStrong, []syntax.Node{
+			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 5, End: 6}, "*"),
+			syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 6, End: 11}, "world"),
+			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 11, End: 12}, "*"),
 		}),
-		errNode,
+		syntax.NewError(
+			syntax.Span{Start: 12, End: 19},
+			"something went wrong",
+			"literal",
+			"try again",
+		),
 	})
 
 	expected := `Markup

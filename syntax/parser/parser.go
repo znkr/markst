@@ -21,7 +21,7 @@ func Parse(src string) syntax.RootNode {
 	}
 	return syntax.RootNode{
 		Source: p.s.Source(),
-		Node:   p.nodes[0],
+		Inner:  p.nodes[0].(*syntax.Inner),
 	}
 }
 
@@ -142,78 +142,94 @@ func (p *parser) consumeIf(kind syntax.Kind) bool {
 	return false
 }
 
-func (p *parser) unexpected() *syntax.ErrorValue {
-	return p.error("unexpected")
-}
-
-func (p *parser) expected(expected string) *syntax.ErrorValue {
-	return p.error(fmt.Sprintf("expected %s", expected))
-}
-
-func (p *parser) error(msg string) *syntax.ErrorValue {
+func (p *parser) expected(expected string) *syntax.Error {
 	at := len(p.nodes) - p.cur.trivia
-	if at > 0 && p.nodes[at-1].Kind == syntax.KindError {
+	if at > 0 && p.nodes[at-1].Kind() == syntax.KindError {
 		// Already have an error at this position.
-		return p.nodes[at-1].AsError()
+		return p.nodes[at-1].(*syntax.Error)
 	}
-	var n syntax.Node
-	if p.cur.kind == syntax.KindError {
-		n = p.cur.node
-	} else {
-		n = syntax.Error(msg, p.cur.node.Span, p.cur.node.Value.Text())
-	}
-	p.nodes = slices.Insert(p.nodes, at, n)
-	return n.AsError()
+	return p.expectedAt(at, expected)
 }
 
-func (p *parser) expectedAt(i int, expected string) *syntax.ErrorValue {
-	prev := p.nodes[i]
-	if prev.Kind == syntax.KindError {
-		// Already have an error at this position.
-		return prev.AsError()
+func (p *parser) expectedAt(i int, expected string) *syntax.Error {
+	var span syntax.Span
+	if i > 0 {
+		span = p.nodes[i-1].Span()
 	}
-	n := syntax.Error(fmt.Sprintf("expected %s", expected), prev.Span, prev.Value.Text())
-	p.nodes[i] = n
-	return n.AsError()
+	n := syntax.NewError(
+		syntax.Span{Start: span.End, End: span.End},
+		fmt.Sprintf("expected %s", expected),
+		"",
+	)
+	p.nodes = slices.Insert(p.nodes, i, syntax.Node(n))
+	return n
 }
 
 func (p *parser) consumeAs(kind syntax.Kind) {
 	if p.at(syntax.KindError) {
 		panic("cannot convert error node")
 	}
-	p.cur.node.Kind = kind
+	p.cur.node = syntax.ConvertNode(p.cur.node, kind)
 	p.consume()
 }
 
 func (p *parser) assert(expected syntax.Kind) {
 	if p.cur.kind != expected {
-		panic(fmt.Sprintf("expected %s, got %s", expected, p.cur.node.Kind))
+		panic(fmt.Sprintf("expected %s, got %s", expected.Name(), p.cur.kind.Name()))
 	}
 	p.consume()
 }
 
-func (p *parser) expect(expected syntax.Kind) bool {
-	if p.cur.kind == expected {
+func (p *parser) expect(kind syntax.Kind) bool {
+	if p.cur.kind == kind {
 		p.consume()
 		return true
+	} else if kind == syntax.KindIdent && syntax.Keywords.Contains(p.cur.kind) {
+		p.trimErrors()
+		p.expected(kind.Name())
+		p.next()
+		return false
+	} else {
+		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
+		p.nodes = append(p.nodes, n)
+		return false
 	}
-	n := syntax.Error(fmt.Sprintf("expected %s", expected), p.cur.node.Span, p.cur.node.Value.Text())
-	p.nodes = append(p.nodes, n)
-	return false
 }
 
-func (p *parser) expectClosing(open int, expected syntax.Kind) *syntax.ErrorValue {
+func (p *parser) unexpected() *syntax.Error {
+	p.trimErrors()
+	n := asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
+	p.nodes = append(p.nodes, n)
+	p.next() // skip the error node we just inserted
+	return n
+}
+
+// trimErrors removes trailing zero-width error nodes that might be left from previous error
+// handling, as they would otherwise result in cascading errors at the same position.
+func (p *parser) trimErrors() {
+	end := len(p.nodes) - p.cur.trivia
+	start := end
+	for ; start > 0; start-- {
+		n := p.nodes[start-1]
+		if n.Kind() != syntax.KindError || n.Span().Start != n.Span().End {
+			break
+		}
+	}
+	p.nodes = slices.Delete(p.nodes, start, end)
+}
+
+func (p *parser) expectClosing(open int, expected syntax.Kind) *syntax.Error {
 	if p.cur.kind == expected {
 		p.consume()
 		return nil
 	}
-	if p.nodes[open].Kind == syntax.KindError {
+	if p.nodes[open].Kind() == syntax.KindError {
 		// Already have an error at this position.
 		return nil
 	}
-	n := syntax.Error("unclosed delimiter", p.nodes[open].Span, p.nodes[open].Value.Text())
+	n := asErrorNode(p.nodes[open], "unclosed delimiter")
 	p.nodes[open] = n
-	return n.AsError()
+	return n
 }
 
 func (p *parser) flushTrivia() {
@@ -226,12 +242,7 @@ func (p *parser) wrap(start int, kind syntax.Kind) {
 	from := min(start, to)
 	children := slices.Clone(p.nodes[from:to])
 	p.nodes = slices.Delete(p.nodes, from, to)
-	var span syntax.Span
-	if len(children) > 0 {
-		span.Start = children[0].Span.Start
-		span.End = children[len(children)-1].Span.End
-	}
-	p.nodes = slices.Insert(p.nodes, from, syntax.Inner(kind, span, children))
+	p.nodes = slices.Insert(p.nodes, from, syntax.Node(syntax.NewInner(kind, children)))
 }
 
 func (p *parser) withMode(mode syntax.Mode, nlmode nlMode, fn func()) {
@@ -254,7 +265,7 @@ func (p *parser) withNewlineMode(mode nlMode, fn func()) {
 	fn()
 	p.newlineMode = prevMode
 	if p.cur.newline && prevMode != mode {
-		p.cur.kind = p.cur.node.Kind // restore correct kind
+		p.cur.kind = p.cur.node.Kind() // restore correct kind
 		if p.newlineMode.stopAt(p.cur) {
 			p.cur.kind = syntax.KindEnd // new mode treads this as end of input
 		}
@@ -342,7 +353,7 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 				p.consumeAs(syntax.KindText)
 			} else {
 				err := p.unexpected()
-				err.AddHint("try using a backslash escape: \\]")
+				err.Hint("try using a backslash escape: \\]")
 			}
 		case syntax.KindStar:
 			p.parseStrong()
@@ -406,8 +417,8 @@ func (p *parser) parseCode(stops syntax.Set) {
 			if !p.atSet(stops) && !p.consumeIf(syntax.KindSemicolon) {
 				err := p.expected("semicolon or line break")
 				if p.at(syntax.KindLabel) {
-					err.AddHint("labels can only be applied in markup mode")
-					err.AddHint("try wrapping your code in a markup block (`[ ]`)")
+					err.Hint("labels can only be applied in markup mode")
+					err.Hint("try wrapping your code in a markup block (`[ ]`)")
 				}
 			}
 		})
@@ -826,7 +837,7 @@ func (p *parser) parseParam(sink *bool) {
 
 	// Named parameter: `name: value`.
 	if p.consumeIf(syntax.KindColon) {
-		if wasAtPattern && p.nodes[start].Kind != syntax.KindIdent {
+		if wasAtPattern && p.nodes[start].Kind() != syntax.KindIdent {
 			p.expectedAt(start, "identifier")
 		}
 
@@ -914,7 +925,7 @@ func (p *parser) parseDestructuringItem(reassignment bool, notJustParens *bool, 
 	// Parse named destructuring item.
 	if p.consumeIf(syntax.KindColon) {
 		// Recover from bad named destructuring.
-		if wasAtPattern && p.nodes[start].Kind != syntax.KindIdent {
+		if wasAtPattern && p.nodes[start].Kind() != syntax.KindIdent {
 			p.expectedAt(start, "identifier")
 		}
 
@@ -944,7 +955,7 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 
 	if !reassignment {
 		node := p.nodes[start]
-		if node.Kind != syntax.KindIdent {
+		if node.Kind() != syntax.KindIdent {
 			p.expectedAt(start, "pattern")
 		}
 	}
@@ -1014,7 +1025,7 @@ func (p *parser) parseArrayOrDictItem(state *groupState) {
 
 		node := p.nodes[start]
 		pairKind := syntax.KindKeyed
-		if node.Kind == syntax.KindIdent {
+		if node.Kind() == syntax.KindIdent {
 			pairKind = syntax.KindNamed
 		}
 
@@ -1043,7 +1054,7 @@ func (p *parser) parseArgs() {
 	if !p.directlyAt(syntax.KindLeftParen) && !p.directlyAt(syntax.KindLeftBracket) {
 		err := p.expected("argument list")
 		if p.at(syntax.KindLeftParen) || p.at(syntax.KindLeftBracket) {
-			err.AddHint("there may not be any spaces between the function name and the argument list")
+			err.Hint("there may not be any spaces between the function name and the argument list")
 		}
 		return
 	}
@@ -1096,7 +1107,7 @@ func (p *parser) parseArg() {
 	if p.consumeIf(syntax.KindColon) {
 		// Recover from bad argument name.
 		if wasAtExpr {
-			if p.nodes[start].Kind != syntax.KindIdent {
+			if p.nodes[start].Kind() != syntax.KindIdent {
 				p.expectedAt(start, "identifier")
 			}
 			// TODO: the official implementation checks for duplicate names here. This is probably
@@ -1220,7 +1231,7 @@ func (p *parser) parseForLoop() {
 
 	if p.at(syntax.KindComma) {
 		err := p.unexpected()
-		err.AddHint("destructuring patterns must be wrapped in parentheses")
+		err.Hint("destructuring patterns must be wrapped in parentheses")
 		if p.atSet(syntax.Pattern) {
 			p.parsePattern(false)
 		}

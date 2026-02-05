@@ -1,94 +1,126 @@
 package syntax
 
 import (
+	"fmt"
 	"strings"
 )
 
-type Node struct {
-	Kind  Kind
-	Span  Span
-	Value Value
+type Node interface {
+	Kind() Kind
+	Span() Span
+	Text() string
+	aNode()
 }
 
 type RootNode struct {
 	Source Source
-	Node
+	*Inner
 }
 
-func (n Node) AsLeaf() *LeafValue {
-	if v, ok := n.Value.(*LeafValue); ok {
-		return v
+type Leaf struct {
+	kind    Kind
+	span    Span
+	literal string
+}
+
+var _ Node = (*Leaf)(nil)
+
+func NewLeaf(kind Kind, span Span, literal string) *Leaf {
+	return &Leaf{
+		kind:    kind,
+		span:    span,
+		literal: literal,
 	}
-	return nil
+}
+func (v *Leaf) Kind() Kind   { return v.kind }
+func (v *Leaf) Span() Span   { return v.span }
+func (v *Leaf) Text() string { return v.literal }
+func (v *Leaf) aNode()       {}
+
+type Inner struct {
+	kind     Kind
+	children []Node
 }
 
-func (n Node) AsInner() *InnerValue {
-	if v, ok := n.Value.(*InnerValue); ok {
-		return v
+var _ Node = (*Inner)(nil)
+
+func NewInner(kind Kind, children []Node) *Inner {
+	return &Inner{
+		kind:     kind,
+		children: children,
 	}
-	return nil
 }
-
-func (n Node) AsError() *ErrorValue {
-	if v, ok := n.Value.(*ErrorValue); ok {
-		return v
+func (v *Inner) Kind() Kind { return v.kind }
+func (v *Inner) Span() Span {
+	if len(v.children) == 0 {
+		return Span{}
 	}
-	return nil
+	return Span{
+		Start: v.children[0].Span().Start,
+		End:   v.children[len(v.children)-1].Span().End,
+	}
 }
-
-type Value interface {
-	Text() string
-	aValue()
-}
-
-type LeafValue struct {
-	Literal string
-}
-
-func Leaf(kind Kind, span Span, literal string) Node {
-	return Node{kind, span, &LeafValue{Literal: literal}}
-}
-
-func (v *LeafValue) Text() string {
-	return v.Literal
-}
-
-func (v *LeafValue) aValue() {}
-
-type InnerValue struct {
-	Children []Node
-}
-
-func Inner(kind Kind, span Span, children []Node) Node {
-	return Node{kind, span, &InnerValue{Children: children}}
-}
-
-func (v *InnerValue) Text() string {
+func (v *Inner) Text() string {
 	var sb strings.Builder
-	for _, child := range v.Children {
-		sb.WriteString(child.Value.Text())
+	for _, child := range v.children {
+		sb.WriteString(child.Text())
 	}
 	return sb.String()
 }
+func (v *Inner) Children() []Node { return v.children }
+func (v *Inner) aNode()           {}
 
-func (v *InnerValue) aValue() {}
-
-type ErrorValue struct {
-	Message string
-	Hints   []string
-	Literal string
+type Error struct {
+	span    Span
+	message string
+	hints   []string
+	literal string
 }
 
-func Error(msg string, span Span, literal string) Node {
-	return Node{KindError, span, &ErrorValue{Message: msg, Literal: literal}}
+var _ Node = (*Error)(nil)
+var _ error = (*Error)(nil)
+
+func NewError(span Span, message string, literal string, hints ...string) *Error {
+	return &Error{
+		span:    span,
+		message: message,
+		hints:   hints,
+		literal: literal,
+	}
 }
 
-func (v *ErrorValue) AddHint(hint string) {
-	v.Hints = append(v.Hints, hint)
+func (n *Error) Span() Span       { return n.span }
+func (n *Error) Kind() Kind       { return KindError }
+func (n *Error) Text() string     { return n.literal }
+func (n *Error) Message() string  { return n.message }
+func (n *Error) Hint(hint string) { n.hints = append(n.hints, hint) }
+func (n *Error) Hints() []string  { return n.hints }
+func (n *Error) Error() string    { return n.message }
+func (n *Error) aNode()           {}
+
+func ConvertNode(node Node, kind Kind) Node {
+	switch v := node.(type) {
+	case *Leaf:
+		return NewLeaf(kind, v.span, v.literal)
+	case *Inner:
+		return NewInner(kind, v.children)
+	case *Error:
+		panic("cannot convert error node")
+	default:
+		panic(fmt.Sprintf("unexpected node type: %T", node))
+	}
 }
 
-func (v *ErrorValue) Text() string {
-	return v.Literal
-}
+// ErrorList is a list of syntax errors that implements error as well.
+type ErrorList []*Error
 
-func (v *ErrorValue) aValue() {}
+func (e ErrorList) Error() string {
+	var sb strings.Builder
+	for i, err := range e {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(err.Error())
+	}
+	return sb.String()
+}

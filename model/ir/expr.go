@@ -9,8 +9,8 @@ import (
 type Expr interface {
 	Eval(ec *EvalContext) Value
 
-	aExpr()
 	format(f *formatter)
+	aExpr()
 }
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////

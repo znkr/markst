@@ -9,6 +9,8 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+var nodeCmpOpts = cmp.Options{cmp.AllowUnexported(syntax.Leaf{}, syntax.Inner{}, syntax.Error{})}
+
 // nodeBuilder tracks offsets to generate proper spans for test expectations.
 type nodeBuilder struct {
 	offset uint32
@@ -17,36 +19,23 @@ type nodeBuilder struct {
 func (b *nodeBuilder) leaf(kind syntax.Kind, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.Leaf(kind, syntax.Span{Start: start, End: b.offset}, literal)
+	return syntax.NewLeaf(kind, syntax.Span{Start: start, End: b.offset}, literal)
 }
 
 func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Node {
-	if len(children) == 0 {
-		return syntax.Inner(kind, syntax.Span{Start: b.offset, End: b.offset}, children)
-	}
-	start := children[0].Span.Start
-	end := children[len(children)-1].Span.End
-	return syntax.Inner(kind, syntax.Span{Start: start, End: end}, children)
+	return syntax.NewInner(kind, children)
 }
 
 func (b *nodeBuilder) err(msg string, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.Error(msg, syntax.Span{Start: start, End: b.offset}, literal)
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, literal)
 }
 
 func (b *nodeBuilder) errWithHints(msg string, literal string, hints []string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.Node{
-		Kind: syntax.KindError,
-		Span: syntax.Span{Start: start, End: b.offset},
-		Value: &syntax.ErrorValue{
-			Message: msg,
-			Hints:   hints,
-			Literal: literal,
-		},
-	}
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, literal, hints...)
 }
 
 func TestScanner_MarkupMode(t *testing.T) {
@@ -825,7 +814,7 @@ func TestScanner_MarkupMode(t *testing.T) {
 			b := &nodeBuilder{}
 			expected := tt.expected(b)
 
-			if diff := cmp.Diff(expected, got); diff != "" {
+			if diff := cmp.Diff(expected, got, nodeCmpOpts); diff != "" {
 				t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -882,7 +871,7 @@ func TestScanner_Newline(t *testing.T) {
 				}
 			}
 
-			if diff := cmp.Diff(tt.expected, got); diff != "" {
+			if diff := cmp.Diff(tt.expected, got, nodeCmpOpts); diff != "" {
 				t.Errorf("Newline() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -1318,7 +1307,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "0x12pt",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("invalid hexadecimal number", "0x12pt"),
+					b.err("invalid hexadecimal number: 0x12pt", "0x12pt"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
@@ -1328,7 +1317,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "0xG",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("invalid hexadecimal number", "0xG"),
+					b.err("invalid hexadecimal number: 0xG", "0xG"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
@@ -1338,7 +1327,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "%",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("unexpected character", "%"),
+					b.err("unexpected character: %", "%"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
@@ -1361,7 +1350,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			b := &nodeBuilder{}
 			expected := tt.expected(b)
 
-			if diff := cmp.Diff(expected, got); diff != "" {
+			if diff := cmp.Diff(expected, got, nodeCmpOpts); diff != "" {
 				t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -1437,8 +1426,8 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan 'h'
 	kind, val := s.Next()
-	if kind != syntax.KindText || val.Value.Text() != "h" {
-		t.Fatalf("expected 'h', got %v %q", kind, val.Value.Text())
+	if kind != syntax.KindText || val.Text() != "h" {
+		t.Fatalf("expected 'h', got %v %q", kind, val.Text())
 	}
 	if c := s.Column(); c != 1 {
 		t.Errorf("after 'h' Column() = %d, want 1", c)
@@ -1446,8 +1435,8 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan '\n'
 	kind, val = s.Next()
-	if kind != syntax.KindSpace || val.Value.Text() != "\n" {
-		t.Fatalf("expected '\\n', got %v %q", kind, val.Value.Text())
+	if kind != syntax.KindSpace || val.Text() != "\n" {
+		t.Fatalf("expected '\\n', got %v %q", kind, val.Text())
 	}
 	if c := s.Column(); c != 0 {
 		t.Errorf("after '\\n' Column() = %d, want 0", c)
@@ -1456,8 +1445,8 @@ func TestScanner_Column(t *testing.T) {
 	// Scan 'e' (part of "ello" text)
 	// scanText scans the whole text block "ello".
 	kind, val = s.Next()
-	if kind != syntax.KindText || val.Value.Text() != "ello" {
-		t.Fatalf("expected 'ello', got %v %q", kind, val.Value.Text())
+	if kind != syntax.KindText || val.Text() != "ello" {
+		t.Fatalf("expected 'ello', got %v %q", kind, val.Text())
 	}
 	// 'ello' length 4. Start at 0. 0+4 = 4. But EOF resets col to 0.
 	if c := s.Column(); c != 0 {

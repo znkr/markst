@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"znkr.io/diff/textdiff"
+	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/model/ir"
 	"znkr.io/writst/syntax/analyzer"
@@ -32,7 +33,10 @@ func TestEval(t *testing.T) {
 					}
 
 					node := parser.Parse(tc.Input)
-					content := analyzer.Analyze(node)
+					content, err := analyzer.Analyze(node)
+					if diff := errcmp.Diff(node, err); diff != "" {
+						t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
+					}
 
 					ec := ir.NewEvalContext()
 					ec.Bind(unique.Make("test"), &ir.Function{
