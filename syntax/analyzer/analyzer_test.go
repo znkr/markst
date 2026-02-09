@@ -24,6 +24,7 @@ func TestAnalyze(t *testing.T) {
 
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
+			t.Parallel()
 			tests := testfile.Read(t, file)
 			for i, tc := range tests {
 				t.Run(tc.Name, func(t *testing.T) {

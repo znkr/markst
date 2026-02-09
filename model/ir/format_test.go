@@ -9,13 +9,13 @@ import (
 )
 
 // Helper functions for creating IR nodes
-func id(s string) *Ident                     { return &Ident{Name: unique.Make(s)} }
-func text(s string) *Const                   { return &Const{Value: &Text{Value: s}} }
-func str(s string) *Const                    { return &Const{Value: String(s)} }
-func num(n int) *Const                       { return &Const{Value: Int(n)} }
-func param(s string) *PositionalParam        { return &PositionalParam{id(s)} }
-func destruct(s string) *DestructIdent       { return &DestructIdent{id(s)} }
-func narg(name string, expr Expr) *NamedArg  { return &NamedArg{Name: unique.Make(name), Expr: expr} }
+func id(s string) *Ident                    { return &Ident{Name: unique.Make(s)} }
+func text(s string) *Const                  { return &Const{Value: &Text{Value: s}} }
+func str(s string) *Const                   { return &Const{Value: String(s)} }
+func num(n int) *Const                      { return &Const{Value: Int(n)} }
+func param(s string) *PositionalParam       { return &PositionalParam{id(s)} }
+func destruct(s string) *DestructIdent      { return &DestructIdent{id(s)} }
+func narg(name string, expr Expr) *NamedArg { return &NamedArg{Name: unique.Make(name), Expr: expr} }
 
 func TestFormat(t *testing.T) {
 	tests := []struct {
