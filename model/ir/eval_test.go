@@ -38,6 +38,9 @@ func TestEval(t *testing.T) {
 					if diff := errcmp.Diff(node, err); diff != "" {
 						t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
 					}
+					if err != nil {
+						return
+					}
 
 					ec := ir.NewEvalContext()
 					ec.Bind(unique.Make("test"), &ir.Function{

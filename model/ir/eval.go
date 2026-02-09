@@ -61,9 +61,9 @@ func (s *scope) lookup(name unique.Handle[string]) (Value, bool) {
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-func (n ContentExpr) Eval(ec *EvalContext) Value {
+func (n *ContentExpr) Eval(ec *EvalContext) Value {
 	var ret Contents
-	for _, expr := range n {
+	for _, expr := range n.exprs {
 		v := toContent(expr.Eval(ec))
 		if v == nil {
 			continue
@@ -75,54 +75,54 @@ func (n ContentExpr) Eval(ec *EvalContext) Value {
 
 func (n *HeadingExpr) Eval(ec *EvalContext) Value {
 	return &Heading{
-		Level: n.Level,
-		Body:  n.Body.Eval(ec).(Content),
+		Level: n.level,
+		Body:  n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *StrongExpr) Eval(ec *EvalContext) Value {
 	return &Strong{
-		Body: n.Body.Eval(ec).(Content),
+		Body: n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *EmphExpr) Eval(ec *EvalContext) Value {
 	return &Emph{
-		Body: n.Body.Eval(ec).(Content),
+		Body: n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *LinkExpr) Eval(ec *EvalContext) Value {
 	return &Link{
-		Dest: n.Dest,
-		Body: n.Body.Eval(ec).(Content),
+		Dest: n.dest,
+		Body: n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *RefExpr) Eval(ec *EvalContext) Value {
 	return &Ref{
-		Target:     n.Target,
-		Supplement: n.Supplement.Eval(ec).(Content),
+		Target:     n.target,
+		Supplement: n.supplement.Eval(ec).(Content),
 	}
 }
 
 func (n *ListItemExpr) Eval(ec *EvalContext) Value {
 	return &ListItem{
-		Body: n.Body.Eval(ec).(Content),
+		Body: n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *EnumItemExpr) Eval(ec *EvalContext) Value {
 	return &EnumItem{
-		Number: n.Number,
-		Body:   n.Body.Eval(ec).(Content),
+		Number: n.number,
+		Body:   n.body.Eval(ec).(Content),
 	}
 }
 
 func (n *TermItemExpr) Eval(ec *EvalContext) Value {
 	return &TermItem{
-		Term:        n.Term.Eval(ec).(Content),
-		Description: n.Description.Eval(ec).(Content),
+		Term:        n.term.Eval(ec).(Content),
+		Description: n.description.Eval(ec).(Content),
 	}
 }
 
@@ -141,14 +141,14 @@ func toContent(v Value) Content {
 
 // Code ////////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Const) Eval(ec *EvalContext) Value { return n.Value }
+func (n *Const) Eval(ec *EvalContext) Value { return n.value }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
 func (n *Ident) Eval(ec *EvalContext) Value {
-	val, ok := ec.Lookup(n.Name)
+	val, ok := ec.Lookup(n.name)
 	if !ok {
-		panic("undefined identifier: " + n.Name.Value())
+		panic("undefined identifier: " + n.name.Value())
 	}
 	return val
 }
@@ -156,38 +156,38 @@ func (n *Ident) Eval(ec *EvalContext) Value {
 func (n *CodeBlock) Eval(ec *EvalContext) Value {
 	ec.PushScope()
 	defer ec.PopScope()
-	return n.Body.Eval(ec)
+	return n.body.Eval(ec)
 }
 
 func (n *ContentBlock) Eval(ec *EvalContext) Value {
 	ec.PushScope()
 	defer ec.PopScope()
-	return n.Body.Eval(ec)
+	return n.body.Eval(ec)
 }
 
 func (n *Parenthesized) Eval(ec *EvalContext) Value {
-	return n.Body.Eval(ec)
+	return n.body.Eval(ec)
 }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
 func (n *ArrayExpr) Eval(ec *EvalContext) Value {
-	var elems Array
-	for _, expr := range n.Elements {
+	elems := make(Array, 0, len(n.elements))
+	for _, expr := range n.elements {
 		elems = append(elems, expr.Eval(ec))
 	}
 	return elems
 }
 
 func (n *DictExpr) Eval(ec *EvalContext) Value {
-	dict := make(Dict)
-	for _, ent := range n.Entries {
-		keyVal := ent.Key.Eval(ec)
+	dict := make(Dict, len(n.entries))
+	for _, ent := range n.entries {
+		keyVal := ent.key.Eval(ec)
 		keyStr, ok := keyVal.(String)
 		if !ok {
 			panic("dictionary key did not evaluate to a string")
 		}
-		dict[keyStr] = ent.Value.Eval(ec)
+		dict[keyStr] = ent.value.Eval(ec)
 	}
 	return dict
 }
@@ -252,19 +252,19 @@ var binops = map[binopKey]func(x, y Value) Value{
 }
 
 func (n *Unary) Eval(ec *EvalContext) Value {
-	x := n.Operand.Eval(ec)
-	op := unaryops[unaryopKey{n.Op, x.Kind()}]
+	x := n.operand.Eval(ec)
+	op := unaryops[unaryopKey{n.op, x.Kind()}]
 	if op == nil {
-		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.Op, x.Kind()))
+		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.op, x.Kind()))
 	}
 	return op(x)
 }
 
 func (n *Binary) Eval(ec *EvalContext) Value {
-	left, right := n.Left.Eval(ec), n.Right.Eval(ec)
-	op := binops[binopKey{n.Op, left.Kind(), right.Kind()}]
+	left, right := n.left.Eval(ec), n.right.Eval(ec)
+	op := binops[binopKey{n.op, left.Kind(), right.Kind()}]
 	if op == nil {
-		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Kind(), n.Op, right.Kind()))
+		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Kind(), n.op, right.Kind()))
 	}
 	return op(left, right)
 }
@@ -276,22 +276,22 @@ func (n *FieldAccess) Eval(ec *EvalContext) Value {
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 func (n *FuncCall) Eval(ec *EvalContext) Value {
-	callee := n.Callee.Eval(ec)
+	callee := n.callee.Eval(ec)
 	fn, ok := callee.(*Function)
 	if !ok {
 		panic("attempted to call a non-function value")
 	}
 
 	var args Arguments
-	for _, arg := range n.Args {
+	for _, arg := range n.args {
 		switch a := arg.(type) {
 		case *ExprArg:
-			args.Positional = append(args.Positional, a.Expr.Eval(ec))
+			args.Positional = append(args.Positional, a.expr.Eval(ec))
 		case *NamedArg:
 			if args.Named == nil {
 				args.Named = make(map[unique.Handle[string]]Value)
 			}
-			args.Named[a.Name] = a.Expr.Eval(ec)
+			args.Named[a.name] = a.expr.Eval(ec)
 		case *SpreadArg:
 			panic("TODO: implement spread arguments")
 		default:
@@ -308,10 +308,10 @@ func (n *Closure) Eval(ec *EvalContext) Value {
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
 
 func (n *LetBinding) Eval(ec *EvalContext) Value {
-	for _, p := range n.Pattern {
+	for _, p := range n.pattern {
 		switch p := p.(type) {
 		case *DestructIdent:
-			ec.Bind(p.Name, n.Value.Eval(ec))
+			ec.Bind(p.ident.name, n.value.Eval(ec))
 		default:
 			panic("TODO: implement complex let patterns")
 		}
@@ -334,14 +334,14 @@ func (n *ShowRule) Eval(ec *EvalContext) Value {
 // Control Flow ////////////////////////////////////////////////////////////////////////////////////
 
 func (n *Conditional) Eval(ec *EvalContext) Value {
-	cond, ok := n.Condition.Eval(ec).(Bool)
+	cond, ok := n.condition.Eval(ec).(Bool)
 	if !ok {
 		panic("condition did not evaluate to a boolean")
 	}
 	if cond {
-		return n.Then.Eval(ec)
-	} else if n.Else != nil {
-		return n.Else.Eval(ec)
+		return n.then.Eval(ec)
+	} else if n.els != nil {
+		return n.els.Eval(ec)
 	}
 	return &None{}
 }

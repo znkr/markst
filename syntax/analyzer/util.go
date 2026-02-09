@@ -14,13 +14,11 @@ import (
 )
 
 var (
-	none       = &ir.Const{Value: ir.None{}}
-	auto       = &ir.Const{Value: ir.Auto{}}
-	underscore = &ir.Ident{Name: unique.Make("_")}
+	underscore = unique.Make("_")
 
-	bools = map[string]*ir.Const{
-		"true":  {Value: ir.Bool(true)},
-		"false": {Value: ir.Bool(false)},
+	bools = map[string]ir.Bool{
+		"true":  ir.Bool(true),
+		"false": ir.Bool(false),
 	}
 
 	shorthandMap = map[string]string{

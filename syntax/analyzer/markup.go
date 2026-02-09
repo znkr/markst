@@ -14,7 +14,7 @@ func (a *analyzer) analyzeHeading(n syntax.Node) *ir.HeadingExpr {
 	defer ns.finish()
 	level := len(ns.take(syntax.KindHeadingMarker))
 	body := a.analyzeContent(ns.node())
-	return &ir.HeadingExpr{Level: level, Body: body}
+	return ir.NewHeadingExpr(n.Span(), level, body)
 }
 
 func (a *analyzer) analyzeListItem(n syntax.Node) *ir.ListItemExpr {
@@ -22,7 +22,7 @@ func (a *analyzer) analyzeListItem(n syntax.Node) *ir.ListItemExpr {
 	defer ns.finish()
 	ns.take(syntax.KindListMarker)
 	body := a.analyzeContent(ns.node())
-	return &ir.ListItemExpr{Body: body}
+	return ir.NewListItemExpr(n.Span(), body)
 }
 
 func (a *analyzer) analyzeEnumItem(n syntax.Node) *ir.EnumItemExpr {
@@ -38,7 +38,7 @@ func (a *analyzer) analyzeEnumItem(n syntax.Node) *ir.EnumItemExpr {
 		number = int(n)
 	}
 	body := a.analyzeContent(ns.node())
-	return &ir.EnumItemExpr{Number: number, Body: body}
+	return ir.NewEnumItemExpr(n.Span(), number, body)
 }
 
 func (a *analyzer) analyzeTermItem(n syntax.Node) *ir.TermItemExpr {
@@ -48,7 +48,7 @@ func (a *analyzer) analyzeTermItem(n syntax.Node) *ir.TermItemExpr {
 	term := a.analyzeContent(ns.node())
 	ns.take(syntax.KindColon)
 	body := a.analyzeContent(ns.node())
-	return &ir.TermItemExpr{Term: term, Description: body}
+	return ir.NewTermItemExpr(n.Span(), term, body)
 }
 
 func (a *analyzer) analyzeRef(n syntax.Node) *ir.RefExpr {
@@ -56,14 +56,14 @@ func (a *analyzer) analyzeRef(n syntax.Node) *ir.RefExpr {
 	defer ns.finish()
 	marker := ns.take(syntax.KindRefMarker)
 	target := marker[1:] // trim '@'
-	var supplement ir.ContentExpr
+	var supplement *ir.ContentExpr
 	if !ns.done() {
 		supplement = a.analyzeContentBlock(ns.node())
 	}
-	return &ir.RefExpr{Target: unique.Make(target), Supplement: supplement}
+	return ir.NewRefExpr(n.Span(), unique.Make(target), supplement)
 }
 
-func (a *analyzer) analyzeContentBlock(n syntax.Node) ir.ContentExpr {
+func (a *analyzer) analyzeContentBlock(n syntax.Node) *ir.ContentExpr {
 	ns := a.inner(n, syntax.KindContentBlock)
 	defer ns.finish()
 	ns.take(syntax.KindLeftBracket)
@@ -94,5 +94,5 @@ func (a *analyzer) analyzeRaw(n syntax.Node) *ir.Const {
 			lines = append(lines, child.Text())
 		}
 	}
-	return &ir.Const{Value: &ir.Raw{Block: marker != "`", Lang: lang, Lines: lines}}
+	return ir.NewConst(n.Span(), &ir.Raw{Block: marker != "`", Lang: lang, Lines: lines})
 }

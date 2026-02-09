@@ -10,10 +10,10 @@ import (
 	"znkr.io/writst/syntax"
 )
 
-func Format(content ContentExpr) string {
+func Format(content *ContentExpr) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
-	for _, c := range content {
+	for _, c := range content.exprs {
 		c.format(f)
 		sb.WriteString("\n")
 	}
@@ -104,13 +104,13 @@ func (f *formatter) arguments(sep string, es []Arg) {
 		switch e := e.(type) {
 		case *SpreadArg:
 			f.str("..")
-			f.expr(e.Expr)
+			f.expr(e.expr)
 		case *ExprArg:
-			f.expr(e.Expr)
+			f.expr(e.expr)
 		case *NamedArg:
-			f.str(e.Name.Value())
+			f.str(e.name.Value())
 			f.str(": ")
-			f.expr(e.Expr)
+			f.expr(e.expr)
 		default:
 			panic(fmt.Sprintf("unknown arg type: %T", e))
 		}
@@ -125,16 +125,16 @@ func (f *formatter) params(sep string, ps []Param) {
 		}
 		switch p := p.(type) {
 		case *PositionalParam:
-			f.expr(p.Ident)
+			f.expr(p.ident)
 		case *NamedParam:
-			f.str(p.Name.Value())
-			if p.Default != nil {
+			f.str(p.name.Value())
+			if p.def != nil {
 				f.str(": ")
-				f.expr(p.Default)
+				f.expr(p.def)
 			}
 		case *SpreadParam:
 			f.str("..")
-			f.expr(p.Ident)
+			f.expr(p.ident)
 		default:
 			panic(fmt.Sprintf("unknown param type: %T", p))
 		}
@@ -151,7 +151,7 @@ func named(name string, v any) arg { return arg{name: name, value: v} }
 func pos(v any) arg                { return arg{positional: true, value: v} }
 
 // funcCall formats #name(args)[funcCall] for funcCall nodes
-func (f *formatter) funcCall(name string, args []arg, cblocks []ContentExpr) {
+func (f *formatter) funcCall(name string, args []arg, cblocks []*ContentExpr) {
 	f.prefix()
 	f.str(name)
 	if len(args) > 0 {
@@ -202,7 +202,7 @@ func (f *formatter) funcCall(name string, args []arg, cblocks []ContentExpr) {
 }
 
 // contents formats multiple content blocks
-func (f *formatter) contents(cs []ContentExpr) {
+func (f *formatter) contents(cs []*ContentExpr) {
 	for _, c := range cs {
 		c.format(f)
 	}
@@ -232,17 +232,17 @@ func (f *formatter) contentBlock(c Content) {
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-func (n ContentExpr) format(f *formatter) {
-	if len(n) == 0 {
+func (n *ContentExpr) format(f *formatter) {
+	if len(n.exprs) == 0 {
 		f.str("[]")
 		return
 	}
 	prev := f.mode
 	f.mode = syntax.ModeMarkup
 	// Stay inline if there's only one item OR we're inside inline code
-	if len(n) == 1 || f.inlineCode {
+	if len(n.exprs) == 1 || f.inlineCode {
 		f.str("[")
-		for i, item := range n {
+		for i, item := range n.exprs {
 			if i > 0 {
 				f.str(" ")
 			}
@@ -252,9 +252,9 @@ func (n ContentExpr) format(f *formatter) {
 	} else {
 		f.str("[")
 		f.indent++
-		for _, n := range n {
+		for _, item := range n.exprs {
 			f.nl()
-			n.format(f)
+			item.format(f)
 		}
 		f.indent--
 		f.nl()
@@ -264,76 +264,76 @@ func (n ContentExpr) format(f *formatter) {
 }
 
 func (n *HeadingExpr) format(f *formatter) {
-	f.funcCall("heading", []arg{named("level", n.Level)}, []ContentExpr{n.Body})
+	f.funcCall("heading", []arg{named("level", n.level)}, []*ContentExpr{n.body})
 }
 
 func (n *StrongExpr) format(f *formatter) {
-	f.funcCall("strong", nil, []ContentExpr{n.Body})
+	f.funcCall("strong", nil, []*ContentExpr{n.body})
 }
 
 func (n *EmphExpr) format(f *formatter) {
-	f.funcCall("emph", nil, []ContentExpr{n.Body})
+	f.funcCall("emph", nil, []*ContentExpr{n.body})
 }
 
 func (n *LinkExpr) format(f *formatter) {
-	f.funcCall("link", []arg{named("dest", n.Dest)}, []ContentExpr{n.Body})
+	f.funcCall("link", []arg{named("dest", n.dest)}, []*ContentExpr{n.body})
 }
 
 func (n *RefExpr) format(f *formatter) {
-	args := []arg{named("target", n.Target.Value())}
-	var cblocks []ContentExpr
-	if len(n.Supplement) > 0 {
-		cblocks = []ContentExpr{n.Supplement}
+	args := []arg{named("target", n.target.Value())}
+	var cblocks []*ContentExpr
+	if n.supplement != nil && len(n.supplement.exprs) > 0 {
+		cblocks = []*ContentExpr{n.supplement}
 	}
 	f.funcCall("ref", args, cblocks)
 }
 
 func (n *ListItemExpr) format(f *formatter) {
-	f.funcCall("list.item", nil, []ContentExpr{n.Body})
+	f.funcCall("list.item", nil, []*ContentExpr{n.body})
 }
 
 func (n *EnumItemExpr) format(f *formatter) {
-	f.funcCall("enum.item", []arg{pos(n.Number)}, []ContentExpr{n.Body})
+	f.funcCall("enum.item", []arg{pos(n.number)}, []*ContentExpr{n.body})
 }
 
 func (n *TermItemExpr) format(f *formatter) {
-	f.funcCall("terms.item", nil, []ContentExpr{n.Term, n.Description})
+	f.funcCall("terms.item", nil, []*ContentExpr{n.term, n.description})
 }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
 func (n *Const) format(f *formatter) {
-	n.Value.format(f)
+	n.value.format(f)
 }
 
 func (n *Ident) format(f *formatter) {
 	f.prefix()
-	f.str(n.Name.Value())
+	f.str(n.name.Value())
 }
 
 func (n *CodeBlock) format(f *formatter) {
 	f.prefix()
-	if len(n.Body) == 0 {
+	if n.body == nil || len(n.body.exprs) == 0 {
 		f.str("{ }")
 		return
 	}
 	prev := f.inlineCode
 	f.inlineCode = true
 	f.str("{ ")
-	f.exprs("; ", n.Body)
+	f.exprs("; ", n.body.exprs)
 	f.str(" }")
 	f.inlineCode = prev
 }
 
 func (n *ContentBlock) format(f *formatter) {
 	f.prefix()
-	n.Body.format(f)
+	n.body.format(f)
 }
 
 func (n *Parenthesized) format(f *formatter) {
 	f.prefix()
 	f.str("(")
-	f.expr(n.Body)
+	f.expr(n.body)
 	f.str(")")
 }
 
@@ -342,12 +342,12 @@ func (n *Parenthesized) format(f *formatter) {
 func (n *ArrayExpr) format(f *formatter) {
 	f.prefix()
 	f.str("(")
-	if len(n.Elements) == 0 {
+	if len(n.elements) == 0 {
 		f.str(")")
 		return
 	}
-	f.exprs(", ", n.Elements)
-	if len(n.Elements) == 1 {
+	f.exprs(", ", n.elements)
+	if len(n.elements) == 1 {
 		// trailing comma for single-element arrays
 		f.str(",")
 	}
@@ -356,18 +356,18 @@ func (n *ArrayExpr) format(f *formatter) {
 
 func (n *DictExpr) format(f *formatter) {
 	f.prefix()
-	if len(n.Entries) == 0 {
+	if len(n.entries) == 0 {
 		f.str("(:)")
 		return
 	}
 	f.str("(")
-	for i, ent := range n.Entries {
+	for i, ent := range n.entries {
 		if i > 0 {
 			f.str(", ")
 		}
-		f.expr(ent.Key)
+		f.expr(ent.key)
 		f.str(": ")
-		f.expr(ent.Value)
+		f.expr(ent.value)
 	}
 	f.str(")")
 }
@@ -376,65 +376,65 @@ func (n *DictExpr) format(f *formatter) {
 
 func (n *Unary) format(f *formatter) {
 	f.prefix()
-	op := n.Op.String()
+	op := n.op.String()
 	f.str(op)
 	// Add space after keyword operators like "not"
 	if op == "not" {
 		f.str(" ")
 	}
-	f.expr(n.Operand)
+	f.expr(n.operand)
 }
 
 func (n *Binary) format(f *formatter) {
 	f.prefix()
-	f.expr(n.Left)
-	f.op(n.Op)
-	f.expr(n.Right)
+	f.expr(n.left)
+	f.op(n.op)
+	f.expr(n.right)
 }
 
 func (n *FieldAccess) format(f *formatter) {
 	f.prefix()
-	f.expr(n.Target)
+	f.expr(n.target)
 	f.str(".")
-	f.str(n.Field)
+	f.str(n.field)
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 func (n *FuncCall) format(f *formatter) {
 	f.prefix()
-	f.expr(n.Callee)
+	f.expr(n.callee)
 	f.str("(")
-	f.arguments(", ", n.Args)
+	f.arguments(", ", n.args)
 	f.str(")")
-	f.contents(n.Content)
+	f.contents(n.content)
 }
 
 func (n *Closure) format(f *formatter) {
 	f.prefix()
-	if n.Name != nil {
+	if n.name != nil {
 		// Named function: name(params) = body
-		f.str(n.Name.Name.Value())
+		f.str(n.name.name.Value())
 		f.str("(")
-		f.params(", ", n.Params)
+		f.params(", ", n.params)
 		f.str(") = ")
-		f.expr(n.Body)
+		f.expr(n.body)
 		return
 	}
 	// Anonymous closure
-	if len(n.Params) == 1 {
+	if len(n.params) == 1 {
 		// Check if param is a spread - if so, needs parens
-		if _, isSpread := n.Params[0].(*SpreadParam); !isSpread {
-			f.params(", ", n.Params)
+		if _, isSpread := n.params[0].(*SpreadParam); !isSpread {
+			f.params(", ", n.params)
 			f.str(" => ")
-			f.expr(n.Body)
+			f.expr(n.body)
 			return
 		}
 	}
 	f.str("(")
-	f.params(", ", n.Params)
+	f.params(", ", n.params)
 	f.str(") => ")
-	f.expr(n.Body)
+	f.expr(n.body)
 }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
@@ -442,42 +442,42 @@ func (n *Closure) format(f *formatter) {
 func (n *LetBinding) format(f *formatter) {
 	f.prefix()
 	f.kw("let")
-	if n.Value != nil {
+	if n.value != nil {
 		// Check if value is a named closure (let function)
-		if closure, ok := n.Value.(*Closure); ok && closure.Name != nil {
-			f.expr(n.Value)
+		if closure, ok := n.value.(*Closure); ok && closure.name != nil {
+			f.expr(n.value)
 			return
 		}
-		f.destructPattern(n.Pattern)
+		f.destructPattern(n.pattern)
 		f.str(" = ")
-		f.expr(n.Value)
+		f.expr(n.value)
 		return
 	}
-	f.destructPattern(n.Pattern)
+	f.destructPattern(n.pattern)
 }
 
 func (n *SetRule) format(f *formatter) {
 	f.prefix()
 	f.kw("set")
-	f.expr(n.Target)
+	f.expr(n.target)
 	f.str("(")
-	f.arguments(", ", n.Args)
+	f.arguments(", ", n.args)
 	f.str(")")
-	if n.Condition != nil {
+	if n.condition != nil {
 		f.kw(" if")
-		f.expr(n.Condition)
+		f.expr(n.condition)
 	}
 }
 
 func (n *ShowRule) format(f *formatter) {
 	f.prefix()
 	f.str("show")
-	if n.Selector != nil {
+	if n.selector != nil {
 		f.str(" ")
-		f.expr(n.Selector)
+		f.expr(n.selector)
 	}
 	f.str(": ")
-	f.expr(n.Transform)
+	f.expr(n.transform)
 }
 
 // Control Flow ////////////////////////////////////////////////////////////////////////////////////
@@ -485,31 +485,31 @@ func (n *ShowRule) format(f *formatter) {
 func (n *Conditional) format(f *formatter) {
 	f.prefix()
 	f.kw("if")
-	f.expr(n.Condition)
+	f.expr(n.condition)
 	f.str(" ")
-	f.expr(n.Then)
-	if n.Else != nil {
+	f.expr(n.then)
+	if n.els != nil {
 		f.str(" else ")
-		f.expr(n.Else)
+		f.expr(n.els)
 	}
 }
 
 func (n *WhileLoop) format(f *formatter) {
 	f.prefix()
 	f.kw("while")
-	f.expr(n.Condition)
+	f.expr(n.condition)
 	f.str(" ")
-	f.expr(n.Body)
+	f.expr(n.body)
 }
 
 func (n *ForLoop) format(f *formatter) {
 	f.prefix()
 	f.kw("for")
-	f.destructPattern(n.Pattern)
+	f.destructPattern(n.pattern)
 	f.kw(" in")
-	f.expr(n.Iterable)
+	f.expr(n.iterable)
 	f.str(" ")
-	f.expr(n.Body)
+	f.expr(n.body)
 }
 
 func (n *LoopBreak) format(f *formatter) {
@@ -525,9 +525,9 @@ func (n *LoopContinue) format(f *formatter) {
 func (n *FuncReturn) format(f *formatter) {
 	f.prefix()
 	f.str("return")
-	if n.Value != nil {
+	if n.value != nil {
 		f.str(" ")
-		f.expr(n.Value)
+		f.expr(n.value)
 	}
 }
 
@@ -536,36 +536,36 @@ func (n *FuncReturn) format(f *formatter) {
 func (n *Contextual) format(f *formatter) {
 	f.prefix()
 	f.kw("context")
-	f.expr(n.Body)
+	f.expr(n.body)
 }
 
 func (n *ModuleInclude) format(f *formatter) {
 	f.prefix()
 	f.kw("include")
-	f.expr(n.Source)
+	f.expr(n.source)
 }
 
 func (n *DestructAssignment) format(f *formatter) {
 	f.prefix()
-	f.destructPattern(n.Pattern)
+	f.destructPattern(n.pattern)
 	f.str(" = ")
-	f.expr(n.Value)
+	f.expr(n.value)
 }
 
 func (n *DestructIdent) format(f *formatter) {
-	f.str(n.Ident.Name.Value())
+	f.str(n.ident.name.Value())
 }
 
 func (n *DestructNamed) format(f *formatter) {
-	f.str(n.Name.Value())
+	f.str(n.name.Value())
 	f.str(": ")
-	f.str(n.Pattern.Name.Value())
+	f.str(n.pattern.name.Value())
 }
 
 func (n *DestructSink) format(f *formatter) {
 	f.str("..")
-	if n.Ident != nil {
-		f.str(n.Ident.Name.Value())
+	if n.ident != nil {
+		f.str(n.ident.name.Value())
 	}
 }
 
