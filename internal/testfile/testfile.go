@@ -166,9 +166,12 @@ func scan(t *testing.T, path string) iter.Seq[token] {
 			line, err := r.ReadString('\n')
 			if err != nil {
 				if err == io.EOF {
-					break
+					if line == "" {
+						break
+					}
+				} else {
+					t.Fatal(err)
 				}
-				t.Fatal(err)
 			}
 			lineno++
 			line = strings.TrimRight(line, "\r\n")

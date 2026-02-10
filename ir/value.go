@@ -5,61 +5,60 @@ import (
 	"maps"
 	"slices"
 	"unique"
+
+	"znkr.io/writst/ir/types"
 )
 
 type Value interface {
-	Kind() Kind
+	Type() types.Type
 
 	aValue()
 	formattable
 }
-
-//go:generate go run  golang.org/x/tools/cmd/stringer -type Kind
-type Kind int
-
-const (
-	KindNone Kind = iota
-	KindAuto
-	KindBool
-	KindInt
-	KindFloat
-	KindNumeric
-	KindString
-	KindArray
-	KindDict
-	KindFunction
-	KindArguments
-	KindContent
-)
 
 // Scalars /////////////////////////////////////////////////////////////////////////////////////////
 
 type None struct{}
 type Auto struct{}
 type Bool bool
-type Int int
+type Int int64
 type Float float64
+type String string
+
 type Numeric struct {
 	Value float64
 	Unit  Unit
 }
-type String string
 
 func (None) aValue()    {}
 func (Auto) aValue()    {}
 func (Bool) aValue()    {}
 func (Int) aValue()     {}
 func (Float) aValue()   {}
-func (Numeric) aValue() {}
 func (String) aValue()  {}
+func (Numeric) aValue() {}
 
-func (None) Kind() Kind    { return KindNone }
-func (Auto) Kind() Kind    { return KindAuto }
-func (Bool) Kind() Kind    { return KindBool }
-func (Int) Kind() Kind     { return KindInt }
-func (Float) Kind() Kind   { return KindFloat }
-func (Numeric) Kind() Kind { return KindNumeric }
-func (String) Kind() Kind  { return KindString }
+func (None) Type() types.Type   { return types.None }
+func (Auto) Type() types.Type   { return types.Auto }
+func (Bool) Type() types.Type   { return types.Bool }
+func (Int) Type() types.Type    { return types.Int }
+func (Float) Type() types.Type  { return types.Float }
+func (String) Type() types.Type { return types.String }
+
+func (n Numeric) Type() types.Type {
+	switch n.Unit {
+	case UnitPt, UnitMm, UnitCm, UnitIn, UnitEm:
+		return types.Length
+	case UnitDeg, UnitRad:
+		return types.Angle
+	case UnitPercent:
+		return types.Ratio
+	case UnitFr:
+		return types.Fraction
+	default:
+		panic(fmt.Sprintf("invalid unit: %s", n.Unit))
+	}
+}
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
@@ -69,16 +68,17 @@ type Dict map[String]Value
 func (Array) aValue() {}
 func (Dict) aValue()  {}
 
-func (Array) Kind() Kind { return KindArray }
-func (Dict) Kind() Kind  { return KindDict }
+func (Array) Type() types.Type { return types.Array }
+func (Dict) Type() types.Type  { return types.Dict }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 type Function struct {
 	Name          string
 	NumPositional int
-	Defaults      *Arguments
-	F             func(args *Arguments) Value
+	Defaults      NamedArgs
+	WithArgs      *Arguments
+	F             func(args []Value, named NamedArgsWithDefaults) (Value, error)
 }
 
 func (n *Function) With(args *Arguments) *Function {
@@ -90,13 +90,18 @@ func (n *Function) With(args *Arguments) *Function {
 	return &Function{
 		Name:          n.Name,
 		NumPositional: numPositional,
-		Defaults:      n.Defaults.merge(args),
+		WithArgs:      n.WithArgs.merge(args),
+		Defaults:      n.Defaults,
 	}
 }
 
-func (n *Function) Apply(args *Arguments) Value {
+func (n *Function) Apply(args *Arguments) (Value, error) {
 	n.validate(args, true)
-	return n.F(n.Defaults.merge(args))
+	args = n.WithArgs.merge(args)
+	return n.F(args.Positional, NamedArgsWithDefaults{
+		Args:     args.Named,
+		Defaults: n.Defaults,
+	})
 }
 
 func (n *Function) validate(args *Arguments, strict bool) {
@@ -107,23 +112,17 @@ func (n *Function) validate(args *Arguments, strict bool) {
 			panic(fmt.Sprintf("incorrect number of positional arguments: expected at most %d, got %d", n.NumPositional, len(args.Positional)))
 		}
 	}
-	var named NamedArgs
-	if n.Defaults != nil {
-		named = n.Defaults.Named
-	}
 	for name := range args.Named {
-		if _, ok := named[name]; !ok {
+		if _, ok := n.Defaults[name]; !ok {
 			panic(fmt.Sprintf("unexpected named argument: %s", name.Value()))
 		}
 	}
 }
 
-func (*Function) aValue()    {}
-func (*Function) Kind() Kind { return KindFunction }
+func (*Function) aValue()          {}
+func (*Function) Type() types.Type { return types.Function }
 
 // Arguments ///////////////////////////////////////////////////////////////////////////////////////
-
-type NamedArgs map[unique.Handle[string]]Value
 
 type Arguments struct {
 	Positional []Value
@@ -162,8 +161,28 @@ func (a *Arguments) merge(args *Arguments) *Arguments {
 	}
 }
 
-func (*Arguments) aValue()    {}
-func (*Arguments) Kind() Kind { return KindArguments }
+func (*Arguments) aValue()          {}
+func (*Arguments) Type() types.Type { return types.Arguments }
+
+type NamedArgs map[unique.Handle[string]]Value
+
+type NamedArgsWithDefaults struct {
+	Args     NamedArgs
+	Defaults NamedArgs
+}
+
+func (n *NamedArgsWithDefaults) IsSet(name unique.Handle[string]) bool {
+	_, ok := n.Args[name]
+	return ok
+}
+
+func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
+	v := n.Args[name]
+	if v == nil {
+		v = n.Defaults[name]
+	}
+	return v
+}
 
 // Content /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -271,22 +290,22 @@ func (*EnumItem) aElement()  {}
 func (*Terms) aElement()     {}
 func (*TermItem) aElement()  {}
 
-func (Contents) Kind() Kind   { return KindContent }
-func (*Heading) Kind() Kind   { return KindContent }
-func (*Text) Kind() Kind      { return KindContent }
-func (*Raw) Kind() Kind       { return KindContent }
-func (*Strong) Kind() Kind    { return KindContent }
-func (*Emph) Kind() Kind      { return KindContent }
-func (*Linebreak) Kind() Kind { return KindContent }
-func (*Parbreak) Kind() Kind  { return KindContent }
-func (*Link) Kind() Kind      { return KindContent }
-func (*Ref) Kind() Kind       { return KindContent }
-func (*List) Kind() Kind      { return KindContent }
-func (*ListItem) Kind() Kind  { return KindContent }
-func (*Enum) Kind() Kind      { return KindContent }
-func (*EnumItem) Kind() Kind  { return KindContent }
-func (*Terms) Kind() Kind     { return KindContent }
-func (*TermItem) Kind() Kind  { return KindContent }
+func (Contents) Type() types.Type   { return types.Content }
+func (*Heading) Type() types.Type   { return types.Content }
+func (*Text) Type() types.Type      { return types.Content }
+func (*Raw) Type() types.Type       { return types.Content }
+func (*Strong) Type() types.Type    { return types.Content }
+func (*Emph) Type() types.Type      { return types.Content }
+func (*Linebreak) Type() types.Type { return types.Content }
+func (*Parbreak) Type() types.Type  { return types.Content }
+func (*Link) Type() types.Type      { return types.Content }
+func (*Ref) Type() types.Type       { return types.Content }
+func (*List) Type() types.Type      { return types.Content }
+func (*ListItem) Type() types.Type  { return types.Content }
+func (*Enum) Type() types.Type      { return types.Content }
+func (*EnumItem) Type() types.Type  { return types.Content }
+func (*Terms) Type() types.Type     { return types.Content }
+func (*TermItem) Type() types.Type  { return types.Content }
 
 // Label ///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -294,6 +313,6 @@ type Label struct {
 	Name unique.Handle[string]
 }
 
-func (Label) aValue()     {}
-func (*Label) aElement()  {}
-func (*Label) Kind() Kind { return KindContent }
+func (Label) aValue()           {}
+func (*Label) aElement()        {}
+func (*Label) Type() types.Type { return types.Content }

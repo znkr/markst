@@ -15,7 +15,7 @@
 #0o89
 
 --- number-suffix-invalid ---
-// Error: 2-4 invalid number suffix: "u"
+// Error: 2-4 invalid number suffix: u
 #1u
 
 --- float-invalid-incomplete-exponent ---

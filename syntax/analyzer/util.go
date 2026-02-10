@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 	"unique"
 
-	"znkr.io/writst/model/ir"
+	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
 )
 

@@ -10,7 +10,7 @@ import (
 	"znkr.io/diff/textdiff"
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/model/ir"
+	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )
@@ -33,12 +33,12 @@ func TestEval(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
-					node := parser.Parse(tc.Input)
-					exprs, err := analyzer.Analyze(node)
-					if diff := errcmp.Diff(node, err); diff != "" {
-						t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
-					}
+					root := parser.Parse(tc.Input)
+					exprs, err := analyzer.Analyze(root)
 					if err != nil {
+						if diff := errcmp.Diff(root, err); diff != "" {
+							t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
+						}
 						return
 					}
 
@@ -46,21 +46,24 @@ func TestEval(t *testing.T) {
 					ec.Bind(unique.Make("test"), &ir.Function{
 						Name:          "test",
 						NumPositional: 2,
-						F: func(args *ir.Arguments) ir.Value {
-							got, want := args.Positional[0], args.Positional[1]
+						F: func(args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
+							got, want := args[0], args[1]
 							if diff := cmp.Diff(ir.FormatValue(got), ir.FormatValue(want)); diff != "" {
 								t.Errorf("test() failed (-got +want):\n%s", diff)
 							}
-							return ir.None{}
+							return ir.None{}, nil
 						},
 					})
 
 					contents, err := ir.Eval(ec, exprs)
-					if err != nil {
-						t.Fatalf("Eval() error: %v", err)
+					if diff := errcmp.Diff(root, err); diff != "" {
+						t.Errorf("Eval() error mismatch (-want +got):\n%s", diff)
 					}
-					got := ir.FormatContents(contents)
+					if err != nil {
+						return
+					}
 
+					got := ir.FormatContents(contents)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}

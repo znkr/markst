@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unique"
 
-	"znkr.io/writst/model/ir"
+	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/convert"
 )

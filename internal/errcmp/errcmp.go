@@ -8,21 +8,38 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
 )
 
 func Diff(root syntax.RootNode, err error) string {
-	if err == nil {
-		return ""
-	}
 	want := collectErrors(root.Source, root.Children())
 	var got []cmpError
-	for _, err := range err.(syntax.ErrorList) {
+	switch err := err.(type) {
+	case nil:
+		// no error
+	case syntax.ErrorList:
+		for _, err := range err {
+			got = append(got, cmpError{
+				Span:    err.Span(),
+				Message: err.Error(),
+				Hints:   err.Hints(),
+			})
+		}
+	case *syntax.Error:
 		got = append(got, cmpError{
 			Span:    err.Span(),
 			Message: err.Error(),
 			Hints:   err.Hints(),
 		})
+	case ir.Error:
+		got = append(got, cmpError{
+			Span:    err.Span(),
+			Message: err.Error(),
+			Hints:   err.Hints(),
+		})
+	default:
+		panic(fmt.Sprintf("unexpected error type: %T", err))
 	}
 	return cmp.Diff(want, got, errcmpopts)
 }

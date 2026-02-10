@@ -34,6 +34,13 @@ func TestRead(t *testing.T) {
 				{Name: "also-no-want", Input: "line one\nline two\n", Want: ""},
 			},
 		},
+		{
+			name: "no-newline",
+			file: "testdata/no-newline.test",
+			tests: []Test{
+				{Name: "no-newline", Input: "something\n", Want: ""},
+			},
+		},
 	}
 
 	for _, tc := range cases {

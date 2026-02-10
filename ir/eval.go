@@ -4,13 +4,28 @@ import (
 	"fmt"
 	"unique"
 
+	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
 
-func Eval(ec *EvalContext, exprs []Expr) (Contents, error) {
+func Eval(ec *EvalContext, exprs []Expr) (c Contents, err error) {
 	ec.openScope()
 	defer ec.closeScope()
-	return evalContents(ec, exprs), nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*errWrapper); ok {
+				// propagate Error as an error return
+				err = r.(*errWrapper).err
+				c = nil
+			} else {
+				// re-panic other kinds of panic
+				panic(r)
+			}
+		}
+	}()
+	c = evalContents(ec, exprs)
+	return c, err
 }
 
 // Context /////////////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +142,7 @@ func (n *TermItemExpr) eval(ec *EvalContext) Value {
 func evalContents(ec *EvalContext, exprs []Expr) Contents {
 	var ret Contents
 	for _, expr := range exprs {
-		v := toContent(expr.eval(ec))
+		v := toContent(expr.Span(), expr.eval(ec))
 		if v == nil {
 			continue
 		}
@@ -136,7 +151,7 @@ func evalContents(ec *EvalContext, exprs []Expr) Contents {
 	return ret
 }
 
-func toContent(v Value) Content {
+func toContent(span syntax.Span, v Value) Content {
 	switch v := v.(type) {
 	case Content:
 		return v
@@ -145,6 +160,10 @@ func toContent(v Value) Content {
 	case None:
 		return nil
 	default:
+		raise(&ValueError{
+			span: span,
+			msg:  fmt.Sprintf("content expression evaluated to non-content value: %T", v),
+		})
 		panic(fmt.Sprintf("content expression evaluated to non-element value: %T", v))
 	}
 }
@@ -209,76 +228,76 @@ func (n *DictExpr) eval(ec *EvalContext) Value {
 // Operations //////////////////////////////////////////////////////////////////////////////////////
 
 type unaryopKey struct {
-	op          syntax.UnaryOp
-	operandKind Kind
+	op  syntax.UnaryOp
+	typ types.Type
 }
 
 var unaryops = map[unaryopKey]func(x Value) Value{
-	{syntax.Not, KindBool}: func(x Value) Value {
+	{syntax.Not, types.Bool}: func(x Value) Value {
 		return !x.(Bool)
 	},
-	{syntax.Neg, KindInt}: func(x Value) Value {
+	{syntax.Neg, types.Int}: func(x Value) Value {
 		return -x.(Int)
 	},
-	{syntax.Neg, KindFloat}: func(x Value) Value {
+	{syntax.Neg, types.Float}: func(x Value) Value {
 		return -x.(Float)
 	},
 }
 
 type binopKey struct {
 	op        syntax.BinaryOp
-	leftKind  Kind
-	rightKind Kind
+	leftType  types.Type
+	rightType types.Type
 }
 
 var binops = map[binopKey]func(x, y Value) Value{
 	// Int operations
-	{syntax.Add, KindInt, KindInt}: func(x, y Value) Value {
+	{syntax.Add, types.Int, types.Int}: func(x, y Value) Value {
 		return x.(Int) + y.(Int)
 	},
-	{syntax.Sub, KindInt, KindInt}: func(x, y Value) Value {
+	{syntax.Sub, types.Int, types.Int}: func(x, y Value) Value {
 		return x.(Int) - y.(Int)
 	},
-	{syntax.Mul, KindInt, KindInt}: func(x, y Value) Value {
+	{syntax.Mul, types.Int, types.Int}: func(x, y Value) Value {
 		return x.(Int) * y.(Int)
 	},
-	{syntax.Div, KindInt, KindInt}: func(x, y Value) Value {
+	{syntax.Div, types.Int, types.Int}: func(x, y Value) Value {
 		return x.(Int) / y.(Int)
 	},
 
 	// Float operations
-	{syntax.Add, KindFloat, KindFloat}: func(x, y Value) Value {
+	{syntax.Add, types.Float, types.Float}: func(x, y Value) Value {
 		return x.(Float) + y.(Float)
 	},
-	{syntax.Sub, KindFloat, KindFloat}: func(x, y Value) Value {
+	{syntax.Sub, types.Float, types.Float}: func(x, y Value) Value {
 		return x.(Float) - y.(Float)
 	},
-	{syntax.Mul, KindFloat, KindFloat}: func(x, y Value) Value {
+	{syntax.Mul, types.Float, types.Float}: func(x, y Value) Value {
 		return x.(Float) * y.(Float)
 	},
-	{syntax.Div, KindFloat, KindFloat}: func(x, y Value) Value {
+	{syntax.Div, types.Float, types.Float}: func(x, y Value) Value {
 		return x.(Float) / y.(Float)
 	},
 
-	{syntax.Add, KindString, KindString}: func(x, y Value) Value {
+	{syntax.Add, types.String, types.String}: func(x, y Value) Value {
 		return String(string(x.(String)) + string(y.(String)))
 	},
 }
 
 func (n *Unary) eval(ec *EvalContext) Value {
 	x := n.operand.eval(ec)
-	op := unaryops[unaryopKey{n.op, x.Kind()}]
+	op := unaryops[unaryopKey{n.op, x.Type()}]
 	if op == nil {
-		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.op, x.Kind()))
+		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.op, x.Type()))
 	}
 	return op(x)
 }
 
 func (n *Binary) eval(ec *EvalContext) Value {
 	left, right := n.left.eval(ec), n.right.eval(ec)
-	op := binops[binopKey{n.op, left.Kind(), right.Kind()}]
+	op := binops[binopKey{n.op, left.Type(), right.Type()}]
 	if op == nil {
-		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Kind(), n.op, right.Kind()))
+		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, right.Type()))
 	}
 	return op(left, right)
 }
@@ -312,7 +331,32 @@ func (n *FuncCall) eval(ec *EvalContext) Value {
 			panic("unrecognized function argument type")
 		}
 	}
-	return fn.Apply(&args)
+	v, err := fn.Apply(&args)
+	if err != nil {
+		var hints []string
+		if argErr, ok := err.(*ArgError); ok {
+			hints = argErr.hints
+		}
+		raise(&ValueError{
+			span:  n.locateArgErrSpan(err),
+			msg:   err.Error(),
+			hints: hints,
+		})
+	}
+	return v
+}
+
+func (n *FuncCall) locateArgErrSpan(err error) syntax.Span {
+	argErr, ok := err.(*ArgError)
+	if !ok {
+		return n.span
+	}
+	for i, arg := range n.args {
+		if expr := argErr.match(i, arg); expr != nil {
+			return expr.Span()
+		}
+	}
+	return n.span
 }
 
 func (n *Closure) eval(ec *EvalContext) Value {

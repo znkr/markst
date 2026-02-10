@@ -9,7 +9,7 @@ import (
 
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/model/ir"
+	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )

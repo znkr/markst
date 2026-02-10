@@ -892,7 +892,7 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 	var suffixErr string
 	if suffix != "" {
 		if _, ok := numberSuffixes[suffix]; !ok {
-			suffixErr = fmt.Sprintf("invalid number suffix: %q", suffix)
+			suffixErr = fmt.Sprintf("invalid number suffix: %s", suffix)
 		}
 	}
 

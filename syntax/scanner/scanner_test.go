@@ -1127,7 +1127,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "1.2e",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("invalid number suffix: \"e\"", "1.2e"),
+					b.err("invalid number suffix: e", "1.2e"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
@@ -1297,7 +1297,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "12invalid",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("invalid number suffix: \"invalid\"", "12invalid"),
+					b.err("invalid number suffix: invalid", "12invalid"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
