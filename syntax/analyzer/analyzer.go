@@ -8,9 +8,9 @@ import (
 	"znkr.io/writst/syntax"
 )
 
-func Analyze(n syntax.RootNode) (*ir.ContentExpr, error) {
+func Analyze(n syntax.RootNode) ([]ir.Expr, error) {
 	a := &analyzer{}
-	exprs := a.analyzeContent(n)
+	exprs := a.analyzeMarkup(n)
 	if len(a.errors) > 0 {
 		return nil, syntax.ErrorList(a.errors)
 	}
@@ -25,7 +25,7 @@ func (a *analyzer) error(n *syntax.Error) {
 	a.errors = append(a.errors, n)
 }
 
-func (a *analyzer) analyzeContent(n syntax.Node) *ir.ContentExpr {
+func (a *analyzer) analyzeMarkup(n syntax.Node) []ir.Expr {
 	var body []ir.Expr
 	for n := range a.inner(n, syntax.KindMarkup).all() {
 		switch n.Kind() {
@@ -39,7 +39,7 @@ func (a *analyzer) analyzeContent(n syntax.Node) *ir.ContentExpr {
 			body = append(body, n0)
 		}
 	}
-	return ir.NewContentExpr(n.Span(), body)
+	return body
 }
 
 func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
@@ -75,14 +75,14 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		ns.take(syntax.KindStar)
 		n0 := ns.node()
 		ns.take(syntax.KindStar)
-		return ir.NewStrongExpr(n.Span(), a.analyzeContent(n0))
+		return ir.NewStrongExpr(n.Span(), a.analyzeMarkup(n0))
 	case syntax.KindEmph:
 		ns := a.inner(n, syntax.KindEmph)
 		defer ns.finish()
 		ns.take(syntax.KindUnderscore)
 		n0 := ns.node()
 		ns.take(syntax.KindUnderscore)
-		return ir.NewEmphExpr(n.Span(), a.analyzeContent(n0))
+		return ir.NewEmphExpr(n.Span(), a.analyzeMarkup(n0))
 	case syntax.KindRaw:
 		return a.analyzeRaw(n)
 	case syntax.KindLink:
@@ -90,7 +90,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		return ir.NewLinkExpr(
 			n.Span(),
 			lit,
-			ir.NewContentExpr(n.Span(), []ir.Expr{ir.NewConst(n.Span(), &ir.Text{Value: lit})}),
+			[]ir.Expr{ir.NewConst(n.Span(), &ir.Text{Value: lit})},
 		)
 	case syntax.KindRef:
 		return a.analyzeRef(n)
@@ -113,7 +113,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindCodeBlock:
 		return a.analyzeCodeBlock(n)
 	case syntax.KindContentBlock:
-		return a.analyzeCodeContentBlock(n)
+		return a.analyzeContentBlock(n)
 	case syntax.KindParenthesized:
 		return a.analyzeParenthesized(n)
 	case syntax.KindArray:

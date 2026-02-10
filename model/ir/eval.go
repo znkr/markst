@@ -7,9 +7,13 @@ import (
 	"znkr.io/writst/syntax"
 )
 
-var universe = &scope{
-	bindings: builtins,
+func Eval(ec *EvalContext, exprs []Expr) (Contents, error) {
+	ec.openScope()
+	defer ec.closeScope()
+	return evalContents(ec, exprs), nil
 }
+
+// Context /////////////////////////////////////////////////////////////////////////////////////////
 
 type EvalContext struct {
 	scope *scope
@@ -23,13 +27,13 @@ func NewEvalContext() *EvalContext {
 	}
 }
 
-func (ec *EvalContext) PushScope() {
+func (ec *EvalContext) openScope() {
 	ec.scope = &scope{
 		parent: ec.scope,
 	}
 }
 
-func (ec *EvalContext) PopScope() {
+func (ec *EvalContext) closeScope() {
 	ec.scope = ec.scope.parent
 }
 
@@ -42,6 +46,12 @@ func (ec *EvalContext) Bind(name unique.Handle[string], val Value) {
 		ec.scope.bindings = make(map[unique.Handle[string]]Value)
 	}
 	ec.scope.bindings[name] = val
+}
+
+// Scope ///////////////////////////////////////////////////////////////////////////////////////////
+
+var universe = &scope{
+	bindings: builtins,
 }
 
 type scope struct {
@@ -61,69 +71,69 @@ func (s *scope) lookup(name unique.Handle[string]) (Value, bool) {
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-func (n *ContentExpr) Eval(ec *EvalContext) Value {
+func (n *HeadingExpr) eval(ec *EvalContext) Value {
+	return &Heading{
+		Level: n.level,
+		Body:  evalContents(ec, n.body),
+	}
+}
+
+func (n *StrongExpr) eval(ec *EvalContext) Value {
+	return &Strong{
+		Body: evalContents(ec, n.body),
+	}
+}
+
+func (n *EmphExpr) eval(ec *EvalContext) Value {
+	return &Emph{
+		Body: evalContents(ec, n.body),
+	}
+}
+
+func (n *LinkExpr) eval(ec *EvalContext) Value {
+	return &Link{
+		Dest: n.dest,
+		Body: evalContents(ec, n.body),
+	}
+}
+
+func (n *RefExpr) eval(ec *EvalContext) Value {
+	return &Ref{
+		Target:     n.target,
+		Supplement: n.supplement.eval(ec).(Content),
+	}
+}
+
+func (n *ListItemExpr) eval(ec *EvalContext) Value {
+	return &ListItem{
+		Body: evalContents(ec, n.body),
+	}
+}
+
+func (n *EnumItemExpr) eval(ec *EvalContext) Value {
+	return &EnumItem{
+		Number: n.number,
+		Body:   evalContents(ec, n.body),
+	}
+}
+
+func (n *TermItemExpr) eval(ec *EvalContext) Value {
+	return &TermItem{
+		Term:        evalContents(ec, n.term),
+		Description: evalContents(ec, n.description),
+	}
+}
+
+func evalContents(ec *EvalContext, exprs []Expr) Contents {
 	var ret Contents
-	for _, expr := range n.exprs {
-		v := toContent(expr.Eval(ec))
+	for _, expr := range exprs {
+		v := toContent(expr.eval(ec))
 		if v == nil {
 			continue
 		}
 		ret = append(ret, v)
 	}
 	return ret
-}
-
-func (n *HeadingExpr) Eval(ec *EvalContext) Value {
-	return &Heading{
-		Level: n.level,
-		Body:  n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *StrongExpr) Eval(ec *EvalContext) Value {
-	return &Strong{
-		Body: n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *EmphExpr) Eval(ec *EvalContext) Value {
-	return &Emph{
-		Body: n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *LinkExpr) Eval(ec *EvalContext) Value {
-	return &Link{
-		Dest: n.dest,
-		Body: n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *RefExpr) Eval(ec *EvalContext) Value {
-	return &Ref{
-		Target:     n.target,
-		Supplement: n.supplement.Eval(ec).(Content),
-	}
-}
-
-func (n *ListItemExpr) Eval(ec *EvalContext) Value {
-	return &ListItem{
-		Body: n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *EnumItemExpr) Eval(ec *EvalContext) Value {
-	return &EnumItem{
-		Number: n.number,
-		Body:   n.body.Eval(ec).(Content),
-	}
-}
-
-func (n *TermItemExpr) Eval(ec *EvalContext) Value {
-	return &TermItem{
-		Term:        n.term.Eval(ec).(Content),
-		Description: n.description.Eval(ec).(Content),
-	}
 }
 
 func toContent(v Value) Content {
@@ -141,11 +151,11 @@ func toContent(v Value) Content {
 
 // Code ////////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Const) Eval(ec *EvalContext) Value { return n.value }
+func (n *Const) eval(ec *EvalContext) Value { return n.value }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
-func (n *Ident) Eval(ec *EvalContext) Value {
+func (n *Ident) eval(ec *EvalContext) Value {
 	val, ok := ec.Lookup(n.name)
 	if !ok {
 		panic("undefined identifier: " + n.name.Value())
@@ -153,41 +163,45 @@ func (n *Ident) Eval(ec *EvalContext) Value {
 	return val
 }
 
-func (n *CodeBlock) Eval(ec *EvalContext) Value {
-	ec.PushScope()
-	defer ec.PopScope()
-	return n.body.Eval(ec)
+func (n *CodeBlock) eval(ec *EvalContext) Value {
+	ec.openScope()
+	defer ec.closeScope()
+	var array Array
+	for _, expr := range n.exprs {
+		array = append(array, expr.eval(ec))
+	}
+	return array
 }
 
-func (n *ContentBlock) Eval(ec *EvalContext) Value {
-	ec.PushScope()
-	defer ec.PopScope()
-	return n.body.Eval(ec)
+func (n *ContentBlock) eval(ec *EvalContext) Value {
+	ec.openScope()
+	defer ec.closeScope()
+	return evalContents(ec, n.exprs)
 }
 
-func (n *Parenthesized) Eval(ec *EvalContext) Value {
-	return n.body.Eval(ec)
+func (n *Parenthesized) eval(ec *EvalContext) Value {
+	return n.body.eval(ec)
 }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
-func (n *ArrayExpr) Eval(ec *EvalContext) Value {
+func (n *ArrayExpr) eval(ec *EvalContext) Value {
 	elems := make(Array, 0, len(n.elements))
 	for _, expr := range n.elements {
-		elems = append(elems, expr.Eval(ec))
+		elems = append(elems, expr.eval(ec))
 	}
 	return elems
 }
 
-func (n *DictExpr) Eval(ec *EvalContext) Value {
+func (n *DictExpr) eval(ec *EvalContext) Value {
 	dict := make(Dict, len(n.entries))
 	for _, ent := range n.entries {
-		keyVal := ent.key.Eval(ec)
+		keyVal := ent.key.eval(ec)
 		keyStr, ok := keyVal.(String)
 		if !ok {
 			panic("dictionary key did not evaluate to a string")
 		}
-		dict[keyStr] = ent.value.Eval(ec)
+		dict[keyStr] = ent.value.eval(ec)
 	}
 	return dict
 }
@@ -251,8 +265,8 @@ var binops = map[binopKey]func(x, y Value) Value{
 	},
 }
 
-func (n *Unary) Eval(ec *EvalContext) Value {
-	x := n.operand.Eval(ec)
+func (n *Unary) eval(ec *EvalContext) Value {
+	x := n.operand.eval(ec)
 	op := unaryops[unaryopKey{n.op, x.Kind()}]
 	if op == nil {
 		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.op, x.Kind()))
@@ -260,8 +274,8 @@ func (n *Unary) Eval(ec *EvalContext) Value {
 	return op(x)
 }
 
-func (n *Binary) Eval(ec *EvalContext) Value {
-	left, right := n.left.Eval(ec), n.right.Eval(ec)
+func (n *Binary) eval(ec *EvalContext) Value {
+	left, right := n.left.eval(ec), n.right.eval(ec)
 	op := binops[binopKey{n.op, left.Kind(), right.Kind()}]
 	if op == nil {
 		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Kind(), n.op, right.Kind()))
@@ -269,14 +283,14 @@ func (n *Binary) Eval(ec *EvalContext) Value {
 	return op(left, right)
 }
 
-func (n *FieldAccess) Eval(ec *EvalContext) Value {
+func (n *FieldAccess) eval(ec *EvalContext) Value {
 	panic("TODO: implement field access")
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
-func (n *FuncCall) Eval(ec *EvalContext) Value {
-	callee := n.callee.Eval(ec)
+func (n *FuncCall) eval(ec *EvalContext) Value {
+	callee := n.callee.eval(ec)
 	fn, ok := callee.(*Function)
 	if !ok {
 		panic("attempted to call a non-function value")
@@ -286,12 +300,12 @@ func (n *FuncCall) Eval(ec *EvalContext) Value {
 	for _, arg := range n.args {
 		switch a := arg.(type) {
 		case *ExprArg:
-			args.Positional = append(args.Positional, a.expr.Eval(ec))
+			args.Positional = append(args.Positional, a.expr.eval(ec))
 		case *NamedArg:
 			if args.Named == nil {
 				args.Named = make(map[unique.Handle[string]]Value)
 			}
-			args.Named[a.name] = a.expr.Eval(ec)
+			args.Named[a.name] = a.expr.eval(ec)
 		case *SpreadArg:
 			panic("TODO: implement spread arguments")
 		default:
@@ -301,17 +315,17 @@ func (n *FuncCall) Eval(ec *EvalContext) Value {
 	return fn.Apply(&args)
 }
 
-func (n *Closure) Eval(ec *EvalContext) Value {
+func (n *Closure) eval(ec *EvalContext) Value {
 	panic("TODO: not actually an expression")
 }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
 
-func (n *LetBinding) Eval(ec *EvalContext) Value {
+func (n *LetBinding) eval(ec *EvalContext) Value {
 	for _, p := range n.pattern {
 		switch p := p.(type) {
 		case *DestructIdent:
-			ec.Bind(p.ident.name, n.value.Eval(ec))
+			ec.Bind(p.ident.name, n.value.eval(ec))
 		default:
 			panic("TODO: implement complex let patterns")
 		}
@@ -319,55 +333,58 @@ func (n *LetBinding) Eval(ec *EvalContext) Value {
 	return &None{}
 }
 
-func (n *DestructAssignment) Eval(ec *EvalContext) Value {
+func (n *DestructAssignment) eval(ec *EvalContext) Value {
 	panic("TODO: implement destruct assignment")
 }
 
-func (n *SetRule) Eval(ec *EvalContext) Value {
+func (n *SetRule) eval(ec *EvalContext) Value {
 	panic("TODO: implement set rules")
 }
 
-func (n *ShowRule) Eval(ec *EvalContext) Value {
+func (n *ShowRule) eval(ec *EvalContext) Value {
 	panic("TODO: implement show rules")
 }
 
 // Control Flow ////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Conditional) Eval(ec *EvalContext) Value {
-	cond, ok := n.condition.Eval(ec).(Bool)
-	if !ok {
-		panic("condition did not evaluate to a boolean")
+func (n *Conditional) eval(ec *EvalContext) Value {
+	for i, cond := range n.conditions {
+		cond, ok := cond.eval(ec).(Bool)
+		if !ok {
+			panic("condition did not evaluate to a boolean")
+		}
+		if cond {
+			return n.blocks[i].eval(ec)
+		}
 	}
-	if cond {
-		return n.then.Eval(ec)
-	} else if n.els != nil {
-		return n.els.Eval(ec)
+	if n.def != nil {
+		return n.def.eval(ec)
 	}
 	return &None{}
 }
 
-func (n *ForLoop) Eval(ec *EvalContext) Value {
+func (n *ForLoop) eval(ec *EvalContext) Value {
 	panic("TODO: implement for loops")
 }
 
-func (n *WhileLoop) Eval(ec *EvalContext) Value {
+func (n *WhileLoop) eval(ec *EvalContext) Value {
 	panic("TODO: implement while loops")
 }
 
-func (n *LoopBreak) Eval(ec *EvalContext) Value {
+func (n *LoopBreak) eval(ec *EvalContext) Value {
 	panic("TODO: not actually an expression")
 }
 
-func (n *LoopContinue) Eval(ec *EvalContext) Value {
+func (n *LoopContinue) eval(ec *EvalContext) Value {
 	panic("TODO: not actually an expression")
 }
 
-func (n *FuncReturn) Eval(ec *EvalContext) Value {
+func (n *FuncReturn) eval(ec *EvalContext) Value {
 	panic("TODO: not actually an expression")
 }
 
 // Other ///////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Contextual) Eval(ec *EvalContext) Value { panic("TODO: implement contextual") }
+func (n *Contextual) eval(ec *EvalContext) Value { panic("TODO: implement contextual") }
 
-func (n *ModuleInclude) Eval(ec *EvalContext) Value { panic("TODO: implement module include") }
+func (n *ModuleInclude) eval(ec *EvalContext) Value { panic("TODO: implement module include") }

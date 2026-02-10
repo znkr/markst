@@ -73,7 +73,6 @@ Hello #0xG world
   dont-care
 }
 
-
 --- unexpected-comma-in-for-pattern ---
 // Error: 7-8 unexpected comma
 // Hint: 7-8 destructuring patterns must be wrapped in parentheses

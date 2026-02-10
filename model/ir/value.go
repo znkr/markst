@@ -10,8 +10,8 @@ import (
 type Value interface {
 	Kind() Kind
 
-	format(f *formatter)
 	aValue()
+	formattable
 }
 
 //go:generate go run  golang.org/x/tools/cmd/stringer -type Kind

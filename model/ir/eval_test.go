@@ -34,7 +34,7 @@ func TestEval(t *testing.T) {
 					}
 
 					node := parser.Parse(tc.Input)
-					content, err := analyzer.Analyze(node)
+					exprs, err := analyzer.Analyze(node)
 					if diff := errcmp.Diff(node, err); diff != "" {
 						t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
 					}
@@ -54,10 +54,12 @@ func TestEval(t *testing.T) {
 							return ir.None{}
 						},
 					})
-					ec.PushScope()
 
-					value := content.Eval(ec)
-					got := ir.FormatValue(value)
+					contents, err := ir.Eval(ec, exprs)
+					if err != nil {
+						t.Fatalf("Eval() error: %v", err)
+					}
+					got := ir.FormatContents(contents)
 
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)

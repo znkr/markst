@@ -13,7 +13,7 @@ func (a *analyzer) analyzeHeading(n syntax.Node) *ir.HeadingExpr {
 	ns := a.inner(n, syntax.KindHeading)
 	defer ns.finish()
 	level := len(ns.take(syntax.KindHeadingMarker))
-	body := a.analyzeContent(ns.node())
+	body := a.analyzeMarkup(ns.node())
 	return ir.NewHeadingExpr(n.Span(), level, body)
 }
 
@@ -21,7 +21,7 @@ func (a *analyzer) analyzeListItem(n syntax.Node) *ir.ListItemExpr {
 	ns := a.inner(n, syntax.KindListItem)
 	defer ns.finish()
 	ns.take(syntax.KindListMarker)
-	body := a.analyzeContent(ns.node())
+	body := a.analyzeMarkup(ns.node())
 	return ir.NewListItemExpr(n.Span(), body)
 }
 
@@ -37,7 +37,7 @@ func (a *analyzer) analyzeEnumItem(n syntax.Node) *ir.EnumItemExpr {
 		}
 		number = int(n)
 	}
-	body := a.analyzeContent(ns.node())
+	body := a.analyzeMarkup(ns.node())
 	return ir.NewEnumItemExpr(n.Span(), number, body)
 }
 
@@ -45,9 +45,9 @@ func (a *analyzer) analyzeTermItem(n syntax.Node) *ir.TermItemExpr {
 	ns := a.inner(n, syntax.KindTermItem)
 	defer ns.finish()
 	ns.take(syntax.KindTermMarker)
-	term := a.analyzeContent(ns.node())
+	term := a.analyzeMarkup(ns.node())
 	ns.take(syntax.KindColon)
-	body := a.analyzeContent(ns.node())
+	body := a.analyzeMarkup(ns.node())
 	return ir.NewTermItemExpr(n.Span(), term, body)
 }
 
@@ -56,20 +56,20 @@ func (a *analyzer) analyzeRef(n syntax.Node) *ir.RefExpr {
 	defer ns.finish()
 	marker := ns.take(syntax.KindRefMarker)
 	target := marker[1:] // trim '@'
-	var supplement *ir.ContentExpr
+	var supplement *ir.ContentBlock
 	if !ns.done() {
 		supplement = a.analyzeContentBlock(ns.node())
 	}
 	return ir.NewRefExpr(n.Span(), unique.Make(target), supplement)
 }
 
-func (a *analyzer) analyzeContentBlock(n syntax.Node) *ir.ContentExpr {
+func (a *analyzer) analyzeContentBlock(n syntax.Node) *ir.ContentBlock {
 	ns := a.inner(n, syntax.KindContentBlock)
 	defer ns.finish()
 	ns.take(syntax.KindLeftBracket)
 	n0 := ns.node()
 	ns.take(syntax.KindRightBracket)
-	return a.analyzeContent(n0)
+	return ir.NewContentBlock(n.Span(), a.analyzeMarkup(n0))
 }
 
 func (a *analyzer) analyzeRaw(n syntax.Node) *ir.Const {

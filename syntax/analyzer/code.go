@@ -89,11 +89,7 @@ func (a *analyzer) analyzeCodeBlock(n syntax.Node) *ir.CodeBlock {
 			exprs = append(exprs, a.analyzeExpr(child))
 		}
 	}
-	return ir.NewCodeBlock(n.Span(), ir.NewContentExpr(n.Span(), exprs))
-}
-
-func (a *analyzer) analyzeCodeContentBlock(n syntax.Node) *ir.ContentBlock {
-	return ir.NewContentBlock(n.Span(), a.analyzeContentBlock(n))
+	return ir.NewCodeBlock(n.Span(), exprs)
 }
 
 func (a *analyzer) analyzeParenthesized(n syntax.Node) *ir.Parenthesized {
@@ -196,7 +192,7 @@ func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {
 	return ir.NewFuncCall(n.Span(), callee, args, content)
 }
 
-func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []*ir.ContentExpr) {
+func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []*ir.ContentBlock) {
 	ns := a.inner(n, syntax.KindArgs)
 	defer ns.finish()
 
@@ -225,7 +221,7 @@ func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []*ir.ContentExpr) {
 		}
 	}
 
-	var content []*ir.ContentExpr
+	var content []*ir.ContentBlock
 	for ns.at(syntax.KindContentBlock) {
 		content = append(content, a.analyzeContentBlock(ns.node()))
 	}
@@ -366,17 +362,30 @@ func (a *analyzer) analyzeShowRule(n syntax.Node) *ir.ShowRule {
 }
 
 func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
-	ns := a.inner(n, syntax.KindConditional)
-	defer ns.finish()
-	ns.take(syntax.KindIf)
-	condition := a.analyzeExpr(ns.node())
-	then := a.analyzeExpr(ns.node())
-	var elseExpr ir.Expr
-	if ns.at(syntax.KindElse) {
+	var conditions []ir.Expr
+	var blocks []*ir.CodeBlock
+	var def *ir.CodeBlock
+
+	var analyze func(n syntax.Node)
+	analyze = func(n syntax.Node) {
+		ns := a.inner(n, syntax.KindConditional)
+		defer ns.finish()
+		ns.take(syntax.KindIf)
+		conditions = append(conditions, a.analyzeExpr(ns.node()))
+		blocks = append(blocks, a.analyzeCodeBlock(ns.node()))
+		if !ns.at(syntax.KindElse) {
+			return
+		}
 		ns.node() // consume else
-		elseExpr = a.analyzeExpr(ns.node())
+		if ns.at(syntax.KindConditional) {
+			analyze(ns.node())
+		} else {
+			def = a.analyzeCodeBlock(ns.node())
+		}
 	}
-	return ir.NewConditional(n.Span(), condition, then, elseExpr)
+	analyze(n)
+
+	return ir.NewConditional(n.Span(), conditions, blocks, def)
 }
 
 func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {
@@ -384,7 +393,7 @@ func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {
 	defer ns.finish()
 	ns.take(syntax.KindWhile)
 	condition := a.analyzeExpr(ns.node())
-	body := a.analyzeExpr(ns.node())
+	body := a.analyzeCodeBlock(ns.node())
 	return ir.NewWhileLoop(n.Span(), condition, body)
 }
 
@@ -395,7 +404,7 @@ func (a *analyzer) analyzeForLoop(n syntax.Node) *ir.ForLoop {
 	pattern := a.unpackDestructuringPattern(ns.node())
 	ns.take(syntax.KindIn)
 	iterable := a.analyzeExpr(ns.node())
-	body := a.analyzeExpr(ns.node())
+	body := a.analyzeCodeBlock(ns.node())
 	return ir.NewForLoop(n.Span(), pattern, iterable, body)
 }
 

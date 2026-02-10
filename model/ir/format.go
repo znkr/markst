@@ -10,10 +10,21 @@ import (
 	"znkr.io/writst/syntax"
 )
 
-func Format(content *ContentExpr) string {
+type formattable interface {
+	format(f *formatter)
+}
+
+func FormatContents(c Contents) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
-	for _, c := range content.exprs {
+	c.format(f)
+	return sb.String()
+}
+
+func FormatExprs(exprs []Expr) string {
+	var sb strings.Builder
+	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
+	for _, c := range exprs {
 		c.format(f)
 		sb.WriteString("\n")
 	}
@@ -24,6 +35,7 @@ func FormatValue(value Value) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeCode}
 	value.format(f)
+	sb.WriteString("\n")
 	return sb.String()
 }
 
@@ -150,8 +162,8 @@ type arg struct {
 func named(name string, v any) arg { return arg{name: name, value: v} }
 func pos(v any) arg                { return arg{positional: true, value: v} }
 
-// funcCall formats #name(args)[funcCall] for funcCall nodes
-func (f *formatter) funcCall(name string, args []arg, cblocks []*ContentExpr) {
+// funcCall formats #name(args)[blocks...] for content nodes
+func (f *formatter) funcCall(name string, args []arg, blocks ...any) {
 	f.prefix()
 	f.str(name)
 	if len(args) > 0 {
@@ -195,27 +207,31 @@ func (f *formatter) funcCall(name string, args []arg, cblocks []*ContentExpr) {
 		}
 		f.str(")")
 	}
-	f.contents(cblocks)
-	if len(args) == 0 && len(cblocks) == 0 {
+	for _, block := range blocks {
+		switch b := block.(type) {
+		case []Expr:
+			f.contentBlock(b)
+		case Content:
+			f.valueBlock(b)
+		}
+	}
+	if len(args) == 0 && len(blocks) == 0 {
 		f.str("()")
 	}
 }
 
-// contents formats multiple content blocks
-func (f *formatter) contents(cs []*ContentExpr) {
-	for _, c := range cs {
-		c.format(f)
+// writeBlock formats items wrapped in [...] with proper indentation for multiple items.
+// For multi-item blocks, each item is preceded by a newline and indent.
+func writeBlock[T formattable](f *formatter, items []T) {
+	if len(items) == 0 {
+		return
 	}
-}
-
-// contentBlock formats a Content value with proper indentation for multi-item contents
-func (f *formatter) contentBlock(c Content) {
 	prev := f.mode
 	f.mode = syntax.ModeMarkup
-	if cs, ok := c.(Contents); ok && len(cs) > 1 {
+	if len(items) > 1 {
 		f.str("[")
 		f.indent++
-		for _, item := range cs {
+		for _, item := range items {
 			f.nl()
 			item.format(f)
 		}
@@ -224,15 +240,92 @@ func (f *formatter) contentBlock(c Content) {
 		f.str("]")
 	} else {
 		f.str("[")
-		c.format(f)
+		items[0].format(f)
 		f.str("]")
 	}
 	f.mode = prev
 }
 
+// contentBlock formats an []Expr block wrapped in [...]
+func (f *formatter) contentBlock(exprs []Expr) {
+	writeBlock(f, exprs)
+}
+
+// valueBlock formats a Content value wrapped in [...]
+func (f *formatter) valueBlock(c Content) {
+	if cs, ok := c.(Contents); ok {
+		writeBlock(f, cs)
+	} else {
+		writeBlock(f, []Content{c})
+	}
+}
+
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-func (n *ContentExpr) format(f *formatter) {
+func (n *HeadingExpr) format(f *formatter) {
+	f.funcCall("heading", []arg{named("level", n.level)}, n.body)
+}
+
+func (n *StrongExpr) format(f *formatter) {
+	f.funcCall("strong", nil, n.body)
+}
+
+func (n *EmphExpr) format(f *formatter) {
+	f.funcCall("emph", nil, n.body)
+}
+
+func (n *LinkExpr) format(f *formatter) {
+	f.funcCall("link", []arg{named("dest", n.dest)}, n.body)
+}
+
+func (n *RefExpr) format(f *formatter) {
+	args := []arg{named("target", n.target.Value())}
+	var blocks []any
+	if n.supplement != nil && len(n.supplement.exprs) > 0 {
+		blocks = append(blocks, n.supplement.Body())
+	}
+	f.funcCall("ref", args, blocks...)
+}
+
+func (n *ListItemExpr) format(f *formatter) {
+	f.funcCall("list.item", nil, n.body)
+}
+
+func (n *EnumItemExpr) format(f *formatter) {
+	f.funcCall("enum.item", []arg{pos(n.number)}, n.body)
+}
+
+func (n *TermItemExpr) format(f *formatter) {
+	f.funcCall("terms.item", nil, n.term, n.description)
+}
+
+// Code Expressions ////////////////////////////////////////////////////////////////////////////////
+
+func (n *Const) format(f *formatter) {
+	n.value.format(f)
+}
+
+func (n *Ident) format(f *formatter) {
+	f.prefix()
+	f.str(n.name.Value())
+}
+
+func (n *CodeBlock) format(f *formatter) {
+	f.prefix()
+	if len(n.exprs) == 0 {
+		f.str("{ }")
+		return
+	}
+	prev := f.inlineCode
+	f.inlineCode = true
+	f.str("{ ")
+	f.exprs("; ", n.exprs)
+	f.str(" }")
+	f.inlineCode = prev
+}
+
+func (n *ContentBlock) format(f *formatter) {
+	f.prefix()
 	if len(n.exprs) == 0 {
 		f.str("[]")
 		return
@@ -261,73 +354,6 @@ func (n *ContentExpr) format(f *formatter) {
 		f.str("]")
 	}
 	f.mode = prev
-}
-
-func (n *HeadingExpr) format(f *formatter) {
-	f.funcCall("heading", []arg{named("level", n.level)}, []*ContentExpr{n.body})
-}
-
-func (n *StrongExpr) format(f *formatter) {
-	f.funcCall("strong", nil, []*ContentExpr{n.body})
-}
-
-func (n *EmphExpr) format(f *formatter) {
-	f.funcCall("emph", nil, []*ContentExpr{n.body})
-}
-
-func (n *LinkExpr) format(f *formatter) {
-	f.funcCall("link", []arg{named("dest", n.dest)}, []*ContentExpr{n.body})
-}
-
-func (n *RefExpr) format(f *formatter) {
-	args := []arg{named("target", n.target.Value())}
-	var cblocks []*ContentExpr
-	if n.supplement != nil && len(n.supplement.exprs) > 0 {
-		cblocks = []*ContentExpr{n.supplement}
-	}
-	f.funcCall("ref", args, cblocks)
-}
-
-func (n *ListItemExpr) format(f *formatter) {
-	f.funcCall("list.item", nil, []*ContentExpr{n.body})
-}
-
-func (n *EnumItemExpr) format(f *formatter) {
-	f.funcCall("enum.item", []arg{pos(n.number)}, []*ContentExpr{n.body})
-}
-
-func (n *TermItemExpr) format(f *formatter) {
-	f.funcCall("terms.item", nil, []*ContentExpr{n.term, n.description})
-}
-
-// Code Expressions ////////////////////////////////////////////////////////////////////////////////
-
-func (n *Const) format(f *formatter) {
-	n.value.format(f)
-}
-
-func (n *Ident) format(f *formatter) {
-	f.prefix()
-	f.str(n.name.Value())
-}
-
-func (n *CodeBlock) format(f *formatter) {
-	f.prefix()
-	if n.body == nil || len(n.body.exprs) == 0 {
-		f.str("{ }")
-		return
-	}
-	prev := f.inlineCode
-	f.inlineCode = true
-	f.str("{ ")
-	f.exprs("; ", n.body.exprs)
-	f.str(" }")
-	f.inlineCode = prev
-}
-
-func (n *ContentBlock) format(f *formatter) {
-	f.prefix()
-	n.body.format(f)
 }
 
 func (n *Parenthesized) format(f *formatter) {
@@ -407,7 +433,9 @@ func (n *FuncCall) format(f *formatter) {
 	f.str("(")
 	f.arguments(", ", n.args)
 	f.str(")")
-	f.contents(n.content)
+	for _, block := range n.blocks {
+		f.contentBlock(block.exprs)
+	}
 }
 
 func (n *Closure) format(f *formatter) {
@@ -418,7 +446,7 @@ func (n *Closure) format(f *formatter) {
 		f.str("(")
 		f.params(", ", n.params)
 		f.str(") = ")
-		f.expr(n.body)
+		f.closureBody(n.body)
 		return
 	}
 	// Anonymous closure
@@ -427,14 +455,23 @@ func (n *Closure) format(f *formatter) {
 		if _, isSpread := n.params[0].(*SpreadParam); !isSpread {
 			f.params(", ", n.params)
 			f.str(" => ")
-			f.expr(n.body)
+			f.closureBody(n.body)
 			return
 		}
 	}
 	f.str("(")
 	f.params(", ", n.params)
 	f.str(") => ")
-	f.expr(n.body)
+	f.closureBody(n.body)
+}
+
+// closureBody formats a closure body, unwrapping single-expression code blocks.
+func (f *formatter) closureBody(body Expr) {
+	if cb, ok := body.(*CodeBlock); ok && len(cb.exprs) == 1 {
+		f.expr(cb.exprs[0])
+	} else {
+		f.expr(body)
+	}
 }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
@@ -484,13 +521,21 @@ func (n *ShowRule) format(f *formatter) {
 
 func (n *Conditional) format(f *formatter) {
 	f.prefix()
-	f.kw("if")
-	f.expr(n.condition)
-	f.str(" ")
-	f.expr(n.then)
-	if n.els != nil {
-		f.str(" else ")
-		f.expr(n.els)
+	for i, cond := range n.conditions {
+		if i == 0 {
+			f.kw("if")
+		} else {
+			f.str(" ")
+			f.kw("else if")
+		}
+		f.expr(cond)
+		f.str(" ")
+		f.expr(n.blocks[i])
+	}
+	if n.def != nil {
+		f.str(" ")
+		f.kw("else")
+		f.expr(n.def)
 	}
 }
 
@@ -691,25 +736,19 @@ func (n Contents) format(f *formatter) {
 }
 
 func (n *Heading) format(f *formatter) {
-	f.prefix()
-	f.printf("heading(level: %d)", n.Level)
-	f.contentBlock(n.Body)
+	f.funcCall("heading", []arg{named("level", n.Level)})
 }
 
 func (n *Strong) format(f *formatter) {
-	f.prefix()
-	f.str("strong")
-	f.contentBlock(n.Body)
+	f.funcCall("strong", nil, n.Body)
 }
 
 func (n *Emph) format(f *formatter) {
-	f.prefix()
-	f.str("emph")
-	f.contentBlock(n.Body)
+	f.funcCall("emph", nil, n.Body)
 }
 
 func (n *Text) format(f *formatter) {
-	f.funcCall("text", []arg{pos(n.Value)}, nil)
+	f.funcCall("text", []arg{pos(n.Value)})
 }
 
 func (n *Raw) format(f *formatter) {
@@ -723,29 +762,28 @@ func (n *Raw) format(f *formatter) {
 	for _, line := range n.Lines {
 		args = append(args, pos(line))
 	}
-	f.funcCall("raw", args, nil)
+	f.funcCall("raw", args)
 }
 
 func (n *Linebreak) format(f *formatter) {
-	f.funcCall("linebreak", nil, nil)
+	f.funcCall("linebreak", nil)
 }
 
 func (n *Parbreak) format(f *formatter) {
-	f.funcCall("parbreak", nil, nil)
+	f.funcCall("parbreak", nil)
 }
 
 func (n *Link) format(f *formatter) {
-	f.prefix()
-	f.printf("link(dest: %q)", n.Dest)
-	f.contentBlock(n.Body)
+	f.funcCall("link", []arg{named("dest", n.Dest)}, n.Body)
 }
 
 func (n *Ref) format(f *formatter) {
-	f.prefix()
-	f.printf("ref(target: %q)", n.Target.Value())
+	args := []arg{named("target", n.Target.Value())}
+	var blocks []any
 	if n.Supplement != nil {
-		f.contentBlock(n.Supplement)
+		blocks = append(blocks, n.Supplement)
 	}
+	f.funcCall("ref", args, blocks...)
 }
 
 func (n *List) format(f *formatter) {
@@ -753,13 +791,11 @@ func (n *List) format(f *formatter) {
 	for i := range n.Items {
 		args = append(args, pos(&n.Items[i]))
 	}
-	f.funcCall("list", args, nil)
+	f.funcCall("list", args)
 }
 
 func (n *ListItem) format(f *formatter) {
-	f.prefix()
-	f.str("list.item")
-	f.contentBlock(n.Body)
+	f.funcCall("list.item", nil, n.Body)
 }
 
 func (n *Enum) format(f *formatter) {
@@ -767,13 +803,11 @@ func (n *Enum) format(f *formatter) {
 	for i := range n.Items {
 		args = append(args, pos(&n.Items[i]))
 	}
-	f.funcCall("enum", args, nil)
+	f.funcCall("enum", args)
 }
 
 func (n *EnumItem) format(f *formatter) {
-	f.prefix()
-	f.printf("enum.item(%d)", n.Number)
-	f.contentBlock(n.Body)
+	f.funcCall("enum.item", []arg{pos(n.Number)}, n.Body)
 }
 
 func (n *Terms) format(f *formatter) {
@@ -781,18 +815,15 @@ func (n *Terms) format(f *formatter) {
 	for i := range n.Items {
 		args = append(args, pos(&n.Items[i]))
 	}
-	f.funcCall("terms", args, nil)
+	f.funcCall("terms", args)
 }
 
 func (n *TermItem) format(f *formatter) {
-	f.prefix()
-	f.str("terms.item")
-	f.contentBlock(n.Term)
-	f.contentBlock(n.Description)
+	f.funcCall("terms.item", nil, n.Term, n.Description)
 }
 
 // Label ///////////////////////////////////////////////////////////////////////////////////////////
 
 func (n *Label) format(f *formatter) {
-	f.funcCall("label", []arg{pos(n.Name.Value())}, nil)
+	f.funcCall("label", []arg{pos(n.Name.Value())})
 }

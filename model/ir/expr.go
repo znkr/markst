@@ -8,10 +8,10 @@ import (
 
 type Expr interface {
 	Span() syntax.Span
-	Eval(ec *EvalContext) Value
 
-	format(f *formatter)
+	eval(ec *EvalContext) Value
 	aExpr()
+	formattable
 }
 
 type expr struct {
@@ -23,114 +23,103 @@ func (e *expr) aExpr()            {}
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-type ContentExpr struct {
-	expr
-	exprs []Expr
-}
-
-func NewContentExpr(span syntax.Span, exprs []Expr) *ContentExpr {
-	return &ContentExpr{expr: expr{span: span}, exprs: exprs}
-}
-
-func (n *ContentExpr) Exprs() []Expr { return n.exprs }
-
 type HeadingExpr struct {
 	expr
 	level int
-	body  *ContentExpr
+	body  []Expr
 }
 
-func NewHeadingExpr(span syntax.Span, level int, body *ContentExpr) *HeadingExpr {
+func NewHeadingExpr(span syntax.Span, level int, body []Expr) *HeadingExpr {
 	return &HeadingExpr{expr: expr{span: span}, level: level, body: body}
 }
 
-func (n *HeadingExpr) Level() int         { return n.level }
-func (n *HeadingExpr) Body() *ContentExpr { return n.body }
+func (n *HeadingExpr) Level() int   { return n.level }
+func (n *HeadingExpr) Body() []Expr { return n.body }
 
 type StrongExpr struct {
 	expr
-	body *ContentExpr
+	body []Expr
 }
 
-func NewStrongExpr(span syntax.Span, body *ContentExpr) *StrongExpr {
+func NewStrongExpr(span syntax.Span, body []Expr) *StrongExpr {
 	return &StrongExpr{expr: expr{span: span}, body: body}
 }
 
-func (n *StrongExpr) Body() *ContentExpr { return n.body }
+func (n *StrongExpr) Body() []Expr { return n.body }
 
 type EmphExpr struct {
 	expr
-	body *ContentExpr
+	body []Expr
 }
 
-func NewEmphExpr(span syntax.Span, body *ContentExpr) *EmphExpr {
+func NewEmphExpr(span syntax.Span, body []Expr) *EmphExpr {
 	return &EmphExpr{expr: expr{span: span}, body: body}
 }
 
-func (n *EmphExpr) Body() *ContentExpr { return n.body }
+func (n *EmphExpr) Body() []Expr { return n.body }
 
 type LinkExpr struct {
 	expr
 	dest string
-	body *ContentExpr
+	body []Expr
 }
 
-func NewLinkExpr(span syntax.Span, dest string, body *ContentExpr) *LinkExpr {
+func NewLinkExpr(span syntax.Span, dest string, body []Expr) *LinkExpr {
 	return &LinkExpr{expr: expr{span: span}, dest: dest, body: body}
 }
 
-func (n *LinkExpr) Dest() string       { return n.dest }
-func (n *LinkExpr) Body() *ContentExpr { return n.body }
+func (n *LinkExpr) Dest() string { return n.dest }
+func (n *LinkExpr) Body() []Expr { return n.body }
 
 type RefExpr struct {
 	expr
 	target     unique.Handle[string]
-	supplement *ContentExpr
+	supplement *ContentBlock
 }
 
-func NewRefExpr(span syntax.Span, target unique.Handle[string], supplement *ContentExpr) *RefExpr {
+func NewRefExpr(span syntax.Span, target unique.Handle[string], supplement *ContentBlock) *RefExpr {
 	return &RefExpr{expr: expr{span: span}, target: target, supplement: supplement}
 }
 
 func (n *RefExpr) Target() unique.Handle[string] { return n.target }
-func (n *RefExpr) Supplement() *ContentExpr      { return n.supplement }
+func (n *RefExpr) Supplement() *ContentBlock     { return n.supplement }
 
 type ListItemExpr struct {
 	expr
-	body *ContentExpr
+	body []Expr
 }
 
-func NewListItemExpr(span syntax.Span, body *ContentExpr) *ListItemExpr {
+func NewListItemExpr(span syntax.Span, body []Expr) *ListItemExpr {
 	return &ListItemExpr{expr: expr{span: span}, body: body}
 }
 
-func (n *ListItemExpr) Body() *ContentExpr { return n.body }
+func (n *ListItemExpr) Body() []Expr { return n.body }
 
 type EnumItemExpr struct {
 	expr
 	number int
-	body   *ContentExpr
+	body   []Expr
 }
 
-func NewEnumItemExpr(span syntax.Span, number int, body *ContentExpr) *EnumItemExpr {
+func NewEnumItemExpr(span syntax.Span, number int, body []Expr) *EnumItemExpr {
 	return &EnumItemExpr{expr: expr{span: span}, number: number, body: body}
 }
 
-func (n *EnumItemExpr) Number() int        { return n.number }
-func (n *EnumItemExpr) Body() *ContentExpr { return n.body }
+func (n *EnumItemExpr) Number() int  { return n.number }
+func (n *EnumItemExpr) Body() []Expr { return n.body }
 
 type TermItemExpr struct {
 	expr
-	term        *ContentExpr
-	description *ContentExpr
+	term        []Expr
+	description []Expr
 }
 
-func NewTermItemExpr(span syntax.Span, term, description *ContentExpr) *TermItemExpr {
+func NewTermItemExpr(span syntax.Span, term, description []Expr) *TermItemExpr {
 	return &TermItemExpr{expr: expr{span: span}, term: term, description: description}
 }
 
-func (n *TermItemExpr) Term() *ContentExpr        { return n.term }
-func (n *TermItemExpr) Description() *ContentExpr { return n.description }
+func (n *TermItemExpr) Term() []Expr        { return n.term }
+func (n *TermItemExpr) Description() []Expr { return n.description }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
@@ -158,25 +147,25 @@ func (n *Ident) Name() unique.Handle[string] { return n.name }
 
 type CodeBlock struct {
 	expr
-	body *ContentExpr
+	exprs []Expr
 }
 
-func NewCodeBlock(span syntax.Span, body *ContentExpr) *CodeBlock {
-	return &CodeBlock{expr: expr{span: span}, body: body}
+func NewCodeBlock(span syntax.Span, body []Expr) *CodeBlock {
+	return &CodeBlock{expr: expr{span: span}, exprs: body}
 }
 
-func (n *CodeBlock) Body() *ContentExpr { return n.body }
+func (n *CodeBlock) Body() []Expr { return n.exprs }
 
 type ContentBlock struct {
 	expr
-	body *ContentExpr
+	exprs []Expr
 }
 
-func NewContentBlock(span syntax.Span, body *ContentExpr) *ContentBlock {
-	return &ContentBlock{expr: expr{span: span}, body: body}
+func NewContentBlock(span syntax.Span, body []Expr) *ContentBlock {
+	return &ContentBlock{expr: expr{span: span}, exprs: body}
 }
 
-func (n *ContentBlock) Body() *ContentExpr { return n.body }
+func (n *ContentBlock) Body() []Expr { return n.exprs }
 
 type Parenthesized struct {
 	expr
@@ -356,18 +345,18 @@ func (*SpreadParam) aParam()     {}
 
 type FuncCall struct {
 	expr
-	callee  Expr
-	args    []Arg
-	content []*ContentExpr
+	callee Expr
+	args   []Arg
+	blocks []*ContentBlock
 }
 
-func NewFuncCall(span syntax.Span, callee Expr, args []Arg, content []*ContentExpr) *FuncCall {
-	return &FuncCall{expr: expr{span: span}, callee: callee, args: args, content: content}
+func NewFuncCall(span syntax.Span, callee Expr, args []Arg, blocks []*ContentBlock) *FuncCall {
+	return &FuncCall{expr: expr{span: span}, callee: callee, args: args, blocks: blocks}
 }
 
-func (n *FuncCall) Callee() Expr            { return n.callee }
-func (n *FuncCall) Args() []Arg             { return n.args }
-func (n *FuncCall) Content() []*ContentExpr { return n.content }
+func (n *FuncCall) Callee() Expr             { return n.callee }
+func (n *FuncCall) Args() []Arg              { return n.args }
+func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
 
 type Closure struct {
 	expr
@@ -498,46 +487,46 @@ func (*DestructSink) aDestructPattern()  {}
 
 type Conditional struct {
 	expr
-	condition Expr
-	then      Expr
-	els       Expr
+	conditions []Expr
+	blocks     []*CodeBlock
+	def        *CodeBlock
 }
 
-func NewConditional(span syntax.Span, condition, then, els Expr) *Conditional {
-	return &Conditional{expr: expr{span: span}, condition: condition, then: then, els: els}
+func NewConditional(span syntax.Span, conditions []Expr, blocks []*CodeBlock, def *CodeBlock) *Conditional {
+	return &Conditional{expr: expr{span: span}, conditions: conditions, blocks: blocks, def: def}
 }
 
-func (n *Conditional) Condition() Expr { return n.condition }
-func (n *Conditional) Then() Expr      { return n.then }
-func (n *Conditional) Else() Expr      { return n.els }
+func (n *Conditional) Conditions() []Expr   { return n.conditions }
+func (n *Conditional) Blocks() []*CodeBlock { return n.blocks }
+func (n *Conditional) Default() *CodeBlock  { return n.def }
 
 type WhileLoop struct {
 	expr
 	condition Expr
-	body      Expr
+	body      *CodeBlock
 }
 
-func NewWhileLoop(span syntax.Span, condition, body Expr) *WhileLoop {
+func NewWhileLoop(span syntax.Span, condition Expr, body *CodeBlock) *WhileLoop {
 	return &WhileLoop{expr: expr{span: span}, condition: condition, body: body}
 }
 
-func (n *WhileLoop) Condition() Expr { return n.condition }
-func (n *WhileLoop) Body() Expr      { return n.body }
+func (n *WhileLoop) Condition() Expr  { return n.condition }
+func (n *WhileLoop) Body() *CodeBlock { return n.body }
 
 type ForLoop struct {
 	expr
 	pattern  []DestructPattern
 	iterable Expr
-	body     Expr
+	body     *CodeBlock
 }
 
-func NewForLoop(span syntax.Span, pattern []DestructPattern, iterable, body Expr) *ForLoop {
+func NewForLoop(span syntax.Span, pattern []DestructPattern, iterable Expr, body *CodeBlock) *ForLoop {
 	return &ForLoop{expr: expr{span: span}, pattern: pattern, iterable: iterable, body: body}
 }
 
 func (n *ForLoop) Pattern() []DestructPattern { return n.pattern }
 func (n *ForLoop) Iterable() Expr             { return n.iterable }
-func (n *ForLoop) Body() Expr                 { return n.body }
+func (n *ForLoop) Body() *CodeBlock           { return n.body }
 
 type LoopBreak struct {
 	expr
