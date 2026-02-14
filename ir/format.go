@@ -18,6 +18,9 @@ func FormatContents(c Contents) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
 	c.format(f)
+	if sb.Len() > 0 {
+		sb.WriteString("\n")
+	}
 	return sb.String()
 }
 
@@ -422,7 +425,7 @@ func (n *FieldAccess) format(f *formatter) {
 	f.prefix()
 	f.expr(n.target)
 	f.str(".")
-	f.str(n.field)
+	f.str(n.field.Value())
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
@@ -614,6 +617,13 @@ func (n *DestructSink) format(f *formatter) {
 	}
 }
 
+// Types ///////////////////////////////////////////////////////////////////////////////////////////
+
+func (n Type) format(f *formatter) {
+	f.prefix()
+	f.str(n.Reflects.String())
+}
+
 // Scalars /////////////////////////////////////////////////////////////////////////////////////////
 
 func (n None) format(f *formatter) {
@@ -669,6 +679,18 @@ func (n String) format(f *formatter) {
 		}
 	}
 	f.str("\"")
+}
+
+func (n Bytes) format(f *formatter) {
+	f.prefix()
+	f.str("(")
+	for i, b := range []byte(n) {
+		if i > 0 {
+			f.str(", ")
+		}
+		f.val(int(b))
+	}
+	f.str(")")
 }
 
 // Containers //////////////////////////////////////////////////////////////////////////////////////
@@ -729,8 +751,10 @@ func (n Contents) format(f *formatter) {
 		n[0].format(f)
 		return
 	}
-	for _, c := range n {
-		f.nl()
+	for i, c := range n {
+		if i > 0 {
+			f.nl()
+		}
 		c.format(f)
 	}
 }

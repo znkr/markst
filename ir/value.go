@@ -16,6 +16,16 @@ type Value interface {
 	formattable
 }
 
+// Type ////////////////////////////////////////////////////////////////////////////////////////////
+
+type Type struct {
+	Reflects    types.Type
+	Constructor *Function
+}
+
+func (*Type) aValue()          {}
+func (*Type) Type() types.Type { return types.ReflectedType }
+
 // Scalars /////////////////////////////////////////////////////////////////////////////////////////
 
 type None struct{}
@@ -24,6 +34,7 @@ type Bool bool
 type Int int64
 type Float float64
 type String string
+type Bytes string
 
 type Numeric struct {
 	Value float64
@@ -36,6 +47,7 @@ func (Bool) aValue()    {}
 func (Int) aValue()     {}
 func (Float) aValue()   {}
 func (String) aValue()  {}
+func (Bytes) aValue()   {}
 func (Numeric) aValue() {}
 
 func (None) Type() types.Type   { return types.None }
@@ -44,6 +56,7 @@ func (Bool) Type() types.Type   { return types.Bool }
 func (Int) Type() types.Type    { return types.Int }
 func (Float) Type() types.Type  { return types.Float }
 func (String) Type() types.Type { return types.String }
+func (Bytes) Type() types.Type  { return types.Bytes }
 
 func (n Numeric) Type() types.Type {
 	switch n.Unit {
@@ -92,6 +105,7 @@ func (n *Function) With(args *Arguments) *Function {
 		NumPositional: numPositional,
 		WithArgs:      n.WithArgs.merge(args),
 		Defaults:      n.Defaults,
+		F:             n.F,
 	}
 }
 

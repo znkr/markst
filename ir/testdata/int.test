@@ -92,7 +92,7 @@
 // Error: 6-39 number too large
 #int(decimal("-9223372036854775809.5"))
 
---- int-signum (skip: not implemented yet) ---
+--- int-signum ---
 // Test int `signum()`
 #test(int(0).signum(), 0)
 #test(int(1.0).signum(), 1)
@@ -100,7 +100,7 @@
 #test(int(10.0).signum(), 1)
 #test(int(-10.0).signum(), -1)
 
---- int-from-and-to-bytes (skip: not implemented yet) ---
+--- int-from-and-to-bytes ---
 // Test `int.from-bytes` and `int.to-bytes`.
 #test(int.from-bytes(bytes(())), 0)
 #test(int.from-bytes(bytes((1, 0, 0, 0, 0, 0, 0, 0)), endian: "little", signed: true), 1)
@@ -114,11 +114,11 @@
 #test(int.from-bytes(1000.to-bytes(endian: "little", size: 5), endian: "little", signed: true), 1000)
 #test(int.from-bytes(1000.to-bytes(endian: "little", size: 5), endian: "little", signed: false), 1000)
 
---- int-from-and-to-bytes-too-many (skip: not implemented yet) ---
+--- int-from-and-to-bytes-too-many ---
 // Error: 2-34 too many bytes to convert to a 64 bit number
 #int.from-bytes(bytes((0,) * 16))
 
---- int-repr (skip: not implemented yet) ---
+--- int-repr ---
 // Test the `repr` function with integers.
 #test(repr(12), "12")
 #test(repr(1234567890), "1234567890")
@@ -164,7 +164,7 @@
   )
 }
 
---- int-display (skip: not implemented yet) ---
+--- int-display ---
 // Test integers.
 #12 \
 #1234567890 \
@@ -175,8 +175,25 @@
 #(-9876543210) \
 #(-0987654321) \
 #(4 - 8)
+│ #raw("12")
+│ #linebreak()
+│ #raw("1234567890")
+│ #linebreak()
+│ #raw("123456789")
+│ #linebreak()
+│ #raw("0")
+│ #linebreak()
+│ #raw("0")
+│ #linebreak()
+│ #raw("-1")
+│ #linebreak()
+│ #raw("-9876543210")
+│ #linebreak()
+│ #raw("-987654321")
+│ #linebreak()
+│ #raw("-4")
 
---- issue-int-constructor (skip: not implemented yet) ---
+--- issue-int-constructor ---
 // Test that integer -> integer conversion doesn't do a roundtrip through float.
 #let x = 9223372036854775800
 #test(type(x), int)

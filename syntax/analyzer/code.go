@@ -181,7 +181,7 @@ func (a *analyzer) analyzeFieldAccess(n syntax.Node) *ir.FieldAccess {
 	target := a.analyzeExpr(ns.node())
 	ns.take(syntax.KindDot)
 	field := ns.take(syntax.KindIdent)
-	return ir.NewFieldAccess(n.Span(), target, field)
+	return ir.NewFieldAccess(n.Span(), target, unique.Make(field))
 }
 
 func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {

@@ -2,6 +2,7 @@ package ir
 
 import (
 	"fmt"
+	"slices"
 	"unique"
 
 	"znkr.io/writst/ir/types"
@@ -64,10 +65,6 @@ func (ec *EvalContext) Bind(name unique.Handle[string], val Value) {
 }
 
 // Scope ///////////////////////////////////////////////////////////////////////////////////////////
-
-var universe = &scope{
-	bindings: builtins,
-}
 
 type scope struct {
 	parent   *scope
@@ -159,6 +156,10 @@ func toContent(span syntax.Span, v Value) Content {
 		return &Text{Value: string(v)}
 	case None:
 		return nil
+	case Int:
+		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}
+	case Float:
+		return &Raw{Lines: []string{fmt.Sprintf("%g", v)}}
 	default:
 		raise(&ValueError{
 			span: span,
@@ -279,8 +280,19 @@ var binops = map[binopKey]func(x, y Value) Value{
 		return x.(Float) / y.(Float)
 	},
 
+	// String operations
 	{syntax.Add, types.String, types.String}: func(x, y Value) Value {
 		return String(string(x.(String)) + string(y.(String)))
+	},
+
+	// Array operations
+	{syntax.Mul, types.Array, types.Int}: func(x, y Value) Value {
+		arr, times := x.(Array), y.(Int)
+		if times < 0 {
+			panic("cannot multiply array by negative integer")
+		}
+		result := slices.Repeat(arr, int(times))
+		return result
 	},
 }
 
@@ -303,16 +315,44 @@ func (n *Binary) eval(ec *EvalContext) Value {
 }
 
 func (n *FieldAccess) eval(ec *EvalContext) Value {
-	panic("TODO: implement field access")
+	t := n.target.eval(ec)
+	switch t := t.(type) {
+	case *Type:
+		ms := methods[t.Reflects]
+		fn := ms[n.field]
+		if fn == nil {
+			panic(fmt.Sprintf("type %s has no method named %s", t.Reflects, n.field.Value()))
+		}
+		return fn
+	case Value:
+		ms := methods[t.Type()]
+		fn := ms[n.field]
+		if fn == nil {
+			panic(fmt.Sprintf("type %s has no method named %s", t.Type(), n.field.Value()))
+		}
+		return fn.With(&Arguments{
+			Positional: []Value{t},
+		})
+	default:
+		panic(fmt.Sprintf("TODO: implement field access for %s", t.Type()))
+	}
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 func (n *FuncCall) eval(ec *EvalContext) Value {
 	callee := n.callee.eval(ec)
-	fn, ok := callee.(*Function)
-	if !ok {
-		panic("attempted to call a non-function value")
+	var fn *Function
+	switch callee := callee.(type) {
+	case *Function:
+		fn = callee
+	case *Type:
+		if callee.Constructor == nil {
+			panic(fmt.Sprintf("type %s is not callable", callee.Reflects))
+		}
+		fn = callee.Constructor
+	default:
+		panic(fmt.Sprintf("attempted to call a non-function value of type %s", callee.Type()))
 	}
 
 	var args Arguments
@@ -374,7 +414,7 @@ func (n *LetBinding) eval(ec *EvalContext) Value {
 			panic("TODO: implement complex let patterns")
 		}
 	}
-	return &None{}
+	return None{}
 }
 
 func (n *DestructAssignment) eval(ec *EvalContext) Value {

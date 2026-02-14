@@ -247,15 +247,15 @@ func (n *Binary) Right() Expr         { return n.right }
 type FieldAccess struct {
 	expr
 	target Expr
-	field  string
+	field  unique.Handle[string]
 }
 
-func NewFieldAccess(span syntax.Span, target Expr, field string) *FieldAccess {
+func NewFieldAccess(span syntax.Span, target Expr, field unique.Handle[string]) *FieldAccess {
 	return &FieldAccess{expr: expr{span: span}, target: target, field: field}
 }
 
-func (n *FieldAccess) Target() Expr  { return n.target }
-func (n *FieldAccess) Field() string { return n.field }
+func (n *FieldAccess) Target() Expr                 { return n.target }
+func (n *FieldAccess) Field() unique.Handle[string] { return n.field }
 
 // Arguments ///////////////////////////////////////////////////////////////////////////////////////
 

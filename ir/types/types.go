@@ -6,6 +6,7 @@ type Type int
 
 const (
 	None Type = iota
+	ReflectedType
 	Auto
 	Bool
 	Int
@@ -15,6 +16,7 @@ const (
 	Angle
 	Fraction
 	String
+	Bytes
 	Array
 	Dict
 	Function
@@ -23,21 +25,23 @@ const (
 )
 
 var types = [...]string{
-	None:      "none",
-	Auto:      "auto",
-	Bool:      "bool",
-	Int:       "int",
-	Float:     "float",
-	Length:    "length",
-	Ratio:     "ratio",
-	Angle:     "angle",
-	Fraction:  "fraction",
-	String:    "string",
-	Array:     "array",
-	Dict:      "dict",
-	Function:  "function",
-	Arguments: "arguments",
-	Content:   "content",
+	None:          "none",
+	ReflectedType: "type",
+	Auto:          "auto",
+	Bool:          "bool",
+	Int:           "int",
+	Float:         "float",
+	Length:        "length",
+	Ratio:         "ratio",
+	Angle:         "angle",
+	Fraction:      "fraction",
+	String:        "string",
+	Bytes:         "bytes",
+	Array:         "array",
+	Dict:          "dict",
+	Function:      "function",
+	Arguments:     "arguments",
+	Content:       "content",
 }
 
 func (t Type) String() string {

@@ -48,8 +48,8 @@ func TestEval(t *testing.T) {
 						NumPositional: 2,
 						F: func(args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
 							got, want := args[0], args[1]
-							if diff := cmp.Diff(ir.FormatValue(got), ir.FormatValue(want)); diff != "" {
-								t.Errorf("test() failed (-got +want):\n%s", diff)
+							if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
+								t.Errorf("test() failed (-want +got):\n%s", diff)
 							}
 							return ir.None{}, nil
 						},

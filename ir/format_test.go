@@ -372,12 +372,12 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Field access
 		{
 			name:    "field_access",
-			content: body(&FieldAccess{target: id("foo"), field: "bar"}),
+			content: body(&FieldAccess{target: id("foo"), field: unique.Make("bar")}),
 			want:    "#foo.bar\n",
 		},
 		{
 			name:    "field_access_nested",
-			content: body(&FieldAccess{target: &FieldAccess{target: id("a"), field: "b"}, field: "c"}),
+			content: body(&FieldAccess{target: &FieldAccess{target: id("a"), field: unique.Make("b")}, field: unique.Make("c")}),
 			want:    "#a.b.c\n",
 		},
 
@@ -409,7 +409,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "method_call",
-			content: body(&FuncCall{callee: &FieldAccess{target: id("foo"), field: "bar"}}),
+			content: body(&FuncCall{callee: &FieldAccess{target: id("foo"), field: unique.Make("bar")}}),
 			want:    "#foo.bar()\n",
 		},
 
@@ -472,7 +472,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "show_rule_with_selector",
-			content: body(&ShowRule{selector: id("heading"), transform: &Closure{params: []Param{param("it")}, body: &FuncCall{callee: id("emph"), args: []Arg{&ExprArg{expr: &FieldAccess{target: id("it"), field: "body"}}}}}}),
+			content: body(&ShowRule{selector: id("heading"), transform: &Closure{params: []Param{param("it")}, body: &FuncCall{callee: id("emph"), args: []Arg{&ExprArg{expr: &FieldAccess{target: id("it"), field: unique.Make("body")}}}}}}),
 			want:    "#show heading: it => emph(it.body)\n",
 		},
 
@@ -539,7 +539,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Other
 		{
 			name:    "context",
-			content: body(&Contextual{body: &FieldAccess{target: id("text"), field: "lang"}}),
+			content: body(&Contextual{body: &FieldAccess{target: id("text"), field: unique.Make("lang")}}),
 			want:    "#context text.lang\n",
 		},
 		{
