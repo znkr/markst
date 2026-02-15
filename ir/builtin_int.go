@@ -15,43 +15,43 @@ import (
 
 var (
 	builtinInt = &Function{
-		Name:          "int",
-		NumPositional: 1,
-		Defaults: NamedArgs{
-			names.Base: Int(10),
+		Name:       "int",
+		Positional: []types.Set{types.SetOf(types.Bool, types.Int, types.Float, types.Str, types.Decimal)},
+		Named: NamedParams{
+			names.Base: NamedParam{Type: types.SetOf(types.Int), Default: Int(10)},
 		},
 		F: builtinIntImpl,
 	}
 
 	builtinIntFromBytes = &Function{
-		Name:          "from-bytes",
-		NumPositional: 1,
-		Defaults: NamedArgs{
-			names.Endian: String("little"),
-			names.Signed: Bool(true),
+		Name:       "int.from-bytes",
+		Positional: []types.Set{types.SetOf(types.Bytes)},
+		Named: NamedParams{
+			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Signed: NamedParam{Type: types.SetOf(types.Bool), Default: Bool(true)},
 		},
 		F: builtinIntFromBytesImpl,
 	}
 
 	builtinIntToBytes = &Function{
-		Name:          "to-bytes",
-		NumPositional: 1,
-		Defaults: NamedArgs{
-			names.Endian: String("little"),
-			names.Size:   Int(8),
+		Name:       "int.to-bytes",
+		Positional: []types.Set{types.SetOf(types.Int)},
+		Named: NamedParams{
+			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Size:   NamedParam{Type: types.SetOf(types.Int), Default: Int(8)},
 		},
 		F: builtinIntToBytesImpl,
 	}
 
 	builtinSignum = &Function{
-		Name:          "signum",
-		NumPositional: 1,
-		F:             builtinSignumImpl,
+		Name:       "int.signum",
+		Positional: []types.Set{types.SetOf(types.Int)},
+		F:          builtinSignumImpl,
 	}
 )
 
-func builtinIntImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
-	if args[0].Type() != types.String && named.IsSet(names.Base) {
+func builtinIntImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
+	if args[0].Type() != types.Str && named.IsSet(names.Base) {
 		return nil, ArgErrorNamedf(names.Base, "base is only supported for strings")
 	}
 	switch v := args[0].(type) {
@@ -67,7 +67,7 @@ func builtinIntImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
 			return nil, ArgErrorPosf(0, "number too large")
 		}
 		return Int(v), nil
-	case String:
+	case Str:
 		s := string(v)
 		if s == "" {
 			return nil, ArgErrorPosf(0, "string must not be empty")
@@ -115,12 +115,9 @@ var byteOrder = map[string]binary.ByteOrder{
 	"big":    binary.BigEndian,
 }
 
-func builtinIntFromBytesImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
-	if args[0].Type() != types.Bytes {
-		return nil, ArgErrorPosf(0, "expected bytes, got %s", args[0].Type())
-	}
+func builtinIntFromBytesImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	b := []byte(args[0].(Bytes))
-	order := byteOrder[string(named.Get(names.Endian).(String))]
+	order := byteOrder[string(named.Get(names.Endian).(Str))]
 	signed := named.Get(names.Signed).(Bool)
 	if order == nil {
 		return nil, ArgErrorNamedf(names.Endian, "endian must be 'little' or 'big'")
@@ -158,12 +155,9 @@ func builtinIntFromBytesImpl(args []Value, named NamedArgsWithDefaults) (Value, 
 	}
 }
 
-func builtinIntToBytesImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
-	if args[0].Type() != types.Int {
-		return nil, ArgErrorPosf(0, "expected int, got %s", args[0].Type())
-	}
+func builtinIntToBytesImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	n := uint64(args[0].(Int))
-	order := byteOrder[string(named.Get(names.Endian).(String))]
+	order := byteOrder[string(named.Get(names.Endian).(Str))]
 	size := int(named.Get(names.Size).(Int))
 	if order == nil {
 		return nil, ArgErrorNamedf(names.Endian, "endian must be 'little' or 'big'")
@@ -179,10 +173,7 @@ func builtinIntToBytesImpl(args []Value, named NamedArgsWithDefaults) (Value, er
 	}
 }
 
-func builtinSignumImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
-	if args[0].Type() != types.Int {
-		return nil, ArgErrorPosf(0, "expected int, got %s", args[0].Type())
-	}
+func builtinSignumImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	n := args[0].(Int)
 	return Int(cmp.Compare(n, 0)), nil
 }

@@ -3,6 +3,7 @@ package ir
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"unique"
 
 	"znkr.io/writst/ir/types"
@@ -152,7 +153,7 @@ func toContent(span syntax.Span, v Value) Content {
 	switch v := v.(type) {
 	case Content:
 		return v
-	case String:
+	case Str:
 		return &Text{Value: string(v)}
 	case None:
 		return nil
@@ -171,7 +172,7 @@ func toContent(span syntax.Span, v Value) Content {
 
 // Code ////////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Const) eval(ec *EvalContext) Value { return n.value }
+func (n *ConstExpr) eval(ec *EvalContext) Value { return n.value }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
@@ -183,14 +184,83 @@ func (n *Ident) eval(ec *EvalContext) Value {
 	return val
 }
 
+var joinResultType = map[[2]types.Type]types.Type{
+	{types.Str, types.Str}:         types.Str,
+	{types.Bytes, types.Bytes}:     types.Bytes,
+	{types.Array, types.Array}:     types.Array,
+	{types.Dict, types.Dict}:       types.Dict,
+	{types.Str, types.Content}:     types.Content,
+	{types.Content, types.Content}: types.Content,
+}
+
 func (n *CodeBlock) eval(ec *EvalContext) Value {
 	ec.openScope()
 	defer ec.closeScope()
-	var array Array
-	for _, expr := range n.exprs {
-		array = append(array, expr.eval(ec))
+
+	var values []Value
+	var spans []syntax.Span
+	rtype := types.None
+	for i, expr := range n.exprs {
+		v := expr.eval(ec)
+		if i == 0 {
+			rtype = v.Type()
+		} else if v.Type() != rtype {
+			var at, bt types.Type
+			at = rtype
+			bt = v.Type()
+			if at > bt {
+				at, bt = bt, at
+			}
+			rtyp, ok := joinResultType[[2]types.Type{at, bt}]
+			if !ok {
+				raise(&ValueError{
+					span: expr.Span(),
+					msg:  fmt.Sprintf("cannot join %s with %s", rtype, v.Type()),
+				})
+			}
+			rtype = rtyp
+		}
+		values = append(values, v)
+		spans = append(spans, expr.Span())
 	}
-	return array
+	switch rtype {
+	case types.None:
+	case types.Int, types.Float:
+		return values[0]
+	case types.Str:
+		var sb strings.Builder
+		for _, v := range values {
+			sb.WriteString(string(v.(Str)))
+		}
+		return Str(sb.String())
+	case types.Bytes:
+		var sb strings.Builder
+		for _, v := range values {
+			sb.WriteString(string(v.(Bytes)))
+		}
+		return Bytes(sb.String())
+	case types.Content:
+		var contents Contents
+		for i, v := range values {
+			contents = append(contents, toContent(spans[i], v))
+		}
+		return contents
+	case types.Array:
+		var arr Array
+		for _, v := range values {
+			arr = append(arr, v.(Array)...)
+		}
+		return arr
+	case types.Dict:
+		dict := make(Dict)
+		for _, v := range values {
+			for k, val := range v.(Dict) {
+				dict[k] = val
+			}
+		}
+		return dict
+	}
+	panic("unsupported result type: " + rtype.String())
 }
 
 func (n *ContentBlock) eval(ec *EvalContext) Value {
@@ -217,7 +287,7 @@ func (n *DictExpr) eval(ec *EvalContext) Value {
 	dict := make(Dict, len(n.entries))
 	for _, ent := range n.entries {
 		keyVal := ent.key.eval(ec)
-		keyStr, ok := keyVal.(String)
+		keyStr, ok := keyVal.(Str)
 		if !ok {
 			panic("dictionary key did not evaluate to a string")
 		}
@@ -281,8 +351,13 @@ var binops = map[binopKey]func(x, y Value) Value{
 	},
 
 	// String operations
-	{syntax.Add, types.String, types.String}: func(x, y Value) Value {
-		return String(string(x.(String)) + string(y.(String)))
+	{syntax.Add, types.Str, types.Str}: func(x, y Value) Value {
+		return Str(string(x.(Str)) + string(y.(Str)))
+	},
+
+	// Bytes operations
+	{syntax.Add, types.Bytes, types.Bytes}: func(x, y Value) Value {
+		return Bytes(string(x.(Bytes)) + string(y.(Bytes)))
 	},
 
 	// Array operations
@@ -318,21 +393,31 @@ func (n *FieldAccess) eval(ec *EvalContext) Value {
 	t := n.target.eval(ec)
 	switch t := t.(type) {
 	case *Type:
-		ms := methods[t.Reflects]
-		fn := ms[n.field]
+		ms := methods[t.Reflected]
+		fn := ms[n.field.Name()]
 		if fn == nil {
-			panic(fmt.Sprintf("type %s has no method named %s", t.Reflects, n.field.Value()))
+			panic(fmt.Sprintf("type %s has no method named %s", t.Reflected, n.field.Name().Value()))
 		}
 		return fn
 	case Value:
 		ms := methods[t.Type()]
-		fn := ms[n.field]
+		fn := ms[n.field.Name()]
 		if fn == nil {
-			panic(fmt.Sprintf("type %s has no method named %s", t.Type(), n.field.Value()))
+			panic(fmt.Sprintf("type %s has no method named %s", t.Type(), n.field.Name().Value()))
 		}
-		return fn.With(&Arguments{
+		fn, err := fn.With(&Arguments{
 			Positional: []Value{t},
 		})
+		if err != nil {
+			if argErr, ok := err.(*ArgError); ok {
+				raise(&ValueError{
+					span:  n.field.Span(),
+					msg:   argErr.msg,
+					hints: argErr.hints,
+				})
+			}
+		}
+		return fn
 	default:
 		panic(fmt.Sprintf("TODO: implement field access for %s", t.Type()))
 	}
@@ -348,7 +433,7 @@ func (n *FuncCall) eval(ec *EvalContext) Value {
 		fn = callee
 	case *Type:
 		if callee.Constructor == nil {
-			panic(fmt.Sprintf("type %s is not callable", callee.Reflects))
+			panic(fmt.Sprintf("type %s is not callable", callee.Reflected))
 		}
 		fn = callee.Constructor
 	default:
@@ -371,7 +456,10 @@ func (n *FuncCall) eval(ec *EvalContext) Value {
 			panic("unrecognized function argument type")
 		}
 	}
-	v, err := fn.Apply(&args)
+	fcc := FuncCallContext{
+		Span: n.span,
+	}
+	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
 		var hints []string
 		if argErr, ok := err.(*ArgError); ok {
@@ -414,7 +502,7 @@ func (n *LetBinding) eval(ec *EvalContext) Value {
 			panic("TODO: implement complex let patterns")
 		}
 	}
-	return None{}
+	return none
 }
 
 func (n *DestructAssignment) eval(ec *EvalContext) Value {
@@ -444,7 +532,7 @@ func (n *Conditional) eval(ec *EvalContext) Value {
 	if n.def != nil {
 		return n.def.eval(ec)
 	}
-	return &None{}
+	return none
 }
 
 func (n *ForLoop) eval(ec *EvalContext) Value {

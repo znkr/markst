@@ -47,7 +47,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindLabel:
 		label := a.leaf(n, syntax.KindLabel)
 		label = label[1 : len(label)-1] // trim '<>'
-		return ir.NewConst(n.Span(), &ir.Label{Name: unique.Make(label)})
+		return ir.NewConstExpr(n.Span(), &ir.Label{Name: unique.Make(label)})
 	case syntax.KindHeading:
 		return a.analyzeHeading(n)
 	case syntax.KindListItem:
@@ -57,18 +57,18 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindTermItem:
 		return a.analyzeTermItem(n)
 	case syntax.KindText:
-		return ir.NewConst(n.Span(), &ir.Text{Value: strings.TrimSpace(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Value: strings.TrimSpace(n.Text())})
 	case syntax.KindEscape:
-		return ir.NewConst(n.Span(), &ir.Text{Value: unescape(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Value: unescape(n.Text())})
 	case syntax.KindShorthand:
-		return ir.NewConst(n.Span(), &ir.Text{Value: unshorthand(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Value: unshorthand(n.Text())})
 	case syntax.KindSmartQuote:
 		// TODO: implement smart quotes properly.
-		return ir.NewConst(n.Span(), &ir.Text{Value: n.Text()})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Value: n.Text()})
 	case syntax.KindLinebreak:
-		return ir.NewConst(n.Span(), &ir.Linebreak{})
+		return ir.NewConstExpr(n.Span(), &ir.Linebreak{})
 	case syntax.KindParbreak:
-		return ir.NewConst(n.Span(), &ir.Parbreak{})
+		return ir.NewConstExpr(n.Span(), &ir.Parbreak{})
 	case syntax.KindStrong:
 		ns := a.inner(n, syntax.KindStrong)
 		defer ns.finish()
@@ -90,14 +90,14 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		return ir.NewLinkExpr(
 			n.Span(),
 			lit,
-			[]ir.Expr{ir.NewConst(n.Span(), &ir.Text{Value: lit})},
+			[]ir.Expr{ir.NewConstExpr(n.Span(), &ir.Text{Value: lit})},
 		)
 	case syntax.KindRef:
 		return a.analyzeRef(n)
 	case syntax.KindNone:
-		return ir.NewConst(n.Span(), ir.None{})
+		return ir.NewConstExpr(n.Span(), ir.None{})
 	case syntax.KindAuto:
-		return ir.NewConst(n.Span(), ir.Auto{})
+		return ir.NewConstExpr(n.Span(), ir.Auto{})
 	case syntax.KindBool:
 		return a.analyzeBool(n)
 	case syntax.KindInt:

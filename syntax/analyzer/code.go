@@ -10,34 +10,34 @@ import (
 	"znkr.io/writst/syntax/convert"
 )
 
-func (a *analyzer) analyzeBool(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeBool(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindBool)
 	v, ok := bools[val]
 	if !ok {
 		panic("invalid bool literal: " + val)
 	}
-	return ir.NewConst(n.Span(), v)
+	return ir.NewConstExpr(n.Span(), v)
 }
 
-func (a *analyzer) analyzeInt(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeInt(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindInt)
 	iv, err := convert.ParseInt(val)
 	if err != nil {
 		panic(err.Error())
 	}
-	return ir.NewConst(n.Span(), ir.Int(iv))
+	return ir.NewConstExpr(n.Span(), ir.Int(iv))
 }
 
-func (a *analyzer) analyzeFloat(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeFloat(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindFloat)
 	fv, err := strconv.ParseFloat(val, 64)
 	if err != nil {
 		panic("invalid float literal: " + val)
 	}
-	return ir.NewConst(n.Span(), ir.Float(fv))
+	return ir.NewConstExpr(n.Span(), ir.Float(fv))
 }
 
-func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindNumeric)
 	// Find where the numeric part ends and unit begins
 	idx := strings.IndexFunc(val, func(r rune) bool { return (r < '0' || r > '9') && r != '.' })
@@ -53,12 +53,12 @@ func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.Const {
 	if !ok {
 		panic("invalid unit literal: " + val)
 	}
-	return ir.NewConst(n.Span(), ir.Numeric{Value: fv, Unit: u})
+	return ir.NewConstExpr(n.Span(), ir.Numeric{Value: fv, Unit: u})
 }
 
-func (a *analyzer) analyzeStr(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeStr(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindStr)
-	return ir.NewConst(n.Span(), ir.String(unquote(val)))
+	return ir.NewConstExpr(n.Span(), ir.Str(unquote(val)))
 }
 
 func (a *analyzer) analyzeIdent(n syntax.Node) *ir.Ident {
@@ -129,7 +129,7 @@ func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
 			value := a.analyzeExpr(entry.node())
 			entry.finish()
 			entries = append(entries, ir.NewDictItemExpr(
-				ir.NewConst(child.Span(), ir.String(key)),
+				ir.NewConstExpr(child.Span(), ir.Str(key)),
 				value,
 			))
 		case syntax.KindKeyed:
@@ -180,8 +180,8 @@ func (a *analyzer) analyzeFieldAccess(n syntax.Node) *ir.FieldAccess {
 	defer ns.finish()
 	target := a.analyzeExpr(ns.node())
 	ns.take(syntax.KindDot)
-	field := ns.take(syntax.KindIdent)
-	return ir.NewFieldAccess(n.Span(), target, unique.Make(field))
+	field := a.analyzeIdent(ns.node())
+	return ir.NewFieldAccess(n.Span(), target, field)
 }
 
 func (a *analyzer) analyzeFuncCall(n syntax.Node) *ir.FuncCall {
@@ -237,22 +237,22 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	// - Anonymous with parens: (params) => body
 	// - Anonymous single param: param => body
 	var name *ir.Ident
-	var params []ir.Param
+	var params []ir.ClosureParam
 	switch n := ns.node(); n.Kind() {
 	case syntax.KindIdent:
 		if ns.at(syntax.KindParams) {
 			// Named function: name(params) = body
 			name = a.analyzeIdent(n)
-			params = a.analyzeParams(ns.node())
+			params = a.analyzeClosureParams(ns.node())
 		} else {
 			// Single param: param => body
-			params = []ir.Param{ir.NewPositionalParam(a.analyzeIdent(n))}
+			params = []ir.ClosureParam{ir.NewPositionalClosureParam(a.analyzeIdent(n))}
 		}
 	case syntax.KindUnderscore:
 		// _ => body
-		params = []ir.Param{ir.NewPositionalParam(ir.NewIdent(n.Span(), underscore))}
+		params = []ir.ClosureParam{ir.NewPositionalClosureParam(ir.NewIdent(n.Span(), underscore))}
 	case syntax.KindParams:
-		params = a.analyzeParams(n)
+		params = a.analyzeClosureParams(n)
 	default:
 		panic("invalid closure syntax: " + n.Kind().String())
 	}
@@ -265,18 +265,18 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	return ir.NewClosure(n.Span(), name, params, body)
 }
 
-func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
+func (a *analyzer) analyzeClosureParams(n syntax.Node) []ir.ClosureParam {
 	ns := a.inner(n, syntax.KindParams)
 	defer ns.finish()
-	var params []ir.Param
+	var params []ir.ClosureParam
 	if !ns.at(syntax.KindLeftParen) {
 		// Single param without parens
 		for child := range ns.all() {
 			switch child.Kind() {
 			case syntax.KindUnderscore:
-				params = append(params, ir.NewPositionalParam(ir.NewIdent(child.Span(), underscore)))
+				params = append(params, ir.NewPositionalClosureParam(ir.NewIdent(child.Span(), underscore)))
 			default:
-				params = append(params, ir.NewPositionalParam(a.analyzeIdent(child)))
+				params = append(params, ir.NewPositionalClosureParam(a.analyzeIdent(child)))
 			}
 		}
 
@@ -287,14 +287,14 @@ func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 			case syntax.KindComma:
 				continue
 			case syntax.KindIdent:
-				params = append(params, ir.NewPositionalParam(a.analyzeIdent(child)))
+				params = append(params, ir.NewPositionalClosureParam(a.analyzeIdent(child)))
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
 				name := unique.Make(named.take(syntax.KindIdent))
 				named.take(syntax.KindColon)
 				defaultExpr := a.analyzeExpr(named.node())
 				named.finish()
-				params = append(params, ir.NewNamedParam(name, defaultExpr))
+				params = append(params, ir.NewNamedClosureParam(name, defaultExpr))
 			case syntax.KindSpread:
 				if hasSink {
 					panic("only one sink parameter allowed")
@@ -304,7 +304,7 @@ func (a *analyzer) analyzeParams(n syntax.Node) []ir.Param {
 				defer ns.finish()
 				ns.take(syntax.KindDots)
 				ident := a.analyzeIdent(ns.node())
-				params = append(params, ir.NewSpreadParam(ident))
+				params = append(params, ir.NewSpreadClosureParam(ident))
 			default:
 				panic("invalid parameter: " + child.Kind().String())
 			}

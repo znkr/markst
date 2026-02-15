@@ -9,13 +9,13 @@ import (
 )
 
 // Helper functions for creating IR nodes
-func id(s string) *Ident                    { return &Ident{name: unique.Make(s)} }
-func text(s string) *Const                  { return &Const{value: &Text{Value: s}} }
-func str(s string) *Const                   { return &Const{value: String(s)} }
-func num(n int) *Const                      { return &Const{value: Int(n)} }
-func param(s string) *PositionalParam       { return &PositionalParam{ident: id(s)} }
-func destruct(s string) *DestructIdent      { return &DestructIdent{ident: id(s)} }
-func narg(name string, expr Expr) *NamedArg { return &NamedArg{name: unique.Make(name), expr: expr} }
+func id(s string) *Ident                     { return &Ident{name: unique.Make(s)} }
+func text(s string) *ConstExpr               { return &ConstExpr{value: &Text{Value: s}} }
+func str(s string) *ConstExpr                { return &ConstExpr{value: Str(s)} }
+func num(n int) *ConstExpr                   { return &ConstExpr{value: Int(n)} }
+func param(s string) *PositionalClosureParam { return &PositionalClosureParam{ident: id(s)} }
+func destruct(s string) *DestructIdent       { return &DestructIdent{ident: id(s)} }
+func narg(name string, expr Expr) *NamedArg  { return &NamedArg{name: unique.Make(name), expr: expr} }
 
 func body(exprs ...Expr) []Expr           { return exprs }
 func codeBlock(exprs ...Expr) *CodeBlock  { return &CodeBlock{exprs: exprs} }
@@ -54,7 +54,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name:    "raw_block",
-			content: body(&Const{value: &Raw{Block: true, Lang: "go", Lines: []string{"package main", "func main() {}"}}}),
+			content: body(&ConstExpr{value: &Raw{Block: true, Lang: "go", Lines: []string{"package main", "func main() {}"}}}),
 			want: `#raw(
   block: true,
   lang: "go",
@@ -65,17 +65,17 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name:    "raw_inline",
-			content: body(&Const{value: &Raw{Block: false, Lines: []string{"code"}}}),
+			content: body(&ConstExpr{value: &Raw{Block: false, Lines: []string{"code"}}}),
 			want:    "#raw(\"code\")\n",
 		},
 		{
 			name:    "linebreak",
-			content: body(&Const{value: &Linebreak{}}),
+			content: body(&ConstExpr{value: &Linebreak{}}),
 			want:    "#linebreak()\n",
 		},
 		{
 			name:    "parbreak",
-			content: body(&Const{value: &Parbreak{}}),
+			content: body(&ConstExpr{value: &Parbreak{}}),
 			want:    "#parbreak()\n",
 		},
 		{
@@ -85,7 +85,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "list",
-			content: body(&Const{value: &List{Items: []ListItem{
+			content: body(&ConstExpr{value: &List{Items: []ListItem{
 				{Body: &Text{Value: "item 1"}},
 				{Body: &Text{Value: "item 2"}},
 			}}}),
@@ -93,7 +93,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "enum",
-			content: body(&Const{value: &Enum{Items: []EnumItem{
+			content: body(&ConstExpr{value: &Enum{Items: []EnumItem{
 				{Number: 1, Body: &Text{Value: "first"}},
 				{Number: 2, Body: &Text{Value: "second"}},
 			}}}),
@@ -101,7 +101,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "terms",
-			content: body(&Const{value: &Terms{Items: []TermItem{
+			content: body(&ConstExpr{value: &Terms{Items: []TermItem{
 				{Term: &Text{Value: "key"}, Description: &Text{Value: "value"}},
 			}}}),
 			want: "#terms(terms.item[#text(\"key\")][#text(\"value\")])\n",
@@ -120,7 +120,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "multi_item_content_block",
-			content: body(&Const{value: &List{Items: []ListItem{
+			content: body(&ConstExpr{value: &List{Items: []ListItem{
 				{Body: Contents{
 					&Text{Value: "first "},
 					&Strong{Body: &Text{Value: "bold"}},
@@ -148,7 +148,7 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "deeply_nested_markup",
-			content: body(&Const{value: &List{Items: []ListItem{
+			content: body(&ConstExpr{value: &List{Items: []ListItem{
 				{Body: Contents{
 					&Text{Value: "outer"},
 					&List{Items: []ListItem{
@@ -182,9 +182,9 @@ func TestFormat(t *testing.T) {
 		{
 			name: "nested_conditionals",
 			content: body(&Conditional{
-				conditions: []Expr{&Const{value: Bool(true)}},
+				conditions: []Expr{&ConstExpr{value: Bool(true)}},
 				blocks: []*CodeBlock{codeBlock(&Conditional{
-					conditions: []Expr{&Const{value: Bool(false)}},
+					conditions: []Expr{&ConstExpr{value: Bool(false)}},
 					blocks:     []*CodeBlock{codeBlock(num(1))},
 					def:        codeBlock(num(2)),
 				})},
@@ -223,22 +223,22 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Literals
 		{
 			name:    "none",
-			content: body(&Const{value: None{}}),
+			content: body(&ConstExpr{value: none}),
 			want:    "#none\n",
 		},
 		{
 			name:    "auto",
-			content: body(&Const{value: Auto{}}),
+			content: body(&ConstExpr{value: Auto{}}),
 			want:    "#auto\n",
 		},
 		{
 			name:    "bool_true",
-			content: body(&Const{value: Bool(true)}),
+			content: body(&ConstExpr{value: Bool(true)}),
 			want:    "#true\n",
 		},
 		{
 			name:    "bool_false",
-			content: body(&Const{value: Bool(false)}),
+			content: body(&ConstExpr{value: Bool(false)}),
 			want:    "#false\n",
 		},
 		{
@@ -248,12 +248,12 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "float",
-			content: body(&Const{value: Float(3.14)}),
+			content: body(&ConstExpr{value: Float(3.14)}),
 			want:    "#3.14\n",
 		},
 		{
 			name:    "numeric",
-			content: body(&Const{value: Numeric{Value: 12, Unit: UnitPt}}),
+			content: body(&ConstExpr{value: Numeric{Value: 12, Unit: UnitPt}}),
 			want:    "#12pt\n",
 		},
 		{
@@ -350,7 +350,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "unary_not",
-			content: body(&Unary{op: syntax.Not, operand: &Const{value: Bool(true)}}),
+			content: body(&Unary{op: syntax.Not, operand: &ConstExpr{value: Bool(true)}}),
 			want:    "#not true\n",
 		},
 		{
@@ -372,12 +372,12 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Field access
 		{
 			name:    "field_access",
-			content: body(&FieldAccess{target: id("foo"), field: unique.Make("bar")}),
+			content: body(&FieldAccess{target: id("foo"), field: id("bar")}),
 			want:    "#foo.bar\n",
 		},
 		{
 			name:    "field_access_nested",
-			content: body(&FieldAccess{target: &FieldAccess{target: id("a"), field: unique.Make("b")}, field: unique.Make("c")}),
+			content: body(&FieldAccess{target: &FieldAccess{target: id("a"), field: id("b")}, field: id("c")}),
 			want:    "#a.b.c\n",
 		},
 
@@ -409,29 +409,29 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "method_call",
-			content: body(&FuncCall{callee: &FieldAccess{target: id("foo"), field: unique.Make("bar")}}),
+			content: body(&FuncCall{callee: &FieldAccess{target: id("foo"), field: id("bar")}}),
 			want:    "#foo.bar()\n",
 		},
 
 		// Closures
 		{
 			name:    "closure_single_param",
-			content: body(&Closure{params: []Param{param("x")}, body: &Binary{left: id("x"), op: syntax.Add, right: num(1)}}),
+			content: body(&Closure{params: []ClosureParam{param("x")}, body: &Binary{left: id("x"), op: syntax.Add, right: num(1)}}),
 			want:    "#x => x + 1\n",
 		},
 		{
 			name:    "closure_multi_param",
-			content: body(&Closure{params: []Param{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}),
+			content: body(&Closure{params: []ClosureParam{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}),
 			want:    "#(x, y) => x + y\n",
 		},
 		{
 			name:    "closure_spread_param",
-			content: body(&Closure{params: []Param{&SpreadParam{ident: id("args")}}, body: id("args")}),
+			content: body(&Closure{params: []ClosureParam{&SpreadClosureParam{ident: id("args")}}, body: id("args")}),
 			want:    "#(..args) => args\n",
 		},
 		{
 			name:    "closure_named",
-			content: body(&Closure{name: id("add"), params: []Param{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}),
+			content: body(&Closure{name: id("add"), params: []ClosureParam{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}),
 			want:    "#add(x, y) = x + y\n",
 		},
 
@@ -448,14 +448,14 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "let_function",
-			content: body(&LetBinding{pattern: []DestructPattern{destruct("add")}, value: &Closure{name: id("add"), params: []Param{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}}),
+			content: body(&LetBinding{pattern: []DestructPattern{destruct("add")}, value: &Closure{name: id("add"), params: []ClosureParam{param("x"), param("y")}, body: &Binary{left: id("x"), op: syntax.Add, right: id("y")}}}),
 			want:    "#let add(x, y) = x + y\n",
 		},
 
 		// Set rules
 		{
 			name:    "set_rule",
-			content: body(&SetRule{target: id("text"), args: []Arg{narg("size", &Const{value: Numeric{Value: 12, Unit: UnitPt}})}}),
+			content: body(&SetRule{target: id("text"), args: []Arg{narg("size", &ConstExpr{value: Numeric{Value: 12, Unit: UnitPt}})}}),
 			want:    "#set text(size: 12pt)\n",
 		},
 		{
@@ -472,7 +472,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		},
 		{
 			name:    "show_rule_with_selector",
-			content: body(&ShowRule{selector: id("heading"), transform: &Closure{params: []Param{param("it")}, body: &FuncCall{callee: id("emph"), args: []Arg{&ExprArg{expr: &FieldAccess{target: id("it"), field: unique.Make("body")}}}}}}),
+			content: body(&ShowRule{selector: id("heading"), transform: &Closure{params: []ClosureParam{param("it")}, body: &FuncCall{callee: id("emph"), args: []Arg{&ExprArg{expr: &FieldAccess{target: id("it"), field: id("body")}}}}}}),
 			want:    "#show heading: it => emph(it.body)\n",
 		},
 
@@ -539,7 +539,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Other
 		{
 			name:    "context",
-			content: body(&Contextual{body: &FieldAccess{target: id("text"), field: unique.Make("lang")}}),
+			content: body(&Contextual{body: &FieldAccess{target: id("text"), field: id("lang")}}),
 			want:    "#context text.lang\n",
 		},
 		{

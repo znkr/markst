@@ -3,18 +3,20 @@ package ir
 import (
 	"fmt"
 	"strconv"
+
+	"znkr.io/writst/ir/types"
 )
 
 var (
 	builtinRepr = &Function{
-		Name:          "repr",
-		NumPositional: 1,
-		F:             builtinReprImpl,
+		Name:       "repr",
+		Positional: []types.Set{types.Any},
+		F:          builtinReprImpl,
 	}
 
 	builtinType = &Function{
-		Name:          "type",
-		NumPositional: 1,
+		Name:       "type",
+		Positional: []types.Set{types.Any},
 		// F is set in init() to avoid an initialization cycle.
 	}
 )
@@ -23,24 +25,24 @@ func init() {
 	builtinType.F = builtinTypeImpl
 }
 
-func builtinReprImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
+func builtinReprImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	switch v := args[0].(type) {
 	case None:
-		return String("none"), nil
+		return Str("none"), nil
 	case Bool:
 		if v {
-			return String("true"), nil
+			return Str("true"), nil
 		}
-		return String("false"), nil
+		return Str("false"), nil
 	case Int:
-		return String(strconv.FormatInt(int64(v), 10)), nil
+		return Str(strconv.FormatInt(int64(v), 10)), nil
 	case Float:
-		return String(strconv.FormatFloat(float64(v), 'g', -1, 64)), nil
+		return Str(strconv.FormatFloat(float64(v), 'g', -1, 64)), nil
 	default:
 		panic(fmt.Sprintf("repr() not implemented for type %s", args[0].Type()))
 	}
 }
 
-func builtinTypeImpl(args []Value, named NamedArgsWithDefaults) (Value, error) {
+func builtinTypeImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	return reflectedTypes[args[0].Type()], nil
 }

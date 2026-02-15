@@ -9,40 +9,49 @@ import (
 
 var universe = &scope{
 	bindings: map[unique.Handle[string]]Value{
+		names.Array: reflectedTypes[types.Array],
 		names.Bytes: reflectedTypes[types.Bytes],
 		names.Int:   reflectedTypes[types.Int],
+		names.Range: builtinRange,
 		names.Repr:  builtinRepr,
+		names.Str:   reflectedTypes[types.Str],
 		names.Type:  reflectedTypes[types.ReflectedType],
 	},
 }
 
 var reflectedTypes = [...]*Type{
-	types.None: {Reflects: types.None},
+	types.None: {Reflected: types.None},
 	types.ReflectedType: {
-		Reflects:    types.ReflectedType,
+		Reflected:   types.ReflectedType,
 		Constructor: builtinType,
 	},
-	types.Auto: {Reflects: types.Auto},
-	types.Bool: {Reflects: types.Bool},
+	types.Auto: {Reflected: types.Auto},
+	types.Bool: {Reflected: types.Bool},
 	types.Int: {
-		Reflects:    types.Int,
+		Reflected:   types.Int,
 		Constructor: builtinInt,
 	},
-	types.Float:    {Reflects: types.Float},
-	types.Length:   {Reflects: types.Length},
-	types.Ratio:    {Reflects: types.Ratio},
-	types.Angle:    {Reflects: types.Angle},
-	types.Fraction: {Reflects: types.Fraction},
-	types.String:   {Reflects: types.String},
+	types.Float:    {Reflected: types.Float},
+	types.Length:   {Reflected: types.Length},
+	types.Ratio:    {Reflected: types.Ratio},
+	types.Angle:    {Reflected: types.Angle},
+	types.Fraction: {Reflected: types.Fraction},
+	types.Str: {
+		Reflected:   types.Str,
+		Constructor: builtinStr,
+	},
 	types.Bytes: {
-		Reflects:    types.Bytes,
+		Reflected:   types.Bytes,
 		Constructor: builtinBytes,
 	},
-	types.Array:     {Reflects: types.Array},
-	types.Dict:      {Reflects: types.Dict},
-	types.Function:  {Reflects: types.Function},
-	types.Arguments: {Reflects: types.Arguments},
-	types.Content:   {Reflects: types.Content},
+	types.Array: {
+		Reflected:   types.Array,
+		Constructor: builtinArray,
+	},
+	types.Dict:      {Reflected: types.Dict},
+	types.Function:  {Reflected: types.Function},
+	types.Arguments: {Reflected: types.Arguments},
+	types.Content:   {Reflected: types.Content},
 }
 
 var methods = [...]map[unique.Handle[string]]*Function{
@@ -55,14 +64,18 @@ var methods = [...]map[unique.Handle[string]]*Function{
 		names.Signum:    builtinSignum,
 		names.ToBytes:   builtinIntToBytes,
 	},
-	types.Float:     {},
-	types.Length:    {},
-	types.Ratio:     {},
-	types.Angle:     {},
-	types.Fraction:  {},
-	types.String:    {},
-	types.Bytes:     {},
-	types.Array:     {},
+	types.Float:    {},
+	types.Length:   {},
+	types.Ratio:    {},
+	types.Angle:    {},
+	types.Fraction: {},
+	types.Str:      {},
+	types.Bytes: {
+		names.Slice: builtinBytesSlice,
+	},
+	types.Array: {
+		names.Join: builtinArrayJoin,
+	},
 	types.Dict:      {},
 	types.Function:  {},
 	types.Arguments: {},

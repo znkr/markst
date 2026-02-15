@@ -123,16 +123,16 @@ func (n *TermItemExpr) Description() []Expr { return n.description }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
-type Const struct {
+type ConstExpr struct {
 	expr
 	value Value
 }
 
-func NewConst(span syntax.Span, value Value) *Const {
-	return &Const{expr: expr{span: span}, value: value}
+func NewConstExpr(span syntax.Span, value Value) *ConstExpr {
+	return &ConstExpr{expr: expr{span: span}, value: value}
 }
 
-func (n *Const) Value() Value { return n.value }
+func (n *ConstExpr) Value() Value { return n.value }
 
 type Ident struct {
 	expr
@@ -247,15 +247,15 @@ func (n *Binary) Right() Expr         { return n.right }
 type FieldAccess struct {
 	expr
 	target Expr
-	field  unique.Handle[string]
+	field  *Ident
 }
 
-func NewFieldAccess(span syntax.Span, target Expr, field unique.Handle[string]) *FieldAccess {
+func NewFieldAccess(span syntax.Span, target Expr, field *Ident) *FieldAccess {
 	return &FieldAccess{expr: expr{span: span}, target: target, field: field}
 }
 
-func (n *FieldAccess) Target() Expr                 { return n.target }
-func (n *FieldAccess) Field() unique.Handle[string] { return n.field }
+func (n *FieldAccess) Target() Expr  { return n.target }
+func (n *FieldAccess) Field() *Ident { return n.field }
 
 // Arguments ///////////////////////////////////////////////////////////////////////////////////////
 
@@ -299,47 +299,47 @@ func (*ExprArg) aArg()   {}
 func (*NamedArg) aArg()  {}
 func (*SpreadArg) aArg() {}
 
-// Parameters //////////////////////////////////////////////////////////////////////////////////////
+// Closure Parameters //////////////////////////////////////////////////////////////////////////////
 
-type Param interface {
-	aParam()
+type ClosureParam interface {
+	aClosureParam()
 }
 
-type PositionalParam struct {
+type PositionalClosureParam struct {
 	ident *Ident
 }
 
-func NewPositionalParam(ident *Ident) *PositionalParam {
-	return &PositionalParam{ident: ident}
+func NewPositionalClosureParam(ident *Ident) *PositionalClosureParam {
+	return &PositionalClosureParam{ident: ident}
 }
 
-func (n *PositionalParam) Ident() *Ident { return n.ident }
+func (n *PositionalClosureParam) Ident() *Ident { return n.ident }
 
-type NamedParam struct {
+type NamedClosureParam struct {
 	name unique.Handle[string]
 	def  Expr
 }
 
-func NewNamedParam(name unique.Handle[string], def Expr) *NamedParam {
-	return &NamedParam{name: name, def: def}
+func NewNamedClosureParam(name unique.Handle[string], def Expr) *NamedClosureParam {
+	return &NamedClosureParam{name: name, def: def}
 }
 
-func (n *NamedParam) Name() unique.Handle[string] { return n.name }
-func (n *NamedParam) Default() Expr               { return n.def }
+func (n *NamedClosureParam) Name() unique.Handle[string] { return n.name }
+func (n *NamedClosureParam) Default() Expr               { return n.def }
 
-type SpreadParam struct {
+type SpreadClosureParam struct {
 	ident *Ident
 }
 
-func NewSpreadParam(ident *Ident) *SpreadParam {
-	return &SpreadParam{ident: ident}
+func NewSpreadClosureParam(ident *Ident) *SpreadClosureParam {
+	return &SpreadClosureParam{ident: ident}
 }
 
-func (n *SpreadParam) Ident() *Ident { return n.ident }
+func (n *SpreadClosureParam) Ident() *Ident { return n.ident }
 
-func (*PositionalParam) aParam() {}
-func (*NamedParam) aParam()      {}
-func (*SpreadParam) aParam()     {}
+func (*PositionalClosureParam) aClosureParam() {}
+func (*NamedClosureParam) aClosureParam()      {}
+func (*SpreadClosureParam) aClosureParam()     {}
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
@@ -361,17 +361,17 @@ func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
 type Closure struct {
 	expr
 	name   *Ident
-	params []Param
+	params []ClosureParam
 	body   Expr
 }
 
-func NewClosure(span syntax.Span, name *Ident, params []Param, body Expr) *Closure {
+func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr) *Closure {
 	return &Closure{expr: expr{span: span}, name: name, params: params, body: body}
 }
 
-func (n *Closure) Name() *Ident    { return n.name }
-func (n *Closure) Params() []Param { return n.params }
-func (n *Closure) Body() Expr      { return n.body }
+func (n *Closure) Name() *Ident           { return n.name }
+func (n *Closure) Params() []ClosureParam { return n.params }
+func (n *Closure) Body() Expr             { return n.body }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
 

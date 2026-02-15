@@ -72,7 +72,7 @@ func (a *analyzer) analyzeContentBlock(n syntax.Node) *ir.ContentBlock {
 	return ir.NewContentBlock(n.Span(), a.analyzeMarkup(n0))
 }
 
-func (a *analyzer) analyzeRaw(n syntax.Node) *ir.Const {
+func (a *analyzer) analyzeRaw(n syntax.Node) *ir.ConstExpr {
 	ns := a.inner(n, syntax.KindRaw)
 	defer ns.finish()
 	marker := ns.take(syntax.KindRawDelim)
@@ -94,5 +94,5 @@ func (a *analyzer) analyzeRaw(n syntax.Node) *ir.Const {
 			lines = append(lines, child.Text())
 		}
 	}
-	return ir.NewConst(n.Span(), &ir.Raw{Block: marker != "`", Lang: lang, Lines: lines})
+	return ir.NewConstExpr(n.Span(), &ir.Raw{Block: marker != "`", Lang: lang, Lines: lines})
 }

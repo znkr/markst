@@ -7,6 +7,7 @@ import (
 	"unique"
 
 	"znkr.io/writst/ir/types"
+	"znkr.io/writst/syntax"
 )
 
 type Value interface {
@@ -19,7 +20,7 @@ type Value interface {
 // Type ////////////////////////////////////////////////////////////////////////////////////////////
 
 type Type struct {
-	Reflects    types.Type
+	Reflected   types.Type
 	Constructor *Function
 }
 
@@ -33,7 +34,7 @@ type Auto struct{}
 type Bool bool
 type Int int64
 type Float float64
-type String string
+type Str string
 type Bytes string
 
 type Numeric struct {
@@ -46,17 +47,17 @@ func (Auto) aValue()    {}
 func (Bool) aValue()    {}
 func (Int) aValue()     {}
 func (Float) aValue()   {}
-func (String) aValue()  {}
+func (Str) aValue()     {}
 func (Bytes) aValue()   {}
 func (Numeric) aValue() {}
 
-func (None) Type() types.Type   { return types.None }
-func (Auto) Type() types.Type   { return types.Auto }
-func (Bool) Type() types.Type   { return types.Bool }
-func (Int) Type() types.Type    { return types.Int }
-func (Float) Type() types.Type  { return types.Float }
-func (String) Type() types.Type { return types.String }
-func (Bytes) Type() types.Type  { return types.Bytes }
+func (None) Type() types.Type  { return types.None }
+func (Auto) Type() types.Type  { return types.Auto }
+func (Bool) Type() types.Type  { return types.Bool }
+func (Int) Type() types.Type   { return types.Int }
+func (Float) Type() types.Type { return types.Float }
+func (Str) Type() types.Type   { return types.Str }
+func (Bytes) Type() types.Type { return types.Bytes }
 
 func (n Numeric) Type() types.Type {
 	switch n.Unit {
@@ -76,7 +77,7 @@ func (n Numeric) Type() types.Type {
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
 type Array []Value
-type Dict map[String]Value
+type Dict map[Str]Value
 
 func (Array) aValue() {}
 func (Dict) aValue()  {}
@@ -87,50 +88,109 @@ func (Dict) Type() types.Type  { return types.Dict }
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 type Function struct {
-	Name          string
-	NumPositional int
-	Defaults      NamedArgs
-	WithArgs      *Arguments
-	F             func(args []Value, named NamedArgsWithDefaults) (Value, error)
+	Name       string
+	Positional []types.Set // allowed types for each positional argument
+	Named      NamedParams // allowed named arguments (with default values)
+	WithArgs   *Arguments
+	F          func(call *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
 }
 
-func (n *Function) With(args *Arguments) *Function {
-	n.validate(args, false)
-	numPositional := n.NumPositional
-	if numPositional >= 0 {
-		numPositional -= len(args.Positional)
+type NamedParams map[unique.Handle[string]]NamedParam
+
+type NamedParam struct {
+	Type    types.Set
+	Default Value
+}
+
+type NamedArgsWithDefaults struct {
+	Args     NamedArgs
+	Defaults NamedParams
+}
+
+func (n *NamedArgsWithDefaults) IsSet(name unique.Handle[string]) bool {
+	_, ok := n.Args[name]
+	return ok
+}
+
+func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
+	v := n.Args[name]
+	if v == nil {
+		var ok bool
+		def, ok := n.Defaults[name]
+		if ok {
+			v = def.Default
+		}
+		if v == nil {
+			v = none
+		}
+	}
+	return v
+}
+
+func (n *Function) With(args *Arguments) (*Function, error) {
+	if err := n.validate(args, false); err != nil {
+		return nil, err
 	}
 	return &Function{
-		Name:          n.Name,
-		NumPositional: numPositional,
-		WithArgs:      n.WithArgs.merge(args),
-		Defaults:      n.Defaults,
-		F:             n.F,
-	}
+		Name:       n.Name,
+		Positional: n.Positional,
+		WithArgs:   n.WithArgs.merge(args),
+		Named:      n.Named,
+		F:          n.F,
+	}, nil
 }
 
-func (n *Function) Apply(args *Arguments) (Value, error) {
-	n.validate(args, true)
+type FuncCallContext struct {
+	Span syntax.Span
+}
+
+func (n *Function) Apply(call *FuncCallContext, args *Arguments) (Value, error) {
+	if err := n.validate(args, true); err != nil {
+		return nil, err
+	}
 	args = n.WithArgs.merge(args)
-	return n.F(args.Positional, NamedArgsWithDefaults{
+	if len(args.Positional) < len(n.Positional) {
+		pos := make([]Value, len(n.Positional))
+		copy(pos, args.Positional)
+		for i := len(args.Positional); i < len(n.Positional); i++ {
+			pos[i] = none
+		}
+		args.Positional = pos
+	}
+	return n.F(call, args.Positional, NamedArgsWithDefaults{
 		Args:     args.Named,
-		Defaults: n.Defaults,
+		Defaults: n.Named,
 	})
 }
 
-func (n *Function) validate(args *Arguments, strict bool) {
-	if n.NumPositional >= 0 {
-		if !strict && len(args.Positional) > n.NumPositional {
-			panic(fmt.Sprintf("too many positional arguments: expected at most %d, got %d", n.NumPositional, len(args.Positional)))
-		} else if strict && len(args.Positional) != n.NumPositional {
-			panic(fmt.Sprintf("incorrect number of positional arguments: expected at most %d, got %d", n.NumPositional, len(args.Positional)))
+func (n *Function) validate(args *Arguments, strict bool) error {
+	remaining := n.Positional
+	if n.WithArgs != nil {
+		remaining = remaining[len(n.WithArgs.Positional):]
+	}
+	if len(args.Positional) > len(remaining) {
+		return fmt.Errorf("too many positional arguments: expected at most %d, got %d", len(n.Positional), len(args.Positional))
+	}
+	for i, ts := range remaining {
+		if len(args.Positional) <= i && (!strict || ts.Contains(types.None)) {
+			break
+		}
+		if len(args.Positional) <= i {
+			return fmt.Errorf("too few positional arguments: expected at least %d, got %d", i+1, len(args.Positional))
+		}
+		if typ := args.Positional[i].Type(); !ts.Contains(typ) {
+			return ArgErrorPosf(i, "expected %s, found %s", ts, typ)
 		}
 	}
 	for name := range args.Named {
-		if _, ok := n.Defaults[name]; !ok {
-			panic(fmt.Sprintf("unexpected named argument: %s", name.Value()))
+		if _, ok := n.Named[name]; !ok {
+			return ArgErrorNamedf(name, "unknown named argument")
+		}
+		if typ := args.Named[name].Type(); !n.Named[name].Type.Contains(typ) {
+			return ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
 		}
 	}
+	return nil
 }
 
 func (*Function) aValue()          {}
@@ -179,24 +239,6 @@ func (*Arguments) aValue()          {}
 func (*Arguments) Type() types.Type { return types.Arguments }
 
 type NamedArgs map[unique.Handle[string]]Value
-
-type NamedArgsWithDefaults struct {
-	Args     NamedArgs
-	Defaults NamedArgs
-}
-
-func (n *NamedArgsWithDefaults) IsSet(name unique.Handle[string]) bool {
-	_, ok := n.Args[name]
-	return ok
-}
-
-func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
-	v := n.Args[name]
-	if v == nil {
-		v = n.Defaults[name]
-	}
-	return v
-}
 
 // Content /////////////////////////////////////////////////////////////////////////////////////////
 

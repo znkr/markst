@@ -11,6 +11,7 @@ import (
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/ir"
+	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )
@@ -44,12 +45,13 @@ func TestEval(t *testing.T) {
 
 					ec := ir.NewEvalContext()
 					ec.Bind(unique.Make("test"), &ir.Function{
-						Name:          "test",
-						NumPositional: 2,
-						F: func(args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
+						Name:       "test",
+						Positional: []types.Set{types.Any, types.Any},
+						F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
 							got, want := args[0], args[1]
 							if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
-								t.Errorf("test() failed (-want +got):\n%s", diff)
+								call := tc.Input[fcc.Span.Start:fcc.Span.End]
+								t.Errorf("test failure. The following test failed:\n\n\t%s\n\nDiff (-want +got):\n%s", call, diff)
 							}
 							return ir.None{}, nil
 						},

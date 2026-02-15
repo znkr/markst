@@ -133,21 +133,21 @@ func (f *formatter) arguments(sep string, es []Arg) {
 }
 
 // params formats parameters with a separator
-func (f *formatter) params(sep string, ps []Param) {
+func (f *formatter) params(sep string, ps []ClosureParam) {
 	for i, p := range ps {
 		if i > 0 {
 			f.str(sep)
 		}
 		switch p := p.(type) {
-		case *PositionalParam:
+		case *PositionalClosureParam:
 			f.expr(p.ident)
-		case *NamedParam:
+		case *NamedClosureParam:
 			f.str(p.name.Value())
 			if p.def != nil {
 				f.str(": ")
 				f.expr(p.def)
 			}
-		case *SpreadParam:
+		case *SpreadClosureParam:
 			f.str("..")
 			f.expr(p.ident)
 		default:
@@ -304,7 +304,7 @@ func (n *TermItemExpr) format(f *formatter) {
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
-func (n *Const) format(f *formatter) {
+func (n *ConstExpr) format(f *formatter) {
 	n.value.format(f)
 }
 
@@ -425,7 +425,7 @@ func (n *FieldAccess) format(f *formatter) {
 	f.prefix()
 	f.expr(n.target)
 	f.str(".")
-	f.str(n.field.Value())
+	f.expr(n.field)
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
@@ -455,7 +455,7 @@ func (n *Closure) format(f *formatter) {
 	// Anonymous closure
 	if len(n.params) == 1 {
 		// Check if param is a spread - if so, needs parens
-		if _, isSpread := n.params[0].(*SpreadParam); !isSpread {
+		if _, isSpread := n.params[0].(*SpreadClosureParam); !isSpread {
 			f.params(", ", n.params)
 			f.str(" => ")
 			f.closureBody(n.body)
@@ -621,7 +621,7 @@ func (n *DestructSink) format(f *formatter) {
 
 func (n Type) format(f *formatter) {
 	f.prefix()
-	f.str(n.Reflects.String())
+	f.str(n.Reflected.String())
 }
 
 // Scalars /////////////////////////////////////////////////////////////////////////////////////////
@@ -657,7 +657,7 @@ func (n Numeric) format(f *formatter) {
 	f.str(n.Unit.String())
 }
 
-func (n String) format(f *formatter) {
+func (n Str) format(f *formatter) {
 	f.prefix()
 	f.str("\"")
 	for _, r := range n {
