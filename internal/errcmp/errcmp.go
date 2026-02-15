@@ -8,44 +8,22 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
 )
 
-func Diff(root syntax.RootNode, err error) string {
+type Error struct {
+	Span    syntax.Span
+	Message string
+	Hints   []string
+}
+
+func Diff(root syntax.RootNode, got []Error) string {
 	want := collectErrors(root.Source, root.Children())
-	var got []cmpError
-	switch err := err.(type) {
-	case nil:
-		// no error
-	case syntax.ErrorList:
-		for _, err := range err {
-			got = append(got, cmpError{
-				Span:    err.Span(),
-				Message: err.Error(),
-				Hints:   err.Hints(),
-			})
-		}
-	case *syntax.Error:
-		got = append(got, cmpError{
-			Span:    err.Span(),
-			Message: err.Error(),
-			Hints:   err.Hints(),
-		})
-	case ir.Error:
-		got = append(got, cmpError{
-			Span:    err.Span(),
-			Message: err.Error(),
-			Hints:   err.Hints(),
-		})
-	default:
-		panic(fmt.Sprintf("unexpected error type: %T", err))
-	}
 	return cmp.Diff(want, got, errcmpopts)
 }
 
 var errcmpopts = cmp.Options{
-	cmpopts.SortSlices(func(a, b cmpError) int {
+	cmpopts.SortSlices(func(a, b Error) int {
 		if n := gocmp.Compare(a.Span.Start, b.Span.Start); n != 0 {
 			return n
 		}
@@ -56,15 +34,9 @@ var errcmpopts = cmp.Options{
 	}),
 }
 
-type cmpError struct {
-	Span    syntax.Span
-	Message string
-	Hints   []string
-}
+var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+)-(\d+)\s+(.+)$`)
 
-var errorExpectationRe = regexp.MustCompile(`^// (Error|Hint): (\d+)-(\d+)\s+(.+)$`)
-
-func collectErrors(source syntax.Source, ns []syntax.Node) []cmpError {
+func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 	type pendingExpectation struct {
 		startCol int
 		endCol   int
@@ -72,7 +44,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []cmpError {
 		hints    []string
 	}
 
-	var result []cmpError
+	var result []Error
 	var pending []pendingExpectation
 
 	for _, n := range ns {
@@ -85,7 +57,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []cmpError {
 				startCol, _ := strconv.Atoi(match[2])
 				endCol, _ := strconv.Atoi(match[3])
 				switch typ {
-				case "Error":
+				case "Error", "Warning":
 					pending = append(pending, pendingExpectation{
 						message:  match[4],
 						startCol: startCol,
@@ -115,7 +87,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []cmpError {
 		// node's start position.
 		line := source.Position(n.Span().Start).Line
 		for _, p := range pending {
-			result = append(result, cmpError{
+			result = append(result, Error{
 				Span: syntax.Span{
 					Start: source.Offset(syntax.Position{Line: line, Column: uint32(p.startCol)}),
 					End:   source.Offset(syntax.Position{Line: line, Column: uint32(p.endCol)}),

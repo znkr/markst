@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -889,6 +890,15 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 	suffix := s.r.ConsumeWhile(func(r rune) bool {
 		return isASCIIAlphanumeric(r) || r == '%'
 	})
+
+	// Handle numbers with a trailing incomplete exponent like `1e` as an invalid floating point
+	// number rather than an invalid suffix.
+	if suffix == "e" || suffix == "E" {
+		number = s.r.From(start)
+		suffix = ""
+		isFloat = true
+	}
+
 	var suffixErr string
 	if suffix != "" {
 		if _, ok := numberSuffixes[suffix]; !ok {
@@ -899,7 +909,7 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 	var numberErr string
 	switch {
 	case isFloat:
-		if _, err := strconv.ParseFloat(number, 64); err != nil {
+		if _, err := strconv.ParseFloat(number, 64); err != nil && !errors.Is(err, strconv.ErrRange) {
 			numberErr = fmt.Sprintf("invalid floating point number: %s", number)
 		}
 	default:

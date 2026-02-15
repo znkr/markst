@@ -9,13 +9,15 @@ import (
 
 var universe = &scope{
 	bindings: map[unique.Handle[string]]Value{
-		names.Array: reflectedTypes[types.Array],
-		names.Bytes: reflectedTypes[types.Bytes],
-		names.Int:   reflectedTypes[types.Int],
-		names.Range: builtinRange,
-		names.Repr:  builtinRepr,
-		names.Str:   reflectedTypes[types.Str],
-		names.Type:  reflectedTypes[types.ReflectedType],
+		names.Array:   reflectedTypes[types.Array],
+		names.Bytes:   reflectedTypes[types.Bytes],
+		names.Decimal: reflectedTypes[types.Decimal],
+		names.Int:     reflectedTypes[types.Int],
+		names.Float:   reflectedTypes[types.Float],
+		names.Range:   builtinRange,
+		names.Repr:    builtinRepr,
+		names.Str:     reflectedTypes[types.Str],
+		names.Type:    reflectedTypes[types.ReflectedType],
 	},
 }
 
@@ -31,7 +33,14 @@ var reflectedTypes = [...]*Type{
 		Reflected:   types.Int,
 		Constructor: builtinInt,
 	},
-	types.Float:    {Reflected: types.Float},
+	types.Float: {
+		Reflected:   types.Float,
+		Constructor: builtinFloat,
+	},
+	types.Decimal: {
+		Reflected:   types.Decimal,
+		Constructor: builtinDecimal,
+	},
 	types.Length:   {Reflected: types.Length},
 	types.Ratio:    {Reflected: types.Ratio},
 	types.Angle:    {Reflected: types.Angle},
@@ -54,7 +63,7 @@ var reflectedTypes = [...]*Type{
 	types.Content:   {Reflected: types.Content},
 }
 
-var methods = [...]map[unique.Handle[string]]*Function{
+var typeFields = [...]map[unique.Handle[string]]Value{
 	types.None:          {},
 	types.ReflectedType: {},
 	types.Auto:          {},
@@ -64,7 +73,16 @@ var methods = [...]map[unique.Handle[string]]*Function{
 		names.Signum:    builtinSignum,
 		names.ToBytes:   builtinIntToBytes,
 	},
-	types.Float:    {},
+	types.Float: {
+		names.FromBytes:  builtinFloatFromBytes,
+		names.Inf:        builtinFloatInf,
+		names.IsInfinite: builtinFloatIsInfinite,
+		names.IsNan:      builtinFloatIsNan,
+		names.Nan:        builtinFloatNan,
+		names.Signum:     builtinFloatSignum,
+		names.ToBytes:    builtinFloatToBytes,
+	},
+	types.Decimal:  {},
 	types.Length:   {},
 	types.Ratio:    {},
 	types.Angle:    {},

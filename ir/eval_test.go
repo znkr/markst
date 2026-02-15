@@ -12,6 +12,7 @@ import (
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/ir"
 	"znkr.io/writst/ir/types"
+	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )
@@ -37,28 +38,29 @@ func TestEval(t *testing.T) {
 					root := parser.Parse(tc.Input)
 					exprs, err := analyzer.Analyze(root)
 					if err != nil {
-						if diff := errcmp.Diff(root, err); diff != "" {
-							t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
+						if diff := errcmp.Diff(root, analysisErrors(err)); diff != "" {
+							t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
 						}
 						return
 					}
 
-					ec := ir.NewEvalContext()
-					ec.Bind(unique.Make("test"), &ir.Function{
-						Name:       "test",
-						Positional: []types.Set{types.Any, types.Any},
-						F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
-							got, want := args[0], args[1]
-							if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
-								call := tc.Input[fcc.Span.Start:fcc.Span.End]
-								t.Errorf("test failure. The following test failed:\n\n\t%s\n\nDiff (-want +got):\n%s", call, diff)
-							}
-							return ir.None{}, nil
+					bindings := map[unique.Handle[string]]ir.Value{
+						unique.Make("test"): &ir.Function{
+							Name:       "test",
+							Positional: []types.Set{types.Any, types.Any},
+							F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
+								got, want := args[0], args[1]
+								if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
+									call := tc.Input[fcc.Span.Start:fcc.Span.End]
+									t.Errorf("test failure. The following test failed:\n\n\t%s\n\nDiff (-want +got):\n%s", call, diff)
+								}
+								return ir.None{}, nil
+							},
 						},
-					})
+					}
 
-					contents, err := ir.Eval(ec, exprs)
-					if diff := errcmp.Diff(root, err); diff != "" {
+					contents, err := ir.Eval(exprs, ir.WithBindings(bindings))
+					if diff := errcmp.Diff(root, evalErrors(err)); diff != "" {
 						t.Errorf("Eval() error mismatch (-want +got):\n%s", diff)
 					}
 					if err != nil {
@@ -80,4 +82,32 @@ func TestEval(t *testing.T) {
 			}
 		})
 	}
+}
+
+func analysisErrors(err error) []errcmp.Error {
+	if err == nil {
+		return nil
+	}
+	var ret []errcmp.Error
+	for _, e := range err.(syntax.ErrorList) {
+		ret = append(ret, errcmp.Error{
+			Span:    e.Span(),
+			Message: e.Error(),
+			Hints:   e.Hints(),
+		})
+	}
+	return ret
+
+}
+
+func evalErrors(err error) []errcmp.Error {
+	if err == nil {
+		return nil
+	}
+	err0 := err.(ir.Error)
+	return []errcmp.Error{{
+		Span:    err0.Span(),
+		Message: err0.Error(),
+		Hints:   err0.Hints(),
+	}}
 }

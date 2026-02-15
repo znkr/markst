@@ -2,15 +2,34 @@ package ir
 
 import (
 	"fmt"
+	"maps"
+	"math"
 	"slices"
 	"strings"
 	"unique"
 
+	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
 
-func Eval(ec *EvalContext, exprs []Expr) (c Contents, err error) {
+type EvalsOption func(*evalCtx)
+
+func WithBindings(bindings map[unique.Handle[string]]Value) EvalsOption {
+	return func(ec *evalCtx) {
+		ec.scope.bindings = bindings
+	}
+}
+
+func Eval(exprs []Expr, opts ...EvalsOption) (c Contents, err error) {
+	ec := &evalCtx{
+		scope: &scope{
+			parent: universe,
+		},
+	}
+	for _, opt := range opts {
+		opt(ec)
+	}
 	ec.openScope()
 	defer ec.closeScope()
 
@@ -33,32 +52,28 @@ func Eval(ec *EvalContext, exprs []Expr) (c Contents, err error) {
 // Context /////////////////////////////////////////////////////////////////////////////////////////
 
 type EvalContext struct {
+	Bindings map[unique.Handle[string]]Value
+}
+
+type evalCtx struct {
 	scope *scope
 }
 
-func NewEvalContext() *EvalContext {
-	return &EvalContext{
-		scope: &scope{
-			parent: universe,
-		},
-	}
-}
-
-func (ec *EvalContext) openScope() {
+func (ec *evalCtx) openScope() {
 	ec.scope = &scope{
 		parent: ec.scope,
 	}
 }
 
-func (ec *EvalContext) closeScope() {
+func (ec *evalCtx) closeScope() {
 	ec.scope = ec.scope.parent
 }
 
-func (ec *EvalContext) Lookup(name unique.Handle[string]) (Value, bool) {
+func (ec *evalCtx) lookup(name unique.Handle[string]) (Value, bool) {
 	return ec.scope.lookup(name)
 }
 
-func (ec *EvalContext) Bind(name unique.Handle[string], val Value) {
+func (ec *evalCtx) bind(name unique.Handle[string], val Value) {
 	if ec.scope.bindings == nil {
 		ec.scope.bindings = make(map[unique.Handle[string]]Value)
 	}
@@ -84,60 +99,60 @@ func (s *scope) lookup(name unique.Handle[string]) (Value, bool) {
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
 
-func (n *HeadingExpr) eval(ec *EvalContext) Value {
+func (n *HeadingExpr) eval(ec *evalCtx) Value {
 	return &Heading{
 		Level: n.level,
 		Body:  evalContents(ec, n.body),
 	}
 }
 
-func (n *StrongExpr) eval(ec *EvalContext) Value {
+func (n *StrongExpr) eval(ec *evalCtx) Value {
 	return &Strong{
 		Body: evalContents(ec, n.body),
 	}
 }
 
-func (n *EmphExpr) eval(ec *EvalContext) Value {
+func (n *EmphExpr) eval(ec *evalCtx) Value {
 	return &Emph{
 		Body: evalContents(ec, n.body),
 	}
 }
 
-func (n *LinkExpr) eval(ec *EvalContext) Value {
+func (n *LinkExpr) eval(ec *evalCtx) Value {
 	return &Link{
 		Dest: n.dest,
 		Body: evalContents(ec, n.body),
 	}
 }
 
-func (n *RefExpr) eval(ec *EvalContext) Value {
+func (n *RefExpr) eval(ec *evalCtx) Value {
 	return &Ref{
 		Target:     n.target,
 		Supplement: n.supplement.eval(ec).(Content),
 	}
 }
 
-func (n *ListItemExpr) eval(ec *EvalContext) Value {
+func (n *ListItemExpr) eval(ec *evalCtx) Value {
 	return &ListItem{
 		Body: evalContents(ec, n.body),
 	}
 }
 
-func (n *EnumItemExpr) eval(ec *EvalContext) Value {
+func (n *EnumItemExpr) eval(ec *evalCtx) Value {
 	return &EnumItem{
 		Number: n.number,
 		Body:   evalContents(ec, n.body),
 	}
 }
 
-func (n *TermItemExpr) eval(ec *EvalContext) Value {
+func (n *TermItemExpr) eval(ec *evalCtx) Value {
 	return &TermItem{
 		Term:        evalContents(ec, n.term),
 		Description: evalContents(ec, n.description),
 	}
 }
 
-func evalContents(ec *EvalContext, exprs []Expr) Contents {
+func evalContents(ec *evalCtx, exprs []Expr) Contents {
 	var ret Contents
 	for _, expr := range exprs {
 		v := toContent(expr.Span(), expr.eval(ec))
@@ -160,7 +175,30 @@ func toContent(span syntax.Span, v Value) Content {
 	case Int:
 		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}
 	case Float:
-		return &Raw{Lines: []string{fmt.Sprintf("%g", v)}}
+		var s string
+		if math.IsInf(float64(v), 1) {
+			s = "inf"
+		} else if math.IsInf(float64(v), -1) {
+			s = "-inf"
+		} else if math.IsNaN(float64(v)) {
+			s = "nan"
+		} else {
+			s = fmt.Sprintf("%g", v)
+		}
+		return &Raw{Lines: []string{s}}
+	case Decimal:
+		d := decimal128.Decimal(v)
+		var s string
+		if d.IsInf(1) {
+			s = "inf"
+		} else if d.IsInf(-1) {
+			s = "-inf"
+		} else if d.IsNaN() {
+			s = "nan"
+		} else {
+			s = d.String()
+		}
+		return &Raw{Lines: []string{s}}
 	default:
 		raise(&ValueError{
 			span: span,
@@ -172,12 +210,12 @@ func toContent(span syntax.Span, v Value) Content {
 
 // Code ////////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *ConstExpr) eval(ec *EvalContext) Value { return n.value }
+func (n *ConstExpr) eval(ec *evalCtx) Value { return n.value }
 
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
-func (n *Ident) eval(ec *EvalContext) Value {
-	val, ok := ec.Lookup(n.name)
+func (n *Ident) eval(ec *evalCtx) Value {
+	val, ok := ec.lookup(n.name)
 	if !ok {
 		panic("undefined identifier: " + n.name.Value())
 	}
@@ -193,7 +231,7 @@ var joinResultType = map[[2]types.Type]types.Type{
 	{types.Content, types.Content}: types.Content,
 }
 
-func (n *CodeBlock) eval(ec *EvalContext) Value {
+func (n *CodeBlock) eval(ec *evalCtx) Value {
 	ec.openScope()
 	defer ec.closeScope()
 
@@ -254,28 +292,26 @@ func (n *CodeBlock) eval(ec *EvalContext) Value {
 	case types.Dict:
 		dict := make(Dict)
 		for _, v := range values {
-			for k, val := range v.(Dict) {
-				dict[k] = val
-			}
+			maps.Copy(dict, v.(Dict))
 		}
 		return dict
 	}
 	panic("unsupported result type: " + rtype.String())
 }
 
-func (n *ContentBlock) eval(ec *EvalContext) Value {
+func (n *ContentBlock) eval(ec *evalCtx) Value {
 	ec.openScope()
 	defer ec.closeScope()
 	return evalContents(ec, n.exprs)
 }
 
-func (n *Parenthesized) eval(ec *EvalContext) Value {
+func (n *Parenthesized) eval(ec *evalCtx) Value {
 	return n.body.eval(ec)
 }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
-func (n *ArrayExpr) eval(ec *EvalContext) Value {
+func (n *ArrayExpr) eval(ec *evalCtx) Value {
 	elems := make(Array, 0, len(n.elements))
 	for _, expr := range n.elements {
 		elems = append(elems, expr.eval(ec))
@@ -283,7 +319,7 @@ func (n *ArrayExpr) eval(ec *EvalContext) Value {
 	return elems
 }
 
-func (n *DictExpr) eval(ec *EvalContext) Value {
+func (n *DictExpr) eval(ec *evalCtx) Value {
 	dict := make(Dict, len(n.entries))
 	for _, ent := range n.entries {
 		keyVal := ent.key.eval(ec)
@@ -350,6 +386,26 @@ var binops = map[binopKey]func(x, y Value) Value{
 		return x.(Float) / y.(Float)
 	},
 
+	// Decimal operations
+	{syntax.Add, types.Decimal, types.Decimal}: func(x, y Value) Value {
+		return Decimal(decimal128.Decimal(x.(Decimal)).Add(decimal128.Decimal(y.(Decimal))))
+	},
+	{syntax.Sub, types.Decimal, types.Decimal}: func(x, y Value) Value {
+		return Decimal(decimal128.Decimal(x.(Decimal)).Sub(decimal128.Decimal(y.(Decimal))))
+	},
+	{syntax.Mul, types.Decimal, types.Decimal}: func(x, y Value) Value {
+		return Decimal(decimal128.Decimal(x.(Decimal)).Mul(decimal128.Decimal(y.(Decimal))))
+	},
+	{syntax.Div, types.Decimal, types.Decimal}: func(x, y Value) Value {
+		return Decimal(decimal128.Decimal(x.(Decimal)).Quo(decimal128.Decimal(y.(Decimal))))
+	},
+
+	// Ratio operations
+	{syntax.Mul, types.Ratio, types.Ratio}: func(x, y Value) Value {
+		r := x.(Numeric).Value * y.(Numeric).Value
+		return Numeric{Value: r, Unit: UnitPercent}
+	},
+
 	// String operations
 	{syntax.Add, types.Str, types.Str}: func(x, y Value) Value {
 		return Str(string(x.(Str)) + string(y.(Str)))
@@ -371,7 +427,7 @@ var binops = map[binopKey]func(x, y Value) Value{
 	},
 }
 
-func (n *Unary) eval(ec *EvalContext) Value {
+func (n *Unary) eval(ec *evalCtx) Value {
 	x := n.operand.eval(ec)
 	op := unaryops[unaryopKey{n.op, x.Type()}]
 	if op == nil {
@@ -380,7 +436,7 @@ func (n *Unary) eval(ec *EvalContext) Value {
 	return op(x)
 }
 
-func (n *Binary) eval(ec *EvalContext) Value {
+func (n *Binary) eval(ec *evalCtx) Value {
 	left, right := n.left.eval(ec), n.right.eval(ec)
 	op := binops[binopKey{n.op, left.Type(), right.Type()}]
 	if op == nil {
@@ -389,21 +445,25 @@ func (n *Binary) eval(ec *EvalContext) Value {
 	return op(left, right)
 }
 
-func (n *FieldAccess) eval(ec *EvalContext) Value {
+func (n *FieldAccess) eval(ec *evalCtx) Value {
 	t := n.target.eval(ec)
 	switch t := t.(type) {
 	case *Type:
-		ms := methods[t.Reflected]
-		fn := ms[n.field.Name()]
-		if fn == nil {
-			panic(fmt.Sprintf("type %s has no method named %s", t.Reflected, n.field.Name().Value()))
+		ms := typeFields[t.Reflected]
+		f := ms[n.field.Name()]
+		if f == nil {
+			panic(fmt.Sprintf("type %s has no field named %s", t.Reflected, n.field.Name().Value()))
 		}
-		return fn
+		return f
 	case Value:
-		ms := methods[t.Type()]
-		fn := ms[n.field.Name()]
-		if fn == nil {
-			panic(fmt.Sprintf("type %s has no method named %s", t.Type(), n.field.Name().Value()))
+		ms := typeFields[t.Type()]
+		f := ms[n.field.Name()]
+		if f == nil {
+			panic(fmt.Sprintf("type %s has no field named %s", t.Type(), n.field.Name().Value()))
+		}
+		fn, ok := f.(*Function)
+		if !ok {
+			panic(fmt.Sprintf("field %s of type %s is not a function", n.field.Name().Value(), t.Type()))
 		}
 		fn, err := fn.With(&Arguments{
 			Positional: []Value{t},
@@ -425,7 +485,7 @@ func (n *FieldAccess) eval(ec *EvalContext) Value {
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
-func (n *FuncCall) eval(ec *EvalContext) Value {
+func (n *FuncCall) eval(ec *evalCtx) Value {
 	callee := n.callee.eval(ec)
 	var fn *Function
 	switch callee := callee.(type) {
@@ -487,17 +547,17 @@ func (n *FuncCall) locateArgErrSpan(err error) syntax.Span {
 	return n.span
 }
 
-func (n *Closure) eval(ec *EvalContext) Value {
+func (n *Closure) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
 
-func (n *LetBinding) eval(ec *EvalContext) Value {
+func (n *LetBinding) eval(ec *evalCtx) Value {
 	for _, p := range n.pattern {
 		switch p := p.(type) {
 		case *DestructIdent:
-			ec.Bind(p.ident.name, n.value.eval(ec))
+			ec.bind(p.ident.name, n.value.eval(ec))
 		default:
 			panic("TODO: implement complex let patterns")
 		}
@@ -505,21 +565,21 @@ func (n *LetBinding) eval(ec *EvalContext) Value {
 	return none
 }
 
-func (n *DestructAssignment) eval(ec *EvalContext) Value {
+func (n *DestructAssignment) eval(ec *evalCtx) Value {
 	panic("TODO: implement destruct assignment")
 }
 
-func (n *SetRule) eval(ec *EvalContext) Value {
+func (n *SetRule) eval(ec *evalCtx) Value {
 	panic("TODO: implement set rules")
 }
 
-func (n *ShowRule) eval(ec *EvalContext) Value {
+func (n *ShowRule) eval(ec *evalCtx) Value {
 	panic("TODO: implement show rules")
 }
 
 // Control Flow ////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Conditional) eval(ec *EvalContext) Value {
+func (n *Conditional) eval(ec *evalCtx) Value {
 	for i, cond := range n.conditions {
 		cond, ok := cond.eval(ec).(Bool)
 		if !ok {
@@ -535,28 +595,28 @@ func (n *Conditional) eval(ec *EvalContext) Value {
 	return none
 }
 
-func (n *ForLoop) eval(ec *EvalContext) Value {
+func (n *ForLoop) eval(ec *evalCtx) Value {
 	panic("TODO: implement for loops")
 }
 
-func (n *WhileLoop) eval(ec *EvalContext) Value {
+func (n *WhileLoop) eval(ec *evalCtx) Value {
 	panic("TODO: implement while loops")
 }
 
-func (n *LoopBreak) eval(ec *EvalContext) Value {
+func (n *LoopBreak) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
-func (n *LoopContinue) eval(ec *EvalContext) Value {
+func (n *LoopContinue) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
-func (n *FuncReturn) eval(ec *EvalContext) Value {
+func (n *FuncReturn) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
 // Other ///////////////////////////////////////////////////////////////////////////////////////////
 
-func (n *Contextual) eval(ec *EvalContext) Value { panic("TODO: implement contextual") }
+func (n *Contextual) eval(ec *evalCtx) Value { panic("TODO: implement contextual") }
 
-func (n *ModuleInclude) eval(ec *EvalContext) Value { panic("TODO: implement module include") }
+func (n *ModuleInclude) eval(ec *evalCtx) Value { panic("TODO: implement module include") }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"unique"
 
+	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
@@ -34,6 +35,7 @@ type Auto struct{}
 type Bool bool
 type Int int64
 type Float float64
+type Decimal decimal128.Decimal
 type Str string
 type Bytes string
 
@@ -47,17 +49,19 @@ func (Auto) aValue()    {}
 func (Bool) aValue()    {}
 func (Int) aValue()     {}
 func (Float) aValue()   {}
+func (Decimal) aValue() {}
 func (Str) aValue()     {}
 func (Bytes) aValue()   {}
 func (Numeric) aValue() {}
 
-func (None) Type() types.Type  { return types.None }
-func (Auto) Type() types.Type  { return types.Auto }
-func (Bool) Type() types.Type  { return types.Bool }
-func (Int) Type() types.Type   { return types.Int }
-func (Float) Type() types.Type { return types.Float }
-func (Str) Type() types.Type   { return types.Str }
-func (Bytes) Type() types.Type { return types.Bytes }
+func (None) Type() types.Type    { return types.None }
+func (Auto) Type() types.Type    { return types.Auto }
+func (Bool) Type() types.Type    { return types.Bool }
+func (Int) Type() types.Type     { return types.Int }
+func (Float) Type() types.Type   { return types.Float }
+func (Decimal) Type() types.Type { return types.Decimal }
+func (Str) Type() types.Type     { return types.Str }
+func (Bytes) Type() types.Type   { return types.Bytes }
 
 func (n Numeric) Type() types.Type {
 	switch n.Unit {

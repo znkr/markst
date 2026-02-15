@@ -10,6 +10,7 @@ import (
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/ir"
+	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 )
@@ -34,10 +35,10 @@ func TestAnalyze(t *testing.T) {
 
 					node := parser.Parse(tc.Input)
 					exprs, err := analyzer.Analyze(node)
+					if diff := errcmp.Diff(node, toCmpErrors(err)); diff != "" {
+						t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
+					}
 					if err != nil {
-						if diff := errcmp.Diff(node, err); diff != "" {
-							t.Errorf("Analyze() error mismatch (-want +got):\n%s", diff)
-						}
 						return
 					}
 
@@ -56,4 +57,19 @@ func TestAnalyze(t *testing.T) {
 			}
 		})
 	}
+}
+
+func toCmpErrors(err error) []errcmp.Error {
+	if err == nil {
+		return nil
+	}
+	var ret []errcmp.Error
+	for _, e := range err.(syntax.ErrorList) {
+		ret = append(ret, errcmp.Error{
+			Span:    e.Span(),
+			Message: e.Error(),
+			Hints:   e.Hints(),
+		})
+	}
+	return ret
 }

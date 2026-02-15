@@ -12,11 +12,11 @@ const (
 	None Type = iota
 	ReflectedType
 	Auto
-	Int
 	Bool
+	Int
 	Float
-	Length
 	Decimal
+	Length
 	Ratio
 	Angle
 	Fraction
@@ -32,12 +32,12 @@ const (
 var types = [...]string{
 	None:          "none",
 	ReflectedType: "type",
-	Int:           "integer",
 	Auto:          "auto",
+	Int:           "integer",
 	Bool:          "boolean",
 	Float:         "float",
-	Length:        "length",
 	Decimal:       "decimal",
+	Length:        "length",
 	Ratio:         "ratio",
 	Angle:         "angle",
 	Fraction:      "fraction",
@@ -63,6 +63,7 @@ var Any = SetOf(
 	None,
 	ReflectedType,
 	Auto,
+	Decimal,
 	Bool,
 	Int,
 	Float,
@@ -95,18 +96,19 @@ func (s Set) String() string {
 	n := bits.OnesCount32(uint32(s))
 	var sb strings.Builder
 	i := 0
-	for bit, name := range types {
-		if s&(1<<bit) != 0 {
-			if n > 2 && i > 0 && i < n-1 {
-				sb.WriteString(", ")
-			} else if n > 2 && i == n-1 {
-				sb.WriteString(", or ")
-			} else if n == 2 && i == 1 {
-				sb.WriteString(" or ")
-			}
-			sb.WriteString(name)
-			i++
+	for t, name := range types {
+		if s&(1<<t) == 0 {
+			continue
 		}
+		if n > 2 && i > 0 && i < n-1 {
+			sb.WriteString(", ")
+		} else if n > 2 && i == n-1 {
+			sb.WriteString(", or ")
+		} else if n == 2 && i == 1 {
+			sb.WriteString(" or ")
+		}
+		sb.WriteString(name)
+		i++
 	}
 	return sb.String()
 }

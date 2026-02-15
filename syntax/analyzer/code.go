@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"unique"
@@ -31,7 +32,7 @@ func (a *analyzer) analyzeInt(n syntax.Node) *ir.ConstExpr {
 func (a *analyzer) analyzeFloat(n syntax.Node) *ir.ConstExpr {
 	val := a.leaf(n, syntax.KindFloat)
 	fv, err := strconv.ParseFloat(val, 64)
-	if err != nil {
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		panic("invalid float literal: " + val)
 	}
 	return ir.NewConstExpr(n.Span(), ir.Float(fv))
@@ -46,14 +47,19 @@ func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.ConstExpr {
 	}
 	num, suffix := val[:idx], val[idx:]
 	fv, err := strconv.ParseFloat(num, 64)
-	if err != nil {
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		panic("invalid float literal: " + val)
 	}
 	u, ok := ir.ParseUnit(suffix)
 	if !ok {
 		panic("invalid unit literal: " + val)
 	}
-	return ir.NewConstExpr(n.Span(), ir.Numeric{Value: fv, Unit: u})
+	scale := 1.0
+	switch u {
+	case ir.UnitPercent:
+		scale = 100
+	}
+	return ir.NewConstExpr(n.Span(), ir.Numeric{Value: fv / scale, Unit: u})
 }
 
 func (a *analyzer) analyzeStr(n syntax.Node) *ir.ConstExpr {

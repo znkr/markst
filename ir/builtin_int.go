@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
+	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/ir/internal/names"
 	"znkr.io/writst/ir/types"
 )
@@ -67,6 +68,12 @@ func builtinIntImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefault
 			return nil, ArgErrorPosf(0, "number too large")
 		}
 		return Int(v), nil
+	case Decimal:
+		r, ok := decimal128.Decimal(v).Int64()
+		if !ok {
+			return nil, ArgErrorPosf(0, "number too large")
+		}
+		return Int(r), nil
 	case Str:
 		s := string(v)
 		if s == "" {
@@ -106,7 +113,7 @@ func builtinIntImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefault
 		}
 		return Int(n), nil
 	default:
-		return nil, ArgErrorPosf(0, "expected integer, boolean, float, decimal, or string, found %s", args[0].Type())
+		panic("should not be reachable due to type checking")
 	}
 }
 

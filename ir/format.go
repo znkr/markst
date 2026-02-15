@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/syntax"
 )
 
@@ -649,6 +650,11 @@ func (n Int) format(f *formatter) {
 func (n Float) format(f *formatter) {
 	f.prefix()
 	f.val(float64(n))
+}
+
+func (n Decimal) format(f *formatter) {
+	f.prefix()
+	f.val(decimal128.Decimal(n))
 }
 
 func (n Numeric) format(f *formatter) {

@@ -1127,7 +1127,7 @@ func TestScanner_CodeMode(t *testing.T) {
 			input: "1.2e",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.err("invalid number suffix: e", "1.2e"),
+					b.err("invalid floating point number: 1.2e", "1.2e"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},

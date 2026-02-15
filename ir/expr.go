@@ -9,7 +9,7 @@ import (
 type Expr interface {
 	Span() syntax.Span
 
-	eval(ec *EvalContext) Value
+	eval(ec *evalCtx) Value
 	aExpr()
 	formattable
 }

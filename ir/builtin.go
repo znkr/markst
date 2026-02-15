@@ -2,8 +2,11 @@ package ir
 
 import (
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
+	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/ir/types"
 )
 
@@ -37,7 +40,32 @@ func builtinReprImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaul
 	case Int:
 		return Str(strconv.FormatInt(int64(v), 10)), nil
 	case Float:
-		return Str(strconv.FormatFloat(float64(v), 'g', -1, 64)), nil
+		if math.IsInf(float64(v), 1) {
+			return Str("float.inf"), nil
+		}
+		if math.IsInf(float64(v), -1) {
+			return Str("-float.inf"), nil
+		}
+		if math.IsNaN(float64(v)) {
+			return Str("float.nan"), nil
+		}
+		s := Str(strconv.FormatFloat(float64(v), 'f', -1, 64))
+		if !strings.Contains(string(s), ".") {
+			s += ".0"
+		}
+		return s, nil
+	case Decimal:
+		if decimal128.Decimal(v).IsInf(1) {
+			return Str("decimal.inf"), nil
+		}
+		if decimal128.Decimal(v).IsInf(-1) {
+			return Str("-decimal.inf"), nil
+		}
+		if decimal128.Decimal(v).IsNaN() {
+			return Str("decimal.nan"), nil
+		}
+		s := decimal128.Format(decimal128.Decimal(v), 'f', -1)
+		return Str(fmt.Sprintf("decimal(\"%s\")", s)), nil
 	default:
 		panic(fmt.Sprintf("repr() not implemented for type %s", args[0].Type()))
 	}

@@ -26,14 +26,6 @@ func (err *ValueError) Error() string     { return err.msg }
 func (err *ValueError) Hints() []string   { return err.hints }
 func (err *ValueError) aError()           {}
 
-type errWrapper struct {
-	err Error
-}
-
-func raise(err Error) {
-	panic(&errWrapper{err})
-}
-
 // ArgError ////////////////////////////////////////////////////////////////////////////////////////
 
 type ArgError struct {
@@ -73,4 +65,14 @@ func ArgErrorNamedf(name unique.Handle[string], format string, args ...any) *Arg
 func (e *ArgError) Error() string { return e.msg }
 func (e *ArgError) Hint(hint string) {
 	e.hints = append(e.hints, hint)
+}
+
+// panics //////////////////////////////////////////////////////////////////////////////////////////
+
+type errWrapper struct {
+	err Error
+}
+
+func raise(err Error) {
+	panic(&errWrapper{err})
 }
