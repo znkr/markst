@@ -59,15 +59,15 @@ func TestEval(t *testing.T) {
 						},
 					}
 
-					contents, err := ir.Eval(exprs, ir.WithBindings(bindings))
-					if diff := errcmp.Diff(root, evalErrors(err)); diff != "" {
+					contents, warnings, err := ir.Eval(exprs, ir.WithBindings(bindings))
+					if diff := errcmp.Diff(root, evalErrors(warnings, err)); diff != "" {
 						t.Errorf("Eval() error mismatch (-want +got):\n%s", diff)
 					}
 					if err != nil {
 						return
 					}
 
-					got := ir.FormatContents(contents)
+					got := ir.FormatContent(contents)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}
@@ -92,6 +92,7 @@ func analysisErrors(err error) []errcmp.Error {
 	for _, e := range err.(syntax.ErrorList) {
 		ret = append(ret, errcmp.Error{
 			Span:    e.Span(),
+			Type:    "Error",
 			Message: e.Error(),
 			Hints:   e.Hints(),
 		})
@@ -100,14 +101,24 @@ func analysisErrors(err error) []errcmp.Error {
 
 }
 
-func evalErrors(err error) []errcmp.Error {
-	if err == nil {
-		return nil
+func evalErrors(warnings []ir.Error, err error) []errcmp.Error {
+	var ret []errcmp.Error
+	for _, w := range warnings {
+		ret = append(ret, errcmp.Error{
+			Span:    w.Span(),
+			Type:    "Warning",
+			Message: w.Error(),
+			Hints:   w.Hints(),
+		})
 	}
-	err0 := err.(ir.Error)
-	return []errcmp.Error{{
-		Span:    err0.Span(),
-		Message: err0.Error(),
-		Hints:   err0.Hints(),
-	}}
+	if err != nil {
+		err0 := err.(ir.Error)
+		ret = append(ret, errcmp.Error{
+			Span:    err0.Span(),
+			Type:    "Error",
+			Message: err0.Error(),
+			Hints:   err0.Hints(),
+		})
+	}
+	return ret
 }

@@ -15,7 +15,7 @@ type formattable interface {
 	format(f *formatter)
 }
 
-func FormatContents(c Contents) string {
+func FormatContent(c Content) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
 	c.format(f)
@@ -257,8 +257,8 @@ func (f *formatter) contentBlock(exprs []Expr) {
 
 // valueBlock formats a Content value wrapped in [...]
 func (f *formatter) valueBlock(c Content) {
-	if cs, ok := c.(Contents); ok {
-		writeBlock(f, cs)
+	if cs, ok := c.(*Sequence); ok {
+		writeBlock(f, cs.Children)
 	} else {
 		writeBlock(f, []Content{c})
 	}
@@ -749,15 +749,15 @@ func (n *Function) format(f *formatter) {
 
 // Content /////////////////////////////////////////////////////////////////////////////////////////
 
-func (n Contents) format(f *formatter) {
-	if len(n) == 0 {
+func (n *Sequence) format(f *formatter) {
+	if n == nil || len(n.Children) == 0 {
 		return
 	}
-	if len(n) == 1 {
-		n[0].format(f)
+	if len(n.Children) == 1 {
+		n.Children[0].format(f)
 		return
 	}
-	for i, c := range n {
+	for i, c := range n.Children {
 		if i > 0 {
 			f.nl()
 		}
@@ -766,7 +766,7 @@ func (n Contents) format(f *formatter) {
 }
 
 func (n *Heading) format(f *formatter) {
-	f.funcCall("heading", []arg{named("level", n.Level)})
+	f.funcCall("heading", []arg{named("level", n.Depth)})
 }
 
 func (n *Strong) format(f *formatter) {
@@ -778,7 +778,7 @@ func (n *Emph) format(f *formatter) {
 }
 
 func (n *Text) format(f *formatter) {
-	f.funcCall("text", []arg{pos(n.Value)})
+	f.funcCall("text", []arg{pos(n.Text)})
 }
 
 func (n *Raw) format(f *formatter) {
@@ -818,8 +818,8 @@ func (n *Ref) format(f *formatter) {
 
 func (n *List) format(f *formatter) {
 	var args []arg
-	for i := range n.Items {
-		args = append(args, pos(&n.Items[i]))
+	for i := range n.Children {
+		args = append(args, pos(n.Children[i]))
 	}
 	f.funcCall("list", args)
 }
@@ -830,8 +830,8 @@ func (n *ListItem) format(f *formatter) {
 
 func (n *Enum) format(f *formatter) {
 	var args []arg
-	for i := range n.Items {
-		args = append(args, pos(&n.Items[i]))
+	for i := range n.Children {
+		args = append(args, pos(n.Children[i]))
 	}
 	f.funcCall("enum", args)
 }
@@ -842,8 +842,8 @@ func (n *EnumItem) format(f *formatter) {
 
 func (n *Terms) format(f *formatter) {
 	var args []arg
-	for i := range n.Items {
-		args = append(args, pos(&n.Items[i]))
+	for i := range n.Children {
+		args = append(args, pos(n.Children[i]))
 	}
 	f.funcCall("terms", args)
 }

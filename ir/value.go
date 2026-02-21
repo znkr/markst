@@ -1,5 +1,7 @@
 package ir
 
+//go:generate go tool znkr.io/writst/ir/internal/fieldaccessgen
+
 import (
 	"fmt"
 	"maps"
@@ -248,32 +250,46 @@ type NamedArgs map[unique.Handle[string]]Value
 
 type Content interface {
 	Value
-	aElement()
+
+	SetLabel(*Label) *Label
+
+	Field(unique.Handle[string]) Value
+	HasField(unique.Handle[string]) bool
+	Fields() Dict
+
+	aContent()
 }
 
-type Contents []Content
+type Sequence struct {
+	Children []Content `writst:"required"`
+	Label    *Label
+}
 
 type Heading struct {
-	Level int
-	Body  Content
+	Depth int     `writst:"required"`
+	Body  Content `writst:"required"`
+	Label *Label
 }
 
 type Strong struct {
-	Body Content
+	Body  Content `writst:"required"`
+	Label *Label
 }
 
 type Emph struct {
-	Body Content
+	Body  Content `writst:"required"`
+	Label *Label
 }
 
 type Text struct {
-	Value string
+	Text  string `writst:"required"`
+	Label *Label
 }
 
 type Raw struct {
-	Block bool
+	Block bool `writst:"required"`
 	Lang  string
-	Lines []string
+	Lines []string `writst:"required"`
 }
 
 type Linebreak struct{}
@@ -281,42 +297,50 @@ type Linebreak struct{}
 type Parbreak struct{}
 
 type Link struct {
-	Dest string
-	Body Content
+	Dest  string  `writst:"required"`
+	Body  Content `writst:"required"`
+	Label *Label
 }
 
 type Ref struct {
-	Target     unique.Handle[string]
+	Target     unique.Handle[string] `writst:"required"`
 	Supplement Content
+	Label      *Label
 }
 
 type List struct {
-	Items []ListItem
+	Children []*ListItem `writst:"required"`
+	Label    *Label
 }
 
 type ListItem struct {
-	Body Content
+	Body  Content `writst:"required"`
+	Label *Label
 }
 
 type Enum struct {
-	Items []EnumItem
+	Children []*EnumItem `writst:"required"`
+	Label    *Label
 }
 
 type EnumItem struct {
 	Number int
-	Body   Content
+	Body   Content `writst:"required"`
+	Label  *Label
 }
 
 type Terms struct {
-	Items []TermItem
+	Children []*TermItem `writst:"required"`
+	Label    *Label
 }
 
 type TermItem struct {
-	Term        Content
-	Description Content
+	Term        Content `writst:"required"`
+	Description Content `writst:"required"`
+	Label       *Label
 }
 
-func (Contents) aValue()   {}
+func (*Sequence) aValue()  {}
 func (*Heading) aValue()   {}
 func (*Text) aValue()      {}
 func (*Raw) aValue()       {}
@@ -333,24 +357,24 @@ func (*EnumItem) aValue()  {}
 func (*Terms) aValue()     {}
 func (*TermItem) aValue()  {}
 
-func (Contents) aElement()   {}
-func (*Heading) aElement()   {}
-func (*Text) aElement()      {}
-func (*Raw) aElement()       {}
-func (*Strong) aElement()    {}
-func (*Emph) aElement()      {}
-func (*Linebreak) aElement() {}
-func (*Parbreak) aElement()  {}
-func (*Link) aElement()      {}
-func (*Ref) aElement()       {}
-func (*List) aElement()      {}
-func (*ListItem) aElement()  {}
-func (*Enum) aElement()      {}
-func (*EnumItem) aElement()  {}
-func (*Terms) aElement()     {}
-func (*TermItem) aElement()  {}
+func (Sequence) aContent()   {}
+func (*Heading) aContent()   {}
+func (*Text) aContent()      {}
+func (*Raw) aContent()       {}
+func (*Strong) aContent()    {}
+func (*Emph) aContent()      {}
+func (*Linebreak) aContent() {}
+func (*Parbreak) aContent()  {}
+func (*Link) aContent()      {}
+func (*Ref) aContent()       {}
+func (*List) aContent()      {}
+func (*ListItem) aContent()  {}
+func (*Enum) aContent()      {}
+func (*EnumItem) aContent()  {}
+func (*Terms) aContent()     {}
+func (*TermItem) aContent()  {}
 
-func (Contents) Type() types.Type   { return types.Content }
+func (Sequence) Type() types.Type   { return types.Content }
 func (*Heading) Type() types.Type   { return types.Content }
 func (*Text) Type() types.Type      { return types.Content }
 func (*Raw) Type() types.Type       { return types.Content }
@@ -375,4 +399,4 @@ type Label struct {
 
 func (Label) aValue()           {}
 func (*Label) aElement()        {}
-func (*Label) Type() types.Type { return types.Content }
+func (*Label) Type() types.Type { return types.Label }

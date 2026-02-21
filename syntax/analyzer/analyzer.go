@@ -57,14 +57,14 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindTermItem:
 		return a.analyzeTermItem(n)
 	case syntax.KindText:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Value: strings.TrimSpace(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Text: strings.TrimSpace(n.Text())})
 	case syntax.KindEscape:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Value: unescape(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Text: unescape(n.Text())})
 	case syntax.KindShorthand:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Value: unshorthand(n.Text())})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Text: unshorthand(n.Text())})
 	case syntax.KindSmartQuote:
 		// TODO: implement smart quotes properly.
-		return ir.NewConstExpr(n.Span(), &ir.Text{Value: n.Text()})
+		return ir.NewConstExpr(n.Span(), &ir.Text{Text: n.Text()})
 	case syntax.KindLinebreak:
 		return ir.NewConstExpr(n.Span(), &ir.Linebreak{})
 	case syntax.KindParbreak:
@@ -90,7 +90,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 		return ir.NewLinkExpr(
 			n.Span(),
 			lit,
-			[]ir.Expr{ir.NewConstExpr(n.Span(), &ir.Text{Value: lit})},
+			[]ir.Expr{ir.NewConstExpr(n.Span(), &ir.Text{Text: lit})},
 		)
 	case syntax.KindRef:
 		return a.analyzeRef(n)

@@ -488,17 +488,17 @@ func (*DestructSink) aDestructPattern()  {}
 type Conditional struct {
 	expr
 	conditions []Expr
-	blocks     []*CodeBlock
-	def        *CodeBlock
+	blocks     []Expr
+	def        Expr
 }
 
-func NewConditional(span syntax.Span, conditions []Expr, blocks []*CodeBlock, def *CodeBlock) *Conditional {
+func NewConditional(span syntax.Span, conditions []Expr, blocks []Expr, def Expr) *Conditional {
 	return &Conditional{expr: expr{span: span}, conditions: conditions, blocks: blocks, def: def}
 }
 
-func (n *Conditional) Conditions() []Expr   { return n.conditions }
-func (n *Conditional) Blocks() []*CodeBlock { return n.blocks }
-func (n *Conditional) Default() *CodeBlock  { return n.def }
+func (n *Conditional) Conditions() []Expr { return n.conditions }
+func (n *Conditional) Blocks() []Expr     { return n.blocks }
+func (n *Conditional) Default() Expr      { return n.def }
 
 type WhileLoop struct {
 	expr

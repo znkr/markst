@@ -369,8 +369,8 @@ func (a *analyzer) analyzeShowRule(n syntax.Node) *ir.ShowRule {
 
 func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
 	var conditions []ir.Expr
-	var blocks []*ir.CodeBlock
-	var def *ir.CodeBlock
+	var blocks []ir.Expr
+	var def ir.Expr
 
 	var analyze func(n syntax.Node)
 	analyze = func(n syntax.Node) {
@@ -378,7 +378,7 @@ func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
 		defer ns.finish()
 		ns.take(syntax.KindIf)
 		conditions = append(conditions, a.analyzeExpr(ns.node()))
-		blocks = append(blocks, a.analyzeCodeBlock(ns.node()))
+		blocks = append(blocks, a.analyzeBlock(ns.node()))
 		if !ns.at(syntax.KindElse) {
 			return
 		}
@@ -386,12 +386,23 @@ func (a *analyzer) analyzeConditional(n syntax.Node) *ir.Conditional {
 		if ns.at(syntax.KindConditional) {
 			analyze(ns.node())
 		} else {
-			def = a.analyzeCodeBlock(ns.node())
+			def = a.analyzeBlock(ns.node())
 		}
 	}
 	analyze(n)
 
 	return ir.NewConditional(n.Span(), conditions, blocks, def)
+}
+
+func (a *analyzer) analyzeBlock(n syntax.Node) ir.Expr {
+	switch n.Kind() {
+	case syntax.KindCodeBlock:
+		return a.analyzeCodeBlock(n)
+	case syntax.KindContentBlock:
+		return a.analyzeContentBlock(n)
+	default:
+		panic("invalid block: " + n.Kind().String())
+	}
 }
 
 func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {

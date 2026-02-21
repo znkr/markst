@@ -10,7 +10,7 @@ import (
 
 // Helper functions for creating IR nodes
 func id(s string) *Ident                     { return &Ident{name: unique.Make(s)} }
-func text(s string) *ConstExpr               { return &ConstExpr{value: &Text{Value: s}} }
+func text(s string) *ConstExpr               { return &ConstExpr{value: &Text{Text: s}} }
 func str(s string) *ConstExpr                { return &ConstExpr{value: Str(s)} }
 func num(n int) *ConstExpr                   { return &ConstExpr{value: Int(n)} }
 func param(s string) *PositionalClosureParam { return &PositionalClosureParam{ident: id(s)} }
@@ -85,24 +85,24 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "list",
-			content: body(&ConstExpr{value: &List{Items: []ListItem{
-				{Body: &Text{Value: "item 1"}},
-				{Body: &Text{Value: "item 2"}},
+			content: body(&ConstExpr{value: &List{Children: []*ListItem{
+				{Body: &Text{Text: "item 1"}},
+				{Body: &Text{Text: "item 2"}},
 			}}}),
 			want: "#list(list.item[#text(\"item 1\")], list.item[#text(\"item 2\")])\n",
 		},
 		{
 			name: "enum",
-			content: body(&ConstExpr{value: &Enum{Items: []EnumItem{
-				{Number: 1, Body: &Text{Value: "first"}},
-				{Number: 2, Body: &Text{Value: "second"}},
+			content: body(&ConstExpr{value: &Enum{Children: []*EnumItem{
+				{Number: 1, Body: &Text{Text: "first"}},
+				{Number: 2, Body: &Text{Text: "second"}},
 			}}}),
 			want: "#enum(enum.item(1)[#text(\"first\")], enum.item(2)[#text(\"second\")])\n",
 		},
 		{
 			name: "terms",
-			content: body(&ConstExpr{value: &Terms{Items: []TermItem{
-				{Term: &Text{Value: "key"}, Description: &Text{Value: "value"}},
+			content: body(&ConstExpr{value: &Terms{Children: []*TermItem{
+				{Term: &Text{Text: "key"}, Description: &Text{Text: "value"}},
 			}}}),
 			want: "#terms(terms.item[#text(\"key\")][#text(\"value\")])\n",
 		},
@@ -120,12 +120,12 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "multi_item_content_block",
-			content: body(&ConstExpr{value: &List{Items: []ListItem{
-				{Body: Contents{
-					&Text{Value: "first "},
-					&Strong{Body: &Text{Value: "bold"}},
-					&Text{Value: " last"},
-				}},
+			content: body(&ConstExpr{value: &List{Children: []*ListItem{
+				{Body: &Sequence{Children: []Content{
+					&Text{Text: "first "},
+					&Strong{Body: &Text{Text: "bold"}},
+					&Text{Text: " last"},
+				}}},
 			}}}),
 			want: `#list(list.item[
   #text("first ")
@@ -148,16 +148,16 @@ func TestFormat(t *testing.T) {
 		},
 		{
 			name: "deeply_nested_markup",
-			content: body(&ConstExpr{value: &List{Items: []ListItem{
-				{Body: Contents{
-					&Text{Value: "outer"},
-					&List{Items: []ListItem{
-						{Body: Contents{
-							&Text{Value: "middle"},
-							&List{Items: []ListItem{{Body: &Text{Value: "inner"}}}},
-						}},
+			content: body(&ConstExpr{value: &List{Children: []*ListItem{
+				{Body: &Sequence{Children: []Content{
+					&Text{Text: "outer"},
+					&List{Children: []*ListItem{
+						{Body: &Sequence{Children: []Content{
+							&Text{Text: "middle"},
+							&List{Children: []*ListItem{{Body: &Text{Text: "inner"}}}},
+						}}},
 					}},
-				}},
+				}}},
 			}}}),
 			want: `#list(list.item[
   #text("outer")
@@ -183,9 +183,9 @@ func TestFormat(t *testing.T) {
 			name: "nested_conditionals",
 			content: body(&Conditional{
 				conditions: []Expr{&ConstExpr{value: Bool(true)}},
-				blocks: []*CodeBlock{codeBlock(&Conditional{
+				blocks: []Expr{codeBlock(&Conditional{
 					conditions: []Expr{&ConstExpr{value: Bool(false)}},
-					blocks:     []*CodeBlock{codeBlock(num(1))},
+					blocks:     []Expr{codeBlock(num(1))},
 					def:        codeBlock(num(2)),
 				})},
 			}),
@@ -479,19 +479,19 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Conditionals
 		{
 			name:    "if_only",
-			content: body(&Conditional{conditions: []Expr{id("x")}, blocks: []*CodeBlock{codeBlock(id("y"))}}),
+			content: body(&Conditional{conditions: []Expr{id("x")}, blocks: []Expr{codeBlock(id("y"))}}),
 			want:    "#if x { y }\n",
 		},
 		{
 			name:    "if_else",
-			content: body(&Conditional{conditions: []Expr{id("x")}, blocks: []*CodeBlock{codeBlock(id("y"))}, def: codeBlock(id("z"))}),
+			content: body(&Conditional{conditions: []Expr{id("x")}, blocks: []Expr{codeBlock(id("y"))}, def: codeBlock(id("z"))}),
 			want:    "#if x { y } else { z }\n",
 		},
 		{
 			name: "if_else_if",
 			content: body(&Conditional{
 				conditions: []Expr{id("a"), id("b")},
-				blocks:     []*CodeBlock{codeBlock(num(1)), codeBlock(num(2))},
+				blocks:     []Expr{codeBlock(num(1)), codeBlock(num(2))},
 				def:        codeBlock(num(3)),
 			}),
 			want: "#if a { 1 } else if b { 2 } else { 3 }\n",
@@ -500,17 +500,17 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Loops
 		{
 			name:    "while_loop",
-			content: body(&WhileLoop{condition: id("x"), body: &CodeBlock{exprs: body(id("y"))}}),
+			content: body(&WhileLoop{condition: id("x"), body: codeBlock(id("y"))}),
 			want:    "#while x { y }\n",
 		},
 		{
 			name:    "for_loop",
-			content: body(&ForLoop{pattern: []DestructPattern{destruct("x")}, iterable: id("items"), body: &CodeBlock{exprs: body(id("x"))}}),
+			content: body(&ForLoop{pattern: []DestructPattern{destruct("x")}, iterable: id("items"), body: codeBlock(id("x"))}),
 			want:    "#for x in items { x }\n",
 		},
 		{
 			name:    "for_loop_pattern",
-			content: body(&ForLoop{pattern: []DestructPattern{destruct("k"), destruct("v")}, iterable: id("dict"), body: &CodeBlock{exprs: body(id("k"))}}),
+			content: body(&ForLoop{pattern: []DestructPattern{destruct("k"), destruct("v")}, iterable: id("dict"), body: codeBlock(id("k"))}),
 			want:    "#for (k, v) in dict { k }\n",
 		},
 

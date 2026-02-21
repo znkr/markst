@@ -13,6 +13,7 @@ import (
 
 type Error struct {
 	Span    syntax.Span
+	Type    string // "Error" or "Warning"
 	Message string
 	Hints   []string
 }
@@ -40,6 +41,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 	type pendingExpectation struct {
 		startCol int
 		endCol   int
+		typ      string
 		message  string
 		hints    []string
 	}
@@ -59,6 +61,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 				switch typ {
 				case "Error", "Warning":
 					pending = append(pending, pendingExpectation{
+						typ:      typ,
 						message:  match[4],
 						startCol: startCol,
 						endCol:   endCol,
@@ -92,6 +95,7 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 					Start: source.Offset(syntax.Position{Line: line, Column: uint32(p.startCol)}),
 					End:   source.Offset(syntax.Position{Line: line, Column: uint32(p.endCol)}),
 				},
+				Type:    p.typ,
 				Message: p.message,
 				Hints:   p.hints,
 			})

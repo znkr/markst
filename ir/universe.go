@@ -18,6 +18,7 @@ var universe = &scope{
 		names.Repr:    builtinRepr,
 		names.Str:     reflectedTypes[types.Str],
 		names.Type:    reflectedTypes[types.ReflectedType],
+		names.Label:   reflectedTypes[types.Label],
 	},
 }
 
@@ -61,6 +62,10 @@ var reflectedTypes = [...]*Type{
 	types.Function:  {Reflected: types.Function},
 	types.Arguments: {Reflected: types.Arguments},
 	types.Content:   {Reflected: types.Content},
+	types.Label: {
+		Reflected:   types.Label,
+		Constructor: builtinLabel,
+	},
 }
 
 var typeFields = [...]map[unique.Handle[string]]Value{

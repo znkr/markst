@@ -21,7 +21,7 @@ func WithBindings(bindings map[unique.Handle[string]]Value) EvalsOption {
 	}
 }
 
-func Eval(exprs []Expr, opts ...EvalsOption) (c Contents, err error) {
+func Eval(exprs []Expr, opts ...EvalsOption) (c Content, warn []Error, err error) {
 	ec := &evalCtx{
 		scope: &scope{
 			parent: universe,
@@ -38,6 +38,7 @@ func Eval(exprs []Expr, opts ...EvalsOption) (c Contents, err error) {
 			if _, ok := r.(*errWrapper); ok {
 				// propagate Error as an error return
 				err = r.(*errWrapper).err
+				warn = ec.warnings
 				c = nil
 			} else {
 				// re-panic other kinds of panic
@@ -46,7 +47,8 @@ func Eval(exprs []Expr, opts ...EvalsOption) (c Contents, err error) {
 		}
 	}()
 	c = evalContents(ec, exprs)
-	return c, err
+	warn = ec.warnings
+	return
 }
 
 // Context /////////////////////////////////////////////////////////////////////////////////////////
@@ -56,7 +58,10 @@ type EvalContext struct {
 }
 
 type evalCtx struct {
-	scope *scope
+	scope  *scope
+	labels map[unique.Handle[string]]struct{} // Set of labels defined in the document
+
+	warnings []Error
 }
 
 func (ec *evalCtx) openScope() {
@@ -80,6 +85,15 @@ func (ec *evalCtx) bind(name unique.Handle[string], val Value) {
 	ec.scope.bindings[name] = val
 }
 
+func (ec *evalCtx) warn(warn Error) {
+	if len(ec.warnings) > 0 && ec.warnings[len(ec.warnings)-1].Span() == warn.Span() {
+		// If the last warning has the same span as the new warning, we assume it's a duplicate and
+		// ignore it.
+		return
+	}
+	ec.warnings = append(ec.warnings, warn)
+}
+
 // Scope ///////////////////////////////////////////////////////////////////////////////////////////
 
 type scope struct {
@@ -101,7 +115,7 @@ func (s *scope) lookup(name unique.Handle[string]) (Value, bool) {
 
 func (n *HeadingExpr) eval(ec *evalCtx) Value {
 	return &Heading{
-		Level: n.level,
+		Depth: n.level,
 		Body:  evalContents(ec, n.body),
 	}
 }
@@ -126,10 +140,19 @@ func (n *LinkExpr) eval(ec *evalCtx) Value {
 }
 
 func (n *RefExpr) eval(ec *evalCtx) Value {
-	return &Ref{
-		Target:     n.target,
-		Supplement: n.supplement.eval(ec).(Content),
+	if _, ok := ec.labels[n.target]; !ok {
+		raise(&ValueError{
+			span: n.Span(),
+			msg:  fmt.Sprintf("label `<%s>` does not exist in the document", n.target.Value()),
+		})
 	}
+	v := &Ref{
+		Target: n.target,
+	}
+	if n.supplement != nil {
+		v.Supplement = n.supplement.eval(ec).(Content)
+	}
+	return v
 }
 
 func (n *ListItemExpr) eval(ec *evalCtx) Value {
@@ -152,16 +175,41 @@ func (n *TermItemExpr) eval(ec *evalCtx) Value {
 	}
 }
 
-func evalContents(ec *evalCtx, exprs []Expr) Contents {
-	var ret Contents
+func evalContents(ec *evalCtx, exprs []Expr) Content {
+	ret := make([]Content, 0, len(exprs))
+	var lastContentExpr Expr
 	for _, expr := range exprs {
-		v := toContent(expr.Span(), expr.eval(ec))
-		if v == nil {
-			continue
+		switch v := expr.eval(ec).(type) {
+		case *Label:
+			if len(ret) == 0 {
+				// TODO: warn of detached label
+				continue
+			}
+			if old := ret[len(ret)-1].SetLabel(v); old != nil {
+				ec.warn(&ValueError{
+					span:  lastContentExpr.Span(),
+					msg:   "content labelled multiple times",
+					hints: []string{"only the last label is used, the rest are ignored"},
+				})
+				delete(ec.labels, old.Name) // Only the last label is used, the rest are ignored.
+			}
+			if ec.labels == nil {
+				ec.labels = make(map[unique.Handle[string]]struct{})
+			}
+			ec.labels[v.Name] = struct{}{}
+		default:
+			lastContentExpr = expr
+			c := toContent(expr.Span(), v)
+			if c == nil {
+				continue
+			}
+			ret = append(ret, c)
 		}
-		ret = append(ret, v)
 	}
-	return ret
+	if len(ret) == 1 {
+		return ret[0]
+	}
+	return &Sequence{Children: ret}
 }
 
 func toContent(span syntax.Span, v Value) Content {
@@ -169,7 +217,7 @@ func toContent(span syntax.Span, v Value) Content {
 	case Content:
 		return v
 	case Str:
-		return &Text{Value: string(v)}
+		return &Text{Text: string(v)}
 	case None:
 		return nil
 	case Int:
@@ -278,11 +326,11 @@ func (n *CodeBlock) eval(ec *evalCtx) Value {
 		}
 		return Bytes(sb.String())
 	case types.Content:
-		var contents Contents
+		children := make([]Content, 0, len(values))
 		for i, v := range values {
-			contents = append(contents, toContent(spans[i], v))
+			children = append(children, toContent(spans[i], v))
 		}
-		return contents
+		return &Sequence{Children: children}
 	case types.Array:
 		var arr Array
 		for _, v := range values {
@@ -371,6 +419,18 @@ var binops = map[binopKey]func(x, y Value) Value{
 	{syntax.Div, types.Int, types.Int}: func(x, y Value) Value {
 		return x.(Int) / y.(Int)
 	},
+	{syntax.Lt, types.Int, types.Int}: func(x, y Value) Value {
+		return Bool(x.(Int) < y.(Int))
+	},
+	{syntax.Gt, types.Int, types.Int}: func(x, y Value) Value {
+		return Bool(x.(Int) > y.(Int))
+	},
+	{syntax.Leq, types.Int, types.Int}: func(x, y Value) Value {
+		return Bool(x.(Int) <= y.(Int))
+	},
+	{syntax.Geq, types.Int, types.Int}: func(x, y Value) Value {
+		return Bool(x.(Int) >= y.(Int))
+	},
 
 	// Float operations
 	{syntax.Add, types.Float, types.Float}: func(x, y Value) Value {
@@ -384,6 +444,18 @@ var binops = map[binopKey]func(x, y Value) Value{
 	},
 	{syntax.Div, types.Float, types.Float}: func(x, y Value) Value {
 		return x.(Float) / y.(Float)
+	},
+	{syntax.Lt, types.Float, types.Float}: func(x, y Value) Value {
+		return Bool(x.(Float) < y.(Float))
+	},
+	{syntax.Gt, types.Float, types.Float}: func(x, y Value) Value {
+		return Bool(x.(Float) > y.(Float))
+	},
+	{syntax.Leq, types.Float, types.Float}: func(x, y Value) Value {
+		return Bool(x.(Float) <= y.(Float))
+	},
+	{syntax.Geq, types.Float, types.Float}: func(x, y Value) Value {
+		return Bool(x.(Float) >= y.(Float))
 	},
 
 	// Decimal operations
@@ -447,6 +519,7 @@ func (n *Binary) eval(ec *evalCtx) Value {
 
 func (n *FieldAccess) eval(ec *evalCtx) Value {
 	t := n.target.eval(ec)
+	fname := n.field.Name()
 	switch t := t.(type) {
 	case *Type:
 		ms := typeFields[t.Reflected]
@@ -456,31 +529,40 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 		}
 		return f
 	case Value:
-		ms := typeFields[t.Type()]
-		f := ms[n.field.Name()]
-		if f == nil {
-			panic(fmt.Sprintf("type %s has no field named %s", t.Type(), n.field.Name().Value()))
-		}
-		fn, ok := f.(*Function)
-		if !ok {
-			panic(fmt.Sprintf("field %s of type %s is not a function", n.field.Name().Value(), t.Type()))
-		}
-		fn, err := fn.With(&Arguments{
-			Positional: []Value{t},
-		})
-		if err != nil {
-			if argErr, ok := err.(*ArgError); ok {
-				raise(&ValueError{
-					span:  n.field.Span(),
-					msg:   argErr.msg,
-					hints: argErr.hints,
+		if f := typeFields[t.Type()][fname]; f != nil {
+			switch f := f.(type) {
+			case *Function:
+				fn, err := f.With(&Arguments{
+					Positional: []Value{t},
 				})
+				if err != nil {
+					if argErr, ok := err.(*ArgError); ok {
+						raise(&ValueError{
+							span:  n.field.Span(),
+							msg:   argErr.msg,
+							hints: argErr.hints,
+						})
+					}
+				}
+				return fn
+			default:
+				return f
 			}
 		}
-		return fn
+		if c, ok := t.(Content); ok {
+			f := c.Field(fname)
+			if f == nil {
+				raise(&ValueError{
+					span: n.field.Span(),
+					msg:  fmt.Sprintf("content does not have field %q", fname.Value()),
+				})
+			}
+			return f
+		}
 	default:
 		panic(fmt.Sprintf("TODO: implement field access for %s", t.Type()))
 	}
+	panic(fmt.Sprintf("value of type %s has no field named %s", t.Type(), n.field.Name().Value()))
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
@@ -515,6 +597,9 @@ func (n *FuncCall) eval(ec *evalCtx) Value {
 		default:
 			panic("unrecognized function argument type")
 		}
+	}
+	for _, block := range n.blocks {
+		args.Positional = append(args.Positional, block.eval(ec))
 	}
 	fcc := FuncCallContext{
 		Span: n.span,

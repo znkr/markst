@@ -67,6 +67,7 @@ func toCmpErrors(err error) []errcmp.Error {
 	for _, e := range err.(syntax.ErrorList) {
 		ret = append(ret, errcmp.Error{
 			Span:    e.Span(),
+			Type:    "Error",
 			Message: e.Error(),
 			Hints:   e.Hints(),
 		})
