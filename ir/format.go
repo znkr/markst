@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unique"
 
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/syntax"
@@ -745,6 +746,35 @@ func (n Dict) format(f *formatter) {
 func (n *Function) format(f *formatter) {
 	f.prefix()
 	f.str(n.Name)
+}
+
+// Arguments ///////////////////////////////////////////////////////////////////////////////////////
+
+func (n *Arguments) format(f *formatter) {
+	f.prefix()
+	f.str("arguments")
+	if len(n.Positional) == 0 && len(n.Named) == 0 {
+		f.str("()")
+		return
+	}
+	f.str("(")
+	for i, v := range n.Positional {
+		if i > 0 {
+			f.str(", ")
+		}
+		v.format(f)
+	}
+	keys := slices.SortedFunc(maps.Keys(n.Named), func(a, b unique.Handle[string]) int { return strings.Compare(a.Value(), b.Value()) })
+	for i, name := range keys {
+		value := n.Named[name]
+		if len(n.Positional) > 0 || i > 0 {
+			f.str(", ")
+		}
+		f.str(name.Value())
+		f.str(": ")
+		value.format(f)
+	}
+	f.str(")")
 }
 
 // Content /////////////////////////////////////////////////////////////////////////////////////////

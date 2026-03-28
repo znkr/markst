@@ -151,6 +151,12 @@ type FuncCallContext struct {
 }
 
 func (n *Function) Apply(call *FuncCallContext, args *Arguments) (Value, error) {
+	// Skip validation for builtinArguments, since it accepts any arguments.
+	if n == builtinArguments {
+		return n.F(call, args.Positional, NamedArgsWithDefaults{
+			Args: args.Named,
+		})
+	}
 	if err := n.validate(args, true); err != nil {
 		return nil, err
 	}

@@ -67,6 +67,16 @@ func (e *ArgError) Hint(hint string) {
 	e.hints = append(e.hints, hint)
 }
 
+// IndexError //////////////////////////////////////////////////////////////////////////////////////
+
+type indexError struct {
+	err error
+	idx int
+}
+
+func (e *indexError) Error() string { return e.err.Error() }
+func (e *indexError) Unwrap() error { return e.err }
+
 // panics //////////////////////////////////////////////////////////////////////////////////////////
 
 type errWrapper struct {

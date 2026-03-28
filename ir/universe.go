@@ -9,16 +9,17 @@ import (
 
 var universe = &scope{
 	bindings: map[unique.Handle[string]]Value{
-		names.Array:   reflectedTypes[types.Array],
-		names.Bytes:   reflectedTypes[types.Bytes],
-		names.Decimal: reflectedTypes[types.Decimal],
-		names.Int:     reflectedTypes[types.Int],
-		names.Float:   reflectedTypes[types.Float],
-		names.Range:   builtinRange,
-		names.Repr:    builtinRepr,
-		names.Str:     reflectedTypes[types.Str],
-		names.Type:    reflectedTypes[types.ReflectedType],
-		names.Label:   reflectedTypes[types.Label],
+		names.Array:     reflectedTypes[types.Array],
+		names.Arguments: reflectedTypes[types.Arguments],
+		names.Bytes:     reflectedTypes[types.Bytes],
+		names.Decimal:   reflectedTypes[types.Decimal],
+		names.Int:       reflectedTypes[types.Int],
+		names.Float:     reflectedTypes[types.Float],
+		names.Range:     builtinRange,
+		names.Repr:      builtinRepr,
+		names.Str:       reflectedTypes[types.Str],
+		names.Type:      reflectedTypes[types.ReflectedType],
+		names.Label:     reflectedTypes[types.Label],
 	},
 }
 
@@ -58,10 +59,13 @@ var reflectedTypes = [...]*Type{
 		Reflected:   types.Array,
 		Constructor: builtinArray,
 	},
-	types.Dict:      {Reflected: types.Dict},
-	types.Function:  {Reflected: types.Function},
-	types.Arguments: {Reflected: types.Arguments},
-	types.Content:   {Reflected: types.Content},
+	types.Dict:     {Reflected: types.Dict},
+	types.Function: {Reflected: types.Function},
+	types.Arguments: {
+		Reflected:   types.Arguments,
+		Constructor: builtinArguments,
+	},
+	types.Content: {Reflected: types.Content},
 	types.Label: {
 		Reflected:   types.Label,
 		Constructor: builtinLabel,
@@ -98,9 +102,13 @@ var typeFields = [...]map[unique.Handle[string]]Value{
 	},
 	types.Array: {
 		names.Join: builtinArrayJoin,
+		names.Sum:  builtinArraySum,
 	},
-	types.Dict:      {},
-	types.Function:  {},
-	types.Arguments: {},
-	types.Content:   {},
+	types.Dict:     {},
+	types.Function: {},
+	types.Arguments: {
+		names.Len: builtinArgumentsLen,
+		names.At:  builtinArgumentsAt,
+	},
+	types.Content: {},
 }

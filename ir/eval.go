@@ -2,10 +2,8 @@ package ir
 
 import (
 	"fmt"
-	"maps"
 	"math"
 	"slices"
-	"strings"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
@@ -199,7 +197,13 @@ func evalContents(ec *evalCtx, exprs []Expr) Content {
 			ec.labels[v.Name] = struct{}{}
 		default:
 			lastContentExpr = expr
-			c := toContent(expr.Span(), v)
+			c, err := toContent(v)
+			if err != nil {
+				raise(&ValueError{
+					span: expr.Span(),
+					msg:  err.Error(),
+				})
+			}
 			if c == nil {
 				continue
 			}
@@ -212,16 +216,16 @@ func evalContents(ec *evalCtx, exprs []Expr) Content {
 	return &Sequence{Children: ret}
 }
 
-func toContent(span syntax.Span, v Value) Content {
+func toContent(v Value) (Content, error) {
 	switch v := v.(type) {
 	case Content:
-		return v
+		return v, nil
 	case Str:
-		return &Text{Text: string(v)}
+		return &Text{Text: string(v)}, nil
 	case None:
-		return nil
+		return nil, nil
 	case Int:
-		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}
+		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}, nil
 	case Float:
 		var s string
 		if math.IsInf(float64(v), 1) {
@@ -233,7 +237,7 @@ func toContent(span syntax.Span, v Value) Content {
 		} else {
 			s = fmt.Sprintf("%g", v)
 		}
-		return &Raw{Lines: []string{s}}
+		return &Raw{Lines: []string{s}}, nil
 	case Decimal:
 		d := decimal128.Decimal(v)
 		var s string
@@ -246,13 +250,9 @@ func toContent(span syntax.Span, v Value) Content {
 		} else {
 			s = d.String()
 		}
-		return &Raw{Lines: []string{s}}
+		return &Raw{Lines: []string{s}}, nil
 	default:
-		raise(&ValueError{
-			span: span,
-			msg:  fmt.Sprintf("content expression evaluated to non-content value: %T", v),
-		})
-		panic(fmt.Sprintf("content expression evaluated to non-element value: %T", v))
+		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
 	}
 }
 
@@ -270,81 +270,29 @@ func (n *Ident) eval(ec *evalCtx) Value {
 	return val
 }
 
-var joinResultType = map[[2]types.Type]types.Type{
-	{types.Str, types.Str}:         types.Str,
-	{types.Bytes, types.Bytes}:     types.Bytes,
-	{types.Array, types.Array}:     types.Array,
-	{types.Dict, types.Dict}:       types.Dict,
-	{types.Str, types.Content}:     types.Content,
-	{types.Content, types.Content}: types.Content,
-}
-
 func (n *CodeBlock) eval(ec *evalCtx) Value {
 	ec.openScope()
 	defer ec.closeScope()
 
 	var values []Value
 	var spans []syntax.Span
-	rtype := types.None
-	for i, expr := range n.exprs {
-		v := expr.eval(ec)
-		if i == 0 {
-			rtype = v.Type()
-		} else if v.Type() != rtype {
-			var at, bt types.Type
-			at = rtype
-			bt = v.Type()
-			if at > bt {
-				at, bt = bt, at
-			}
-			rtyp, ok := joinResultType[[2]types.Type{at, bt}]
-			if !ok {
-				raise(&ValueError{
-					span: expr.Span(),
-					msg:  fmt.Sprintf("cannot join %s with %s", rtype, v.Type()),
-				})
-			}
-			rtype = rtyp
-		}
-		values = append(values, v)
+	for _, expr := range n.exprs {
+		values = append(values, expr.eval(ec))
 		spans = append(spans, expr.Span())
 	}
-	switch rtype {
-	case types.None:
-	case types.Int, types.Float:
-		return values[0]
-	case types.Str:
-		var sb strings.Builder
-		for _, v := range values {
-			sb.WriteString(string(v.(Str)))
+	v, err := join(values)
+	if err != nil {
+		if idxErr, ok := err.(*indexError); ok {
+			raise(&ValueError{
+				span:  spans[idxErr.idx],
+				msg:   idxErr.err.Error(),
+				hints: nil,
+			})
+		} else {
+			panic(err)
 		}
-		return Str(sb.String())
-	case types.Bytes:
-		var sb strings.Builder
-		for _, v := range values {
-			sb.WriteString(string(v.(Bytes)))
-		}
-		return Bytes(sb.String())
-	case types.Content:
-		children := make([]Content, 0, len(values))
-		for i, v := range values {
-			children = append(children, toContent(spans[i], v))
-		}
-		return &Sequence{Children: children}
-	case types.Array:
-		var arr Array
-		for _, v := range values {
-			arr = append(arr, v.(Array)...)
-		}
-		return arr
-	case types.Dict:
-		dict := make(Dict)
-		for _, v := range values {
-			maps.Copy(dict, v.(Dict))
-		}
-		return dict
 	}
-	panic("unsupported result type: " + rtype.String())
+	return v
 }
 
 func (n *ContentBlock) eval(ec *evalCtx) Value {
@@ -496,6 +444,12 @@ var binops = map[binopKey]func(x, y Value) Value{
 		}
 		result := slices.Repeat(arr, int(times))
 		return result
+	},
+
+	// Arguments operations
+	{syntax.Add, types.Arguments, types.Arguments}: func(x, y Value) Value {
+		a, b := x.(*Arguments), y.(*Arguments)
+		return a.merge(b)
 	},
 }
 

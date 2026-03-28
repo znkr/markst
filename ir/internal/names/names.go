@@ -4,6 +4,8 @@ import "unique"
 
 var (
 	Array       = unique.Make("array")
+	Arguments   = unique.Make("arguments")
+	At          = unique.Make("at")
 	Base        = unique.Make("base")
 	Block       = unique.Make("block")
 	Body        = unique.Make("body")
@@ -26,6 +28,7 @@ var (
 	Label       = unique.Make("label")
 	Lang        = unique.Make("lang")
 	Last        = unique.Make("last")
+	Len         = unique.Make("len")
 	Lines       = unique.Make("lines")
 	Nan         = unique.Make("nan")
 	Number      = unique.Make("number")
@@ -38,6 +41,7 @@ var (
 	Slice       = unique.Make("slice")
 	Step        = unique.Make("step")
 	Str         = unique.Make("str")
+	Sum         = unique.Make("sum")
 	Supplement  = unique.Make("supplement")
 	Target      = unique.Make("target")
 	Term        = unique.Make("term")
