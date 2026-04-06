@@ -496,8 +496,6 @@ _hello
 │         Int: "1"
 │         Comma: ","
 │         Space: " "
-│         Error
-│           Msg: "expected expression"
 │         Keyed
 │           Str: "\"a\""
 │           Colon: ":"
@@ -998,4 +996,78 @@ _hello
 │           RightParen: ")"
 │       Space: " "
 │     RightBrace: "}"
+│   Space: "\n"
+
+--- array-bad-token ---
+#(1*/2)
+│ Markup
+│   Hash: "#"
+│   Array
+│     LeftParen: "("
+│     Int: "1"
+│     Error: "*/"
+│       Msg: "unexpected end of block comment"
+│       Hint: "consider escaping the `*` with a backslash or opening the block comment with `/*`"
+│     Int: "2"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- array-leading-comma ---
+#(,1)
+│ Markup
+│   Hash: "#"
+│   Parenthesized
+│     LeftParen: "("
+│     Error: ","
+│       Msg: "unexpected comma"
+│     Int: "1"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- array-incomplete-pair ---
+#(a:)
+│ Markup
+│   Hash: "#"
+│   Dict
+│     LeftParen: "("
+│     Named
+│       Ident: "a"
+│       Colon: ":"
+│       Error
+│         Msg: "expected expression"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- array-named-pair ---
+#(1, b: 2)
+│ Markup
+│   Hash: "#"
+│   Array
+│     LeftParen: "("
+│     Int: "1"
+│     Comma: ","
+│     Space: " "
+│     Named
+│       Ident: "b"
+│       Colon: ":"
+│       Space: " "
+│       Int: "2"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- array-keyed-pair ---
+#(1, "key": 2)
+│ Markup
+│   Hash: "#"
+│   Array
+│     LeftParen: "("
+│     Int: "1"
+│     Comma: ","
+│     Space: " "
+│     Keyed
+│       Str: "\"key\""
+│       Colon: ":"
+│       Space: " "
+│       Int: "2"
+│     RightParen: ")"
 │   Space: "\n"

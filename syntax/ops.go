@@ -152,6 +152,30 @@ func (op BinaryOp) Assoc() Assoc {
 	}
 }
 
+func (op BinaryOp) IsAssign() bool {
+	switch op {
+	case Assign, AddAssign, SubAssign, MulAssign, DivAssign:
+		return true
+	default:
+		return false
+	}
+}
+
+func (op BinaryOp) StripAssign() BinaryOp {
+	switch op {
+	case AddAssign:
+		return Add
+	case SubAssign:
+		return Sub
+	case MulAssign:
+		return Mul
+	case DivAssign:
+		return Div
+	default:
+		return op
+	}
+}
+
 func (op BinaryOp) String() string {
 	switch op {
 	case Add:

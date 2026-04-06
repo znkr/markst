@@ -114,7 +114,7 @@ func (s *Scanner) scan(ch rune, start int) syntax.Kind {
 	case '*':
 		if ch := s.r.Peek(); ch == '/' {
 			s.r.Next()
-			kind := s.error("unmatched end of multiline comment", "consider escaping the `*` with a backslash or opening the block comment with `/*`")
+			kind := s.error("unexpected end of block comment", "consider escaping the `*` with a backslash or opening the block comment with `/*`")
 			return kind
 		}
 	}

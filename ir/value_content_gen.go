@@ -48,11 +48,11 @@ func (n *Emph) SetLabel(label *Label) *Label {
 func (n *Enum) Field(name unique.Handle[string]) Value {
 	switch name {
 	case names.Children:
-		arr := make(Array, len(n.Children))
+		vs := make([]Value, len(n.Children))
 		for i, v := range n.Children {
-			arr[i] = v
+			vs[i] = v
 		}
-		return arr
+		return &Array{Elems: vs}
 	case names.Label:
 		if n.Label == nil {
 			return nil
@@ -248,11 +248,11 @@ func (n *Link) SetLabel(label *Label) *Label {
 func (n *List) Field(name unique.Handle[string]) Value {
 	switch name {
 	case names.Children:
-		arr := make(Array, len(n.Children))
+		vs := make([]Value, len(n.Children))
 		for i, v := range n.Children {
-			arr[i] = v
+			vs[i] = v
 		}
-		return arr
+		return &Array{Elems: vs}
 	case names.Label:
 		if n.Label == nil {
 			return nil
@@ -355,11 +355,11 @@ func (n *Raw) Field(name unique.Handle[string]) Value {
 		}
 		return Str(n.Lang)
 	case names.Lines:
-		arr := make(Array, len(n.Lines))
+		vs := make([]Value, len(n.Lines))
 		for i, v := range n.Lines {
-			arr[i] = Str(v)
+			vs[i] = Str(v)
 		}
-		return arr
+		return &Array{Elems: vs}
 	default:
 		return nil
 	}
@@ -445,11 +445,11 @@ func (n *Ref) SetLabel(label *Label) *Label {
 func (n *Sequence) Field(name unique.Handle[string]) Value {
 	switch name {
 	case names.Children:
-		arr := make(Array, len(n.Children))
+		vs := make([]Value, len(n.Children))
 		for i, v := range n.Children {
-			arr[i] = v
+			vs[i] = v
 		}
-		return arr
+		return &Array{Elems: vs}
 	case names.Label:
 		if n.Label == nil {
 			return nil
@@ -574,11 +574,11 @@ func (n *TermItem) SetLabel(label *Label) *Label {
 func (n *Terms) Field(name unique.Handle[string]) Value {
 	switch name {
 	case names.Children:
-		arr := make(Array, len(n.Children))
+		vs := make([]Value, len(n.Children))
 		for i, v := range n.Children {
-			arr[i] = v
+			vs[i] = v
 		}
-		return arr
+		return &Array{Elems: vs}
 	case names.Label:
 		if n.Label == nil {
 			return nil

@@ -8,21 +8,28 @@ import (
 
 var (
 	builtinArguments = &Function{
-		Name:       "arguments",
-		Positional: []types.Set{},
-		F:          builtinArgumentsImpl,
+		Name: "arguments",
+		Bind: func(_ *Function, args *Arguments) (*Arguments, []int, error) {
+			return args, nil, nil
+		},
+		F: builtinArgumentsImpl,
 	}
 
 	builtinArgumentsLen = &Function{
-		Name:       "arguments.len",
-		Positional: []types.Set{types.SetOf(types.Arguments)},
-		F:          builtinArgumentsLenImpl,
+		Name: "arguments.len",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+		},
+		F: builtinArgumentsLenImpl,
 	}
 
 	builtinArgumentsAt = &Function{
-		Name:       "arguments.len",
-		Positional: []types.Set{types.SetOf(types.Arguments), types.SetOf(types.Int, types.Str)},
-		F:          builtinArgumentsAtImpl,
+		Name: "arguments.at",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+			{Name: "key", Type: types.SetOf(types.Int, types.Str)},
+		},
+		F: builtinArgumentsAtImpl,
 	}
 )
 

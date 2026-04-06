@@ -16,12 +16,12 @@
 
 --- arguments-at-invalid-index ---
 #let args = arguments(0, 1, a: 2, 3)
-// Error: 2-12 arguments do not contain key 4 and no default value was specified
+// Error: 10-11 arguments do not contain key 4 and no default value was specified
 #args.at(4)
 
 --- arguments-at-invalid-name ---
 #let args = arguments(0, 1, a: 2, 3)
-// Error: 2-14 arguments do not contain key "b" and no default value was specified
+// Error: 10-13 arguments do not contain key "b" and no default value was specified
 #args.at("b")
 
 --- arguments-plus-sum-join ---

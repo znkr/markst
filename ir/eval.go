@@ -3,11 +3,9 @@ package ir
 import (
 	"fmt"
 	"math"
-	"slices"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
 
@@ -33,9 +31,9 @@ func Eval(exprs []Expr, opts ...EvalsOption) (c Content, warn []Error, err error
 
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(*errWrapper); ok {
+			if w, ok := r.(*errWrapper); ok {
 				// propagate Error as an error return
-				err = r.(*errWrapper).err
+				err = ErrorList(w.err)
 				warn = ec.warnings
 				c = nil
 			} else {
@@ -72,7 +70,7 @@ func (ec *evalCtx) closeScope() {
 	ec.scope = ec.scope.parent
 }
 
-func (ec *evalCtx) lookup(name unique.Handle[string]) (Value, bool) {
+func (ec *evalCtx) lookup(name unique.Handle[string]) (Value, setter, bool) {
 	return ec.scope.lookup(name)
 }
 
@@ -99,14 +97,14 @@ type scope struct {
 	bindings map[unique.Handle[string]]Value
 }
 
-func (s *scope) lookup(name unique.Handle[string]) (Value, bool) {
+func (s *scope) lookup(name unique.Handle[string]) (Value, setter, bool) {
 	if val, ok := s.bindings[name]; ok {
-		return val, true
+		return val, func(v Value) { s.bindings[name] = v }, true
 	}
 	if s.parent != nil {
 		return s.parent.lookup(name)
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // Content Expressions /////////////////////////////////////////////////////////////////////////////
@@ -251,6 +249,8 @@ func toContent(v Value) (Content, error) {
 			s = d.String()
 		}
 		return &Raw{Lines: []string{s}}, nil
+	case *Array:
+		return &Raw{Lines: []string{FormatValue(v)}}, nil
 	default:
 		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
 	}
@@ -263,36 +263,44 @@ func (n *ConstExpr) eval(ec *evalCtx) Value { return n.value }
 // Code Expressions ////////////////////////////////////////////////////////////////////////////////
 
 func (n *Ident) eval(ec *evalCtx) Value {
-	val, ok := ec.lookup(n.name)
+	val, _ := n.evalL(ec)
+	return val
+}
+
+func (n *Ident) evalL(ec *evalCtx) (Value, setter) {
+	val, set, ok := ec.lookup(n.name)
 	if !ok {
 		panic("undefined identifier: " + n.name.Value())
 	}
-	return val
+	return val, set
 }
 
 func (n *CodeBlock) eval(ec *evalCtx) Value {
 	ec.openScope()
 	defer ec.closeScope()
 
-	var values []Value
-	var spans []syntax.Span
+	values := make([]Value, 0, len(n.exprs))
+	var joinSel joinerSelector
 	for _, expr := range n.exprs {
-		values = append(values, expr.eval(ec))
-		spans = append(spans, expr.Span())
-	}
-	v, err := join(values)
-	if err != nil {
-		if idxErr, ok := err.(*indexError); ok {
+		v := expr.eval(ec)
+		if err := joinSel.add(v.Type()); err != nil {
 			raise(&ValueError{
-				span:  spans[idxErr.idx],
-				msg:   idxErr.err.Error(),
-				hints: nil,
+				span: expr.Span(),
+				msg:  err.Error(),
 			})
-		} else {
-			panic(err)
+		}
+		values = append(values, v)
+	}
+	joiner := joinSel.joiner()
+	for i, v := range values {
+		if err := joiner.add(v); err != nil {
+			raise(&ValueError{
+				span: n.exprs[i].Span(),
+				msg:  err.Error(),
+			})
 		}
 	}
-	return v
+	return joiner.result()
 }
 
 func (n *ContentBlock) eval(ec *evalCtx) Value {
@@ -308,11 +316,35 @@ func (n *Parenthesized) eval(ec *evalCtx) Value {
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
 func (n *ArrayExpr) eval(ec *evalCtx) Value {
-	elems := make(Array, 0, len(n.elements))
+	elems := make([]Value, 0, len(n.elements))
 	for _, expr := range n.elements {
-		elems = append(elems, expr.eval(ec))
+		if spread, ok := expr.(*SpreadExpr); ok {
+			val := spread.inner.eval(ec)
+			switch v := val.(type) {
+			case *Array:
+				elems = append(elems, v.Elems...)
+			case None:
+				// spreading none produces no elements
+			case Dict:
+				raise(&ValueError{
+					span: spread.span,
+					msg:  "cannot spread dictionary into array",
+				})
+			default:
+				raise(&ValueError{
+					span: spread.span,
+					msg:  fmt.Sprintf("cannot spread %s into array", val.Type()),
+				})
+			}
+		} else {
+			elems = append(elems, expr.eval(ec))
+		}
 	}
-	return elems
+	return &Array{elems}
+}
+
+func (n *SpreadExpr) eval(ec *evalCtx) Value {
+	panic("spread expr should not be evaluated directly")
 }
 
 func (n *DictExpr) eval(ec *evalCtx) Value {
@@ -330,129 +362,6 @@ func (n *DictExpr) eval(ec *evalCtx) Value {
 
 // Operations //////////////////////////////////////////////////////////////////////////////////////
 
-type unaryopKey struct {
-	op  syntax.UnaryOp
-	typ types.Type
-}
-
-var unaryops = map[unaryopKey]func(x Value) Value{
-	{syntax.Not, types.Bool}: func(x Value) Value {
-		return !x.(Bool)
-	},
-	{syntax.Neg, types.Int}: func(x Value) Value {
-		return -x.(Int)
-	},
-	{syntax.Neg, types.Float}: func(x Value) Value {
-		return -x.(Float)
-	},
-}
-
-type binopKey struct {
-	op        syntax.BinaryOp
-	leftType  types.Type
-	rightType types.Type
-}
-
-var binops = map[binopKey]func(x, y Value) Value{
-	// Int operations
-	{syntax.Add, types.Int, types.Int}: func(x, y Value) Value {
-		return x.(Int) + y.(Int)
-	},
-	{syntax.Sub, types.Int, types.Int}: func(x, y Value) Value {
-		return x.(Int) - y.(Int)
-	},
-	{syntax.Mul, types.Int, types.Int}: func(x, y Value) Value {
-		return x.(Int) * y.(Int)
-	},
-	{syntax.Div, types.Int, types.Int}: func(x, y Value) Value {
-		return x.(Int) / y.(Int)
-	},
-	{syntax.Lt, types.Int, types.Int}: func(x, y Value) Value {
-		return Bool(x.(Int) < y.(Int))
-	},
-	{syntax.Gt, types.Int, types.Int}: func(x, y Value) Value {
-		return Bool(x.(Int) > y.(Int))
-	},
-	{syntax.Leq, types.Int, types.Int}: func(x, y Value) Value {
-		return Bool(x.(Int) <= y.(Int))
-	},
-	{syntax.Geq, types.Int, types.Int}: func(x, y Value) Value {
-		return Bool(x.(Int) >= y.(Int))
-	},
-
-	// Float operations
-	{syntax.Add, types.Float, types.Float}: func(x, y Value) Value {
-		return x.(Float) + y.(Float)
-	},
-	{syntax.Sub, types.Float, types.Float}: func(x, y Value) Value {
-		return x.(Float) - y.(Float)
-	},
-	{syntax.Mul, types.Float, types.Float}: func(x, y Value) Value {
-		return x.(Float) * y.(Float)
-	},
-	{syntax.Div, types.Float, types.Float}: func(x, y Value) Value {
-		return x.(Float) / y.(Float)
-	},
-	{syntax.Lt, types.Float, types.Float}: func(x, y Value) Value {
-		return Bool(x.(Float) < y.(Float))
-	},
-	{syntax.Gt, types.Float, types.Float}: func(x, y Value) Value {
-		return Bool(x.(Float) > y.(Float))
-	},
-	{syntax.Leq, types.Float, types.Float}: func(x, y Value) Value {
-		return Bool(x.(Float) <= y.(Float))
-	},
-	{syntax.Geq, types.Float, types.Float}: func(x, y Value) Value {
-		return Bool(x.(Float) >= y.(Float))
-	},
-
-	// Decimal operations
-	{syntax.Add, types.Decimal, types.Decimal}: func(x, y Value) Value {
-		return Decimal(decimal128.Decimal(x.(Decimal)).Add(decimal128.Decimal(y.(Decimal))))
-	},
-	{syntax.Sub, types.Decimal, types.Decimal}: func(x, y Value) Value {
-		return Decimal(decimal128.Decimal(x.(Decimal)).Sub(decimal128.Decimal(y.(Decimal))))
-	},
-	{syntax.Mul, types.Decimal, types.Decimal}: func(x, y Value) Value {
-		return Decimal(decimal128.Decimal(x.(Decimal)).Mul(decimal128.Decimal(y.(Decimal))))
-	},
-	{syntax.Div, types.Decimal, types.Decimal}: func(x, y Value) Value {
-		return Decimal(decimal128.Decimal(x.(Decimal)).Quo(decimal128.Decimal(y.(Decimal))))
-	},
-
-	// Ratio operations
-	{syntax.Mul, types.Ratio, types.Ratio}: func(x, y Value) Value {
-		r := x.(Numeric).Value * y.(Numeric).Value
-		return Numeric{Value: r, Unit: UnitPercent}
-	},
-
-	// String operations
-	{syntax.Add, types.Str, types.Str}: func(x, y Value) Value {
-		return Str(string(x.(Str)) + string(y.(Str)))
-	},
-
-	// Bytes operations
-	{syntax.Add, types.Bytes, types.Bytes}: func(x, y Value) Value {
-		return Bytes(string(x.(Bytes)) + string(y.(Bytes)))
-	},
-
-	// Array operations
-	{syntax.Mul, types.Array, types.Int}: func(x, y Value) Value {
-		arr, times := x.(Array), y.(Int)
-		if times < 0 {
-			panic("cannot multiply array by negative integer")
-		}
-		result := slices.Repeat(arr, int(times))
-		return result
-	},
-
-	// Arguments operations
-	{syntax.Add, types.Arguments, types.Arguments}: func(x, y Value) Value {
-		a, b := x.(*Arguments), y.(*Arguments)
-		return a.merge(b)
-	},
-}
-
 func (n *Unary) eval(ec *evalCtx) Value {
 	x := n.operand.eval(ec)
 	op := unaryops[unaryopKey{n.op, x.Type()}]
@@ -463,12 +372,30 @@ func (n *Unary) eval(ec *evalCtx) Value {
 }
 
 func (n *Binary) eval(ec *evalCtx) Value {
-	left, right := n.left.eval(ec), n.right.eval(ec)
-	op := binops[binopKey{n.op, left.Type(), right.Type()}]
-	if op == nil {
-		panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, right.Type()))
+	if n.op.IsAssign() {
+		lexpr, ok := n.left.(lvalueExpr)
+		if !ok {
+			panic("left-hand side of assignment must be an LValue")
+		}
+		left, set := lexpr.evalL(ec)
+		v := n.right.eval(ec)
+		if n.op != syntax.Assign {
+			op := binops[binopKey{n.op.StripAssign(), left.Type(), v.Type()}]
+			if op == nil {
+				panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, v.Type()))
+			}
+			v = op(left, v)
+		}
+		set(v)
+		return none
+	} else {
+		left, right := n.left.eval(ec), n.right.eval(ec)
+		op := binops[binopKey{n.op, left.Type(), right.Type()}]
+		if op == nil {
+			panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, right.Type()))
+		}
+		return op(left, right)
 	}
-	return op(left, right)
 }
 
 func (n *FieldAccess) eval(ec *evalCtx) Value {
@@ -479,7 +406,10 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 		ms := typeFields[t.Reflected]
 		f := ms[n.field.Name()]
 		if f == nil {
-			panic(fmt.Sprintf("type %s has no field named %s", t.Reflected, n.field.Name().Value()))
+			raise(&ValueError{
+				span: n.span,
+				msg:  fmt.Sprintf("type %s has no method `%s`", t.Reflected, n.field.Name().Value()),
+			})
 		}
 		return f
 	case Value:
@@ -503,8 +433,18 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 				return f
 			}
 		}
-		if c, ok := t.(Content); ok {
-			f := c.Field(fname)
+		switch t := t.(type) {
+		case Dict:
+			if val, ok := t[Str(fname.Value())]; ok {
+				return val
+			} else {
+				raise(&ValueError{
+					span: n.field.Span(),
+					msg:  fmt.Sprintf("dictionary does not have an entry %q", fname.Value()),
+				})
+			}
+		case Content:
+			f := t.Field(fname)
 			if f == nil {
 				raise(&ValueError{
 					span: n.field.Span(),
@@ -516,12 +456,16 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 	default:
 		panic(fmt.Sprintf("TODO: implement field access for %s", t.Type()))
 	}
-	panic(fmt.Sprintf("value of type %s has no field named %s", t.Type(), n.field.Name().Value()))
+	raise(&ValueError{
+		span: n.span,
+		msg:  fmt.Sprintf("type %s has no method `%s`", t.Type(), n.field.Name().Value()),
+	})
+	panic("unreachable")
 }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
-func (n *FuncCall) eval(ec *evalCtx) Value {
+func (n *FuncCall) eval0(ec *evalCtx, setter *setter) Value {
 	callee := n.callee.eval(ec)
 	var fn *Function
 	switch callee := callee.(type) {
@@ -556,31 +500,64 @@ func (n *FuncCall) eval(ec *evalCtx) Value {
 		args.Positional = append(args.Positional, block.eval(ec))
 	}
 	fcc := FuncCallContext{
-		Span: n.span,
+		Span:   n.span,
+		setter: setter,
 	}
 	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
-		var hints []string
-		if argErr, ok := err.(*ArgError); ok {
-			hints = argErr.hints
+		switch err := err.(type) {
+		case ArgErrors:
+			var errs []Error
+			for _, e := range err {
+				errs = append(errs, &ValueError{
+					span:  n.locateArgErrSpan(fn, e),
+					msg:   e.Error(),
+					hints: e.hints,
+				})
+			}
+			raise(errs...)
+		case *ArgError:
+			raise(&ValueError{
+				span:  n.locateArgErrSpan(fn, err),
+				msg:   err.Error(),
+				hints: err.hints,
+			})
+		default:
+			raise(&ValueError{
+				span: n.span,
+				msg:  err.Error(),
+			})
 		}
-		raise(&ValueError{
-			span:  n.locateArgErrSpan(err),
-			msg:   err.Error(),
-			hints: hints,
-		})
+
 	}
 	return v
 }
 
-func (n *FuncCall) locateArgErrSpan(err error) syntax.Span {
-	argErr, ok := err.(*ArgError)
-	if !ok {
-		return n.span
+func (n *FuncCall) evalL(ec *evalCtx) (Value, setter) {
+	var setter setter
+	v := n.eval0(ec, &setter)
+	if setter == nil {
+		raise(&ValueError{
+			span:  n.span,
+			msg:   "cannot mutate a temporary value",
+			hints: nil,
+		})
+	}
+	return v, setter
+}
+
+func (n *FuncCall) eval(ec *evalCtx) Value {
+	return n.eval0(ec, nil)
+}
+
+func (n *FuncCall) locateArgErrSpan(fn *Function, err *ArgError) syntax.Span {
+	offset := 0
+	if fn.WithArgs != nil {
+		offset = len(fn.WithArgs.Positional)
 	}
 	for i, arg := range n.args {
-		if expr := argErr.match(i, arg); expr != nil {
-			return expr.Span()
+		if span, ok := err.match(i+offset, arg); ok {
+			return span
 		}
 	}
 	return n.span

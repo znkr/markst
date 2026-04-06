@@ -385,6 +385,11 @@ func (n *ArrayExpr) format(f *formatter) {
 	f.str(")")
 }
 
+func (n *SpreadExpr) format(f *formatter) {
+	f.str("..")
+	f.expr(n.inner)
+}
+
 func (n *DictExpr) format(f *formatter) {
 	f.prefix()
 	if len(n.entries) == 0 {
@@ -702,20 +707,20 @@ func (n Bytes) format(f *formatter) {
 
 // Containers //////////////////////////////////////////////////////////////////////////////////////
 
-func (n Array) format(f *formatter) {
+func (n *Array) format(f *formatter) {
 	f.prefix()
 	f.str("(")
-	if len(n) == 0 {
+	if len(n.Elems) == 0 {
 		f.str(")")
 		return
 	}
-	for i, item := range n {
+	for i, item := range n.Elems {
 		if i > 0 {
 			f.str(", ")
 		}
 		item.format(f)
 	}
-	if len(n) == 1 {
+	if len(n.Elems) == 1 {
 		// trailing comma for single-element arrays
 		f.str(",")
 	}

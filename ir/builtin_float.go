@@ -17,50 +17,62 @@ var (
 
 	builtinFloat = &Function{
 		Name: "float",
-		Positional: []types.Set{types.SetOf(
-			types.Bool,
-			types.Int,
-			types.Float,
-			types.Decimal,
-			types.Ratio,
-			types.Str,
-		)},
+		Positional: []Param{
+			{Name: "value", Type: types.SetOf(
+				types.Bool,
+				types.Int,
+				types.Float,
+				types.Decimal,
+				types.Ratio,
+				types.Str,
+			)},
+		},
 		F: builtinFloatImpl,
 	}
 
 	builtinFloatIsNan = &Function{
-		Name:       "float.is-nan",
-		Positional: []types.Set{types.SetOf(types.Float)},
-		F:          builtinFloatIsNanImpl,
+		Name: "float.is-nan",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Float)},
+		},
+		F: builtinFloatIsNanImpl,
 	}
 
 	builtinFloatIsInfinite = &Function{
-		Name:       "float.is-infinite",
-		Positional: []types.Set{types.SetOf(types.Float)},
-		F:          builtinFloatIsInfiniteImpl,
+		Name: "float.is-infinite",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Float)},
+		},
+		F: builtinFloatIsInfiniteImpl,
 	}
 
 	builtinFloatSignum = &Function{
-		Name:       "float.signum",
-		Positional: []types.Set{types.SetOf(types.Float)},
-		F:          builtinFloatSignumImpl,
+		Name: "float.signum",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Float)},
+		},
+		F: builtinFloatSignumImpl,
 	}
 
 	builtinFloatFromBytes = &Function{
-		Name:       "float.from-bytes",
-		Positional: []types.Set{types.SetOf(types.Bytes)},
+		Name: "float.from-bytes",
+		Positional: []Param{
+			{Name: "bytes", Type: types.SetOf(types.Bytes)},
+		},
 		Named: NamedParams{
-			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Endian: Param{Name: "endian", Type: types.SetOf(types.Str), Default: Str("little")},
 		},
 		F: builtinFloatFromBytesImpl,
 	}
 
 	builtinFloatToBytes = &Function{
-		Name:       "float.to-bytes",
-		Positional: []types.Set{types.SetOf(types.Float)},
+		Name: "float.to-bytes",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Float)},
+		},
 		Named: NamedParams{
-			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
-			names.Size:   NamedParam{Type: types.SetOf(types.Int), Default: Int(8)},
+			names.Endian: Param{Name: "endian", Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Size:   Param{Name: "size", Type: types.SetOf(types.Int), Default: Int(8)},
 		},
 		F: builtinFloatToBytesImpl,
 	}

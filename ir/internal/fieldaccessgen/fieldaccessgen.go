@@ -145,16 +145,16 @@ func generate(filename string) ([]byte, error) {
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif len(n.%s) == 0 { return nil }\n", f.Name)
 					}
-					fmt.Fprintf(&buf, "\t\tarr := make(Array, len(n.%s))\n", f.Name)
-					fmt.Fprintf(&buf, "\t\tfor i, v := range n.%s { arr[i] = Str(v) }\n", f.Name)
-					fmt.Fprintf(&buf, "\t\treturn arr\n")
+					fmt.Fprintf(&buf, "\t\tvs := make([]Value, len(n.%s))\n", f.Name)
+					fmt.Fprintf(&buf, "\t\tfor i, v := range n.%s { vs[i] = Str(v) }\n", f.Name)
+					fmt.Fprintf(&buf, "\t\treturn &Array{Elems: vs}\n")
 				case "[]Content", "[]*ListItem", "[]*EnumItem", "[]*TermItem":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif len(n.%s) == 0 { return nil }\n", f.Name)
 					}
-					fmt.Fprintf(&buf, "\t\tarr := make(Array, len(n.%s))\n", f.Name)
-					fmt.Fprintf(&buf, "\t\tfor i, v := range n.%s { arr[i] = v }\n", f.Name)
-					fmt.Fprintf(&buf, "\t\treturn arr\n")
+					fmt.Fprintf(&buf, "\t\tvs := make([]Value, len(n.%s))\n", f.Name)
+					fmt.Fprintf(&buf, "\t\tfor i, v := range n.%s { vs[i] = v }\n", f.Name)
+					fmt.Fprintf(&buf, "\t\treturn &Array{Elems: vs}\n")
 				case "*Label":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)

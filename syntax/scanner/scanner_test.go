@@ -182,7 +182,7 @@ func TestScanner_MarkupMode(t *testing.T) {
 			input: "*/",
 			expected: func(b *nodeBuilder) []syntax.Node {
 				return []syntax.Node{
-					b.errWithHints("unmatched end of multiline comment", "*/", []string{"consider escaping the `*` with a backslash or opening the block comment with `/*`"}),
+					b.errWithHints("unexpected end of block comment", "*/", []string{"consider escaping the `*` with a backslash or opening the block comment with `/*`"}),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},
@@ -793,6 +793,20 @@ func TestScanner_MarkupMode(t *testing.T) {
 						b.leaf(syntax.KindRawTrimmed, "\n"),
 						b.leaf(syntax.KindRawDelim, "```"),
 					}),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		// interesting edge cases
+		{
+			name:  "array_bad_tokens",
+			input: "#(1*/2)",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindHash, "#"),
+					b.leaf(syntax.KindText, "(1"),
+					b.errWithHints("unexpected end of block comment", "*/", []string{"consider escaping the `*` with a backslash or opening the block comment with `/*`"}),
+					b.leaf(syntax.KindText, "2)"),
 					b.leaf(syntax.KindEnd, ""),
 				}
 			},

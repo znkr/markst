@@ -8,9 +8,11 @@ import (
 
 var (
 	builtinLabel = &Function{
-		Name:       "label",
-		Positional: []types.Set{types.SetOf(types.Str)},
-		F:          builtinLabelImpl,
+		Name: "label",
+		Positional: []Param{
+			{Name: "name", Type: types.SetOf(types.Str)},
+		},
+		F: builtinLabelImpl,
 	}
 )
 

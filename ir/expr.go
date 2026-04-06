@@ -14,6 +14,13 @@ type Expr interface {
 	formattable
 }
 
+type lvalueExpr interface {
+	Expr
+	evalL(ec *evalCtx) (Value, setter)
+}
+
+type setter func(Value)
+
 type expr struct {
 	span syntax.Span
 }
@@ -191,6 +198,17 @@ func NewArrayExpr(span syntax.Span, elements []Expr) *ArrayExpr {
 
 func (n *ArrayExpr) Elements() []Expr { return n.elements }
 
+type SpreadExpr struct {
+	expr
+	inner Expr
+}
+
+func NewSpreadExpr(span syntax.Span, inner Expr) *SpreadExpr {
+	return &SpreadExpr{expr: expr{span: span}, inner: inner}
+}
+
+func (n *SpreadExpr) Inner() Expr { return n.inner }
+
 type DictExpr struct {
 	expr
 	entries []DictItemExpr
@@ -274,14 +292,16 @@ func NewExprArg(expr Expr) *ExprArg {
 func (n *ExprArg) Expr() Expr { return n.expr }
 
 type NamedArg struct {
+	span syntax.Span
 	name unique.Handle[string]
 	expr Expr
 }
 
-func NewNamedArg(name unique.Handle[string], expr Expr) *NamedArg {
-	return &NamedArg{name: name, expr: expr}
+func NewNamedArg(span syntax.Span, name unique.Handle[string], expr Expr) *NamedArg {
+	return &NamedArg{span: span, name: name, expr: expr}
 }
 
+func (n *NamedArg) Span() syntax.Span           { return n.span }
 func (n *NamedArg) Name() unique.Handle[string] { return n.name }
 func (n *NamedArg) Expr() Expr                  { return n.expr }
 

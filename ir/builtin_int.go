@@ -16,38 +16,46 @@ import (
 
 var (
 	builtinInt = &Function{
-		Name:       "int",
-		Positional: []types.Set{types.SetOf(types.Bool, types.Int, types.Float, types.Str, types.Decimal)},
+		Name: "int",
+		Positional: []Param{
+			{Name: "value", Type: types.SetOf(types.Bool, types.Int, types.Float, types.Str, types.Decimal)},
+		},
 		Named: NamedParams{
-			names.Base: NamedParam{Type: types.SetOf(types.Int), Default: Int(10)},
+			names.Base: Param{Name: "base", Type: types.SetOf(types.Int), Default: Int(10)},
 		},
 		F: builtinIntImpl,
 	}
 
 	builtinIntFromBytes = &Function{
-		Name:       "int.from-bytes",
-		Positional: []types.Set{types.SetOf(types.Bytes)},
+		Name: "int.from-bytes",
+		Positional: []Param{
+			{Name: "bytes", Type: types.SetOf(types.Bytes)},
+		},
 		Named: NamedParams{
-			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
-			names.Signed: NamedParam{Type: types.SetOf(types.Bool), Default: Bool(true)},
+			names.Endian: Param{Name: "endian", Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Signed: Param{Name: "signed", Type: types.SetOf(types.Bool), Default: Bool(true)},
 		},
 		F: builtinIntFromBytesImpl,
 	}
 
 	builtinIntToBytes = &Function{
-		Name:       "int.to-bytes",
-		Positional: []types.Set{types.SetOf(types.Int)},
+		Name: "int.to-bytes",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Int)},
+		},
 		Named: NamedParams{
-			names.Endian: NamedParam{Type: types.SetOf(types.Str), Default: Str("little")},
-			names.Size:   NamedParam{Type: types.SetOf(types.Int), Default: Int(8)},
+			names.Endian: Param{Name: "endian", Type: types.SetOf(types.Str), Default: Str("little")},
+			names.Size:   Param{Name: "size", Type: types.SetOf(types.Int), Default: Int(8)},
 		},
 		F: builtinIntToBytesImpl,
 	}
 
 	builtinSignum = &Function{
-		Name:       "int.signum",
-		Positional: []types.Set{types.SetOf(types.Int)},
-		F:          builtinSignumImpl,
+		Name: "int.signum",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Int)},
+		},
+		F: builtinSignumImpl,
 	}
 )
 

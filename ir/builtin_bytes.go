@@ -9,20 +9,22 @@ import (
 
 var (
 	builtinBytes = &Function{
-		Name:       "bytes",
-		Positional: []types.Set{types.Any},
-		F:          builtinBytesImpl,
+		Name: "bytes",
+		Positional: []Param{
+			{Name: "value", Type: types.Any},
+		},
+		F: builtinBytesImpl,
 	}
 
 	builtinBytesSlice = &Function{
 		Name: "bytes.slice",
-		Positional: []types.Set{
-			types.SetOf(types.Bytes),
-			types.SetOf(types.Int),
-			types.SetOf(types.Int, types.None),
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Bytes)},
+			{Name: "start", Type: types.SetOf(types.Int)},
+			{Name: "end", Type: types.SetOf(types.Int, types.None), Default: none},
 		},
 		Named: NamedParams{
-			names.Count: NamedParam{Type: types.SetOf(types.Int)},
+			names.Count: Param{Name: "count", Type: types.SetOf(types.Int)},
 		},
 		F: builtinBytesSliceImpl,
 	}
@@ -32,12 +34,9 @@ func builtinBytesImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefau
 	switch v := args[0].(type) {
 	case Str:
 		return Bytes(v), nil
-	case Array:
-		if args[0].Type() != types.Array {
-			return nil, ArgErrorPosf(0, "expected array, got %s", args[0].Type())
-		}
+	case *Array:
 		var sb strings.Builder
-		for i, v := range args[0].(Array) {
+		for i, v := range v.Elems {
 			if v.Type() != types.Int {
 				return nil, ArgErrorPosf(0, "expected array of int, got array of %s (element %d)", v.Type(), i)
 			}

@@ -13,13 +13,13 @@ import (
 var (
 	builtinRepr = &Function{
 		Name:       "repr",
-		Positional: []types.Set{types.Any},
+		Positional: []Param{{Type: types.Any}},
 		F:          builtinReprImpl,
 	}
 
 	builtinType = &Function{
 		Name:       "type",
-		Positional: []types.Set{types.Any},
+		Positional: []Param{{Type: types.Any}},
 		// F is set in init() to avoid an initialization cycle.
 	}
 )

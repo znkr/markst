@@ -11,9 +11,11 @@ import (
 
 var (
 	builtinDecimal = &Function{
-		Name:       "decimal",
-		Positional: []types.Set{types.SetOf(types.Bool, types.Int, types.Float, types.Decimal, types.Str)},
-		F:          builtinDecimalImpl,
+		Name: "decimal",
+		Positional: []Param{
+			{Name: "value", Type: types.SetOf(types.Bool, types.Int, types.Float, types.Decimal, types.Str)},
+		},
+		F: builtinDecimalImpl,
 	}
 )
 

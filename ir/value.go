@@ -82,28 +82,38 @@ func (n Numeric) Type() types.Type {
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 
-type Array []Value
+type Array struct {
+	Elems []Value
+}
 type Dict map[Str]Value
 
-func (Array) aValue() {}
-func (Dict) aValue()  {}
+func (*Array) aValue() {}
+func (Dict) aValue()   {}
 
-func (Array) Type() types.Type { return types.Array }
-func (Dict) Type() types.Type  { return types.Dict }
+func (*Array) Type() types.Type { return types.Array }
+func (Dict) Type() types.Type   { return types.Dict }
 
 // Functions ///////////////////////////////////////////////////////////////////////////////////////
 
 type Function struct {
 	Name       string
-	Positional []types.Set // allowed types for each positional argument
+	Positional []Param     // allowed types for each positional argument
+	Variadic   *Param      // if set, collects remaining positional args into an *Array
 	Named      NamedParams // allowed named arguments (with default values)
 	WithArgs   *Arguments
 	F          func(call *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
+
+	// Bind, if set, overrides the default argument validation and slot
+	// mapping. It receives the merged arguments (WithArgs + call args) and
+	// returns the validated arguments along with a positional slot mapping.
+	// When set, the default type checking and slot assignment are skipped.
+	Bind func(fn *Function, args *Arguments) (*Arguments, []int, error)
 }
 
-type NamedParams map[unique.Handle[string]]NamedParam
+type NamedParams map[unique.Handle[string]]Param
 
-type NamedParam struct {
+type Param struct {
+	Name    string
 	Type    types.Set
 	Default Value
 }
@@ -134,75 +144,158 @@ func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
 }
 
 func (n *Function) With(args *Arguments) (*Function, error) {
-	if err := n.validate(args, false); err != nil {
+	merged, _, err := n.bind(args)
+	if err != nil {
 		return nil, err
 	}
 	return &Function{
 		Name:       n.Name,
 		Positional: n.Positional,
-		WithArgs:   n.WithArgs.merge(args),
+		Variadic:   n.Variadic,
 		Named:      n.Named,
+		WithArgs:   merged,
 		F:          n.F,
+		Bind:       n.Bind,
 	}, nil
+}
+
+// bind merges WithArgs with args, validates types and named arguments, and returns the merged
+// arguments along with a parameter slot mapping.
+//
+// mapping[paramIndex] is the arg index that fills that slot, or -1 if the slot uses its default, or
+// -2 if the slot is required but unfilled.
+func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
+	merged := n.WithArgs.merge(args)
+	if n.Bind != nil {
+		return n.Bind(n, merged)
+	}
+
+	m := len(merged.Positional)
+	if n.Variadic == nil && m > len(n.Positional) {
+		return nil, nil, fmt.Errorf("too many positional arguments: expected at most %d, got %d", len(n.Positional), m)
+	}
+
+	// mapping[paramIndex]: arg index that fills the slot, -1 for default, -2 for unset.
+	mapping := slices.Repeat([]int{-2}, len(n.Positional))
+
+	// Type-check each arg against the non-variadic parameter slots it could
+	// reach. Walk left to right: the lowest matching slot for arg[i] anchors
+	// arg[i+1]'s search (slots are always assigned in order). Optional slots
+	// are only consumed when there are surplus args beyond what's needed for
+	// the remaining required slots.
+	lo := 0
+	reqRemaining := 0 // required slots in [lo, len(Positional))
+	for _, p := range n.Positional {
+		if p.Default == nil {
+			reqRemaining++
+		}
+	}
+
+	// Determine how many args are available for non-variadic slots.
+	nonVariadicArgs := min(m, len(n.Positional))
+
+	for i := range nonVariadicArgs {
+		arg := merged.Positional[i]
+		hi := len(n.Positional) - nonVariadicArgs + i
+		argsLeft := nonVariadicArgs - i // args left including this one
+		matched := false
+		for slot := lo; slot <= hi; slot++ {
+			// Skip optional slots when remaining args can only cover required slots.
+			if n.Positional[slot].Default != nil && argsLeft <= reqRemaining {
+				continue
+			}
+			if n.Positional[slot].Type.Contains(arg.Type()) {
+				for j := lo; j < slot; j++ {
+					mapping[j] = -1
+				}
+				mapping[slot] = i
+				if n.Positional[slot].Default == nil {
+					reqRemaining--
+				}
+				lo = slot + 1
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, nil, ArgErrorPosf(i, "expected %s, found %s", n.Positional[lo].Type, arg.Type())
+		}
+	}
+	for i := lo; i < len(n.Positional); i++ {
+		if n.Positional[i].Default != nil {
+			mapping[i] = -1
+		}
+	}
+
+	// Handle variadic args: type-check each remaining arg.
+	if n.Variadic != nil {
+		for i := nonVariadicArgs; i < m; i++ {
+			if !n.Variadic.Type.Contains(merged.Positional[i].Type()) {
+				return nil, nil, ArgErrorPosf(i, "expected %s, found %s", n.Variadic.Type, merged.Positional[i].Type())
+			}
+		}
+	}
+
+	for name := range merged.Named {
+		if _, ok := n.Named[name]; !ok {
+			return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+		}
+		if typ := merged.Named[name].Type(); !n.Named[name].Type.Contains(typ) {
+			return nil, nil, ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
+		}
+	}
+	return merged, mapping, nil
 }
 
 type FuncCallContext struct {
 	Span syntax.Span
+
+	// setter can be set by the function to support assignment to the result of a function call,
+	// e.g. array.at(). This is a bit of a hack and there's probably better ways to support this,
+	// but it works for now.
+	setter *setter
 }
 
+// Apply calls the function with the given arguments. It merges WithArgs,
+// validates and maps positional arguments to parameter slots, fills defaults
+// for optional parameters, and invokes F.
 func (n *Function) Apply(call *FuncCallContext, args *Arguments) (Value, error) {
-	// Skip validation for builtinArguments, since it accepts any arguments.
-	if n == builtinArguments {
-		return n.F(call, args.Positional, NamedArgsWithDefaults{
-			Args: args.Named,
-		})
-	}
-	if err := n.validate(args, true); err != nil {
+	merged, mapping, err := n.bind(args)
+	if err != nil {
 		return nil, err
 	}
-	args = n.WithArgs.merge(args)
-	if len(args.Positional) < len(n.Positional) {
-		pos := make([]Value, len(n.Positional))
-		copy(pos, args.Positional)
-		for i := len(args.Positional); i < len(n.Positional); i++ {
-			pos[i] = none
-		}
-		args.Positional = pos
+
+	// A nil mapping means args pass through directly (no slot assignment).
+	if mapping == nil {
+		return n.F(call, merged.Positional, NamedArgsWithDefaults{Args: merged.Named})
 	}
-	return n.F(call, args.Positional, NamedArgsWithDefaults{
-		Args:     args.Named,
+
+	pos := make([]Value, len(mapping))
+	for i, argIdx := range mapping {
+		switch argIdx {
+		case -2:
+			return nil, fmt.Errorf("missing argument: %s", n.Positional[i].Name)
+		case -1:
+			pos[i] = n.Positional[i].Default
+		default:
+			pos[i] = merged.Positional[argIdx]
+		}
+	}
+
+	// Append variadic args as an *Array.
+	if n.Variadic != nil {
+		var elems []Value
+		variadicStart := min(len(merged.Positional), len(n.Positional))
+		if variadicStart < len(merged.Positional) {
+			elems = slices.Clone(merged.Positional[variadicStart:])
+		}
+		pos = append(pos, &Array{Elems: elems})
+	}
+
+	return n.F(call, pos, NamedArgsWithDefaults{
+		Args:     merged.Named,
 		Defaults: n.Named,
 	})
-}
-
-func (n *Function) validate(args *Arguments, strict bool) error {
-	remaining := n.Positional
-	if n.WithArgs != nil {
-		remaining = remaining[len(n.WithArgs.Positional):]
-	}
-	if len(args.Positional) > len(remaining) {
-		return fmt.Errorf("too many positional arguments: expected at most %d, got %d", len(n.Positional), len(args.Positional))
-	}
-	for i, ts := range remaining {
-		if len(args.Positional) <= i && (!strict || ts.Contains(types.None)) {
-			break
-		}
-		if len(args.Positional) <= i {
-			return fmt.Errorf("too few positional arguments: expected at least %d, got %d", i+1, len(args.Positional))
-		}
-		if typ := args.Positional[i].Type(); !ts.Contains(typ) {
-			return ArgErrorPosf(i, "expected %s, found %s", ts, typ)
-		}
-	}
-	for name := range args.Named {
-		if _, ok := n.Named[name]; !ok {
-			return ArgErrorNamedf(name, "unknown named argument")
-		}
-		if typ := args.Named[name].Type(); !n.Named[name].Type.Contains(typ) {
-			return ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
-		}
-	}
-	return nil
 }
 
 func (*Function) aValue()          {}
@@ -215,30 +308,30 @@ type Arguments struct {
 	Named      NamedArgs
 }
 
-func (a *Arguments) merge(args *Arguments) *Arguments {
+func (n *Arguments) merge(args *Arguments) *Arguments {
 	if args == nil {
-		return a
+		return n
 	}
-	if a == nil {
+	if n == nil {
 		return args
 	}
 
 	var pos []Value
-	if len(a.Positional) == 0 {
+	if len(n.Positional) == 0 {
 		pos = args.Positional
 	} else if len(args.Positional) == 0 {
-		pos = a.Positional
+		pos = n.Positional
 	} else {
-		pos = slices.Concat(a.Positional, args.Positional)
+		pos = slices.Concat(n.Positional, args.Positional)
 	}
 
 	var named NamedArgs
-	if len(a.Named) == 0 {
+	if len(n.Named) == 0 {
 		named = args.Named
 	} else if len(args.Named) == 0 {
-		named = a.Named
+		named = n.Named
 	} else {
-		named = maps.Clone(a.Named)
+		named = maps.Clone(n.Named)
 		maps.Copy(named, args.Named)
 	}
 	return &Arguments{

@@ -192,6 +192,9 @@ func (p *parser) expect(kind syntax.Kind) bool {
 	} else {
 		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
 		p.nodes = append(p.nodes, n)
+		if p.cur.kind == syntax.KindError {
+			p.next()
+		}
 		return false
 	}
 }
@@ -1035,7 +1038,9 @@ func (p *parser) parseArrayOrDictItem(state *groupState) {
 		state.notJustParens = true
 
 		if state.kind == syntax.KindArray {
-			p.expectedAt(start, "expression")
+			// Dictionary syntax in an array. This is an error, but we're handling it in the
+			// analyzer instead of here.
+			return
 		} else {
 			state.kind = syntax.KindDict
 		}

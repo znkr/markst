@@ -47,7 +47,7 @@ func TestEval(t *testing.T) {
 					bindings := map[unique.Handle[string]]ir.Value{
 						unique.Make("test"): &ir.Function{
 							Name:       "test",
-							Positional: []types.Set{types.Any, types.Any},
+							Positional: []ir.Param{{Type: types.Any}, {Type: types.Any}},
 							F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
 								got, want := args[0], args[1]
 								if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
@@ -111,14 +111,26 @@ func evalErrors(warnings []ir.Error, err error) []errcmp.Error {
 			Hints:   w.Hints(),
 		})
 	}
-	if err != nil {
-		err0 := err.(ir.Error)
+	switch e := err.(type) {
+	case nil:
+	case ir.ErrorList:
+		for _, e := range e {
+			ret = append(ret, errcmp.Error{
+				Span:    e.Span(),
+				Type:    "Error",
+				Message: e.Error(),
+				Hints:   e.Hints(),
+			})
+		}
+	case ir.Error:
 		ret = append(ret, errcmp.Error{
-			Span:    err0.Span(),
+			Span:    e.Span(),
 			Type:    "Error",
-			Message: err0.Error(),
-			Hints:   err0.Hints(),
+			Message: e.Error(),
+			Hints:   e.Hints(),
 		})
+	default:
+		panic("unexpected error: " + e.Error())
 	}
 	return ret
 }

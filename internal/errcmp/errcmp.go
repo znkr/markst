@@ -35,7 +35,7 @@ var errcmpopts = cmp.Options{
 	}),
 }
 
-var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+)-(\d+)\s+(.+)$`)
+var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+)(?:-(\d+))?\s+(.+)$`)
 
 func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 	type pendingExpectation struct {
@@ -52,12 +52,17 @@ func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
 	for _, n := range ns {
 		// Read all error expectations from line comments. The format is:
 		//   // Error: <start>-<end> <message>
+		//   // Error: <start> <message>
+
 		if n.Kind() == syntax.KindLineComment {
 			lit := n.Text()
 			if match := errorExpectationRe.FindStringSubmatch(lit); match != nil {
 				typ := match[1]
 				startCol, _ := strconv.Atoi(match[2])
-				endCol, _ := strconv.Atoi(match[3])
+				endCol := startCol
+				if match[3] != "" {
+					endCol, _ = strconv.Atoi(match[3])
+				}
 				switch typ {
 				case "Error", "Warning":
 					pending = append(pending, pendingExpectation{

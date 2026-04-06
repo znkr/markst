@@ -101,10 +101,11 @@ func (a *analyzer) analyzeCodeBlock(n syntax.Node) *ir.CodeBlock {
 func (a *analyzer) analyzeParenthesized(n syntax.Node) *ir.Parenthesized {
 	ns := a.inner(n, syntax.KindParenthesized)
 	defer ns.finish()
-	ns.take(syntax.KindLeftParen)
-	n0 := ns.node()
-	ns.take(syntax.KindRightParen)
-	return ir.NewParenthesized(n.Span(), a.analyzeExpr(n0))
+	var expr ir.Expr
+	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
+		expr = a.analyzeExpr(child)
+	}
+	return ir.NewParenthesized(n.Span(), expr)
 }
 
 func (a *analyzer) analyzeArray(n syntax.Node) *ir.ArrayExpr {
@@ -112,10 +113,19 @@ func (a *analyzer) analyzeArray(n syntax.Node) *ir.ArrayExpr {
 	defer ns.finish()
 	var items []ir.Expr
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		if child.Kind() == syntax.KindComma {
-			continue
+		switch kind := child.Kind(); kind {
+		case syntax.KindComma:
+		case syntax.KindSpread:
+			entry := a.inner(child, syntax.KindSpread)
+			entry.take(syntax.KindDots)
+			expr := a.analyzeExpr(entry.node())
+			entry.finish()
+			items = append(items, ir.NewSpreadExpr(child.Span(), expr))
+		case syntax.KindNamed, syntax.KindKeyed:
+			a.error(syntax.NewError(child.Span(), "expected expression, found "+kind.Name()+" pair", child.Text()))
+		default:
+			items = append(items, a.analyzeExpr(child))
 		}
-		items = append(items, a.analyzeExpr(child))
 	}
 	return ir.NewArrayExpr(n.Span(), items)
 }
@@ -220,7 +230,7 @@ func (a *analyzer) analyzeArgs(n syntax.Node) ([]ir.Arg, []*ir.ContentBlock) {
 				named.take(syntax.KindColon)
 				value := a.analyzeExpr(named.node())
 				named.finish()
-				args = append(args, ir.NewNamedArg(key, value))
+				args = append(args, ir.NewNamedArg(child.Span(), key, value))
 			default:
 				args = append(args, ir.NewExprArg(a.analyzeExpr(child)))
 			}
