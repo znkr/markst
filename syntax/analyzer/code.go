@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"unique"
@@ -50,16 +51,30 @@ func (a *analyzer) analyzeNumeric(n syntax.Node) *ir.ConstExpr {
 	if err != nil && !errors.Is(err, strconv.ErrRange) {
 		panic("invalid float literal: " + val)
 	}
-	u, ok := ir.ParseUnit(suffix)
-	if !ok {
+	var v ir.Value
+	switch suffix {
+	case "pt":
+		v = ir.Length{Pt: fv}
+	case "mm":
+		v = ir.Length{Pt: fv * (72.0 / 25.4)}
+	case "cm":
+		v = ir.Length{Pt: fv * (72.0 / 2.54)}
+	case "in":
+		v = ir.Length{Pt: fv * 72.0}
+	case "em":
+		v = ir.Length{Em: fv}
+	case "deg":
+		v = ir.Angle(fv / 180.0 * math.Pi)
+	case "rad":
+		v = ir.Angle(fv)
+	case "fr":
+		v = ir.Fraction(fv)
+	case "%":
+		v = ir.Ratio(fv / 100.0)
+	default:
 		panic("invalid unit literal: " + val)
 	}
-	scale := 1.0
-	switch u {
-	case ir.UnitPercent:
-		scale = 100
-	}
-	return ir.NewConstExpr(n.Span(), ir.Numeric{Value: fv / scale, Unit: u})
+	return ir.NewConstExpr(n.Span(), v)
 }
 
 func (a *analyzer) analyzeStr(n syntax.Node) *ir.ConstExpr {

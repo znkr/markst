@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/woodsbury/decimal128"
+	"znkr.io/writst/syntax"
 )
 
 func labelEqual(a, b *Label) bool {
@@ -75,9 +76,29 @@ func (n Bytes) Equal(other Value) bool {
 	return ok && n == o
 }
 
-func (n Numeric) Equal(other Value) bool {
-	o, ok := other.(Numeric)
-	return ok && n.Value == o.Value && n.Unit == o.Unit
+func (n Ratio) Equal(other Value) bool {
+	o, ok := other.(Ratio)
+	return ok && n == o
+}
+
+func (n Fraction) Equal(other Value) bool {
+	o, ok := other.(Fraction)
+	return ok && n == o
+}
+
+func (n Length) Equal(other Value) bool {
+	o, ok := other.(Length)
+	return ok && n.Pt == o.Pt && n.Em == o.Em
+}
+
+func (n Relative) Equal(other Value) bool {
+	o, ok := other.(Relative)
+	return ok && n.Ratio == o.Ratio && n.Length == o.Length
+}
+
+func (n Angle) Equal(other Value) bool {
+	o, ok := other.(Angle)
+	return ok && n == o
 }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +109,8 @@ func (n *Array) Equal(other Value) bool {
 		return false
 	}
 	for i := range n.Elems {
-		if !n.Elems[i].Equal(o.Elems[i]) {
+		x, y := promote(syntax.Eq, n.Elems[i], o.Elems[i])
+		if !x.Equal(y) {
 			return false
 		}
 	}
@@ -102,7 +124,11 @@ func (n Dict) Equal(other Value) bool {
 	}
 	for k, v := range n {
 		ov, exists := o[k]
-		if !exists || !v.Equal(ov) {
+		if !exists {
+			return false
+		}
+		x, y := promote(syntax.Eq, v, ov)
+		if !x.Equal(y) {
 			return false
 		}
 	}

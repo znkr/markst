@@ -176,6 +176,15 @@ func (op BinaryOp) StripAssign() BinaryOp {
 	}
 }
 
+func (op BinaryOp) IsComparision() bool {
+	switch op {
+	case Eq, Neq, Lt, Leq, Gt, Geq, In, NotIn:
+		return true
+	default:
+		return false
+	}
+}
+
 func (op BinaryOp) String() string {
 	switch op {
 	case Add:

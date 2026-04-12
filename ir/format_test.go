@@ -252,8 +252,8 @@ func TestFormatCodeExpressions(t *testing.T) {
 			want:    "#3.14\n",
 		},
 		{
-			name:    "numeric",
-			content: body(&ConstExpr{value: Numeric{Value: 12, Unit: UnitPt}}),
+			name:    "length",
+			content: body(&ConstExpr{value: Length{Pt: 12}}),
 			want:    "#12pt\n",
 		},
 		{
@@ -455,7 +455,7 @@ func TestFormatCodeExpressions(t *testing.T) {
 		// Set rules
 		{
 			name:    "set_rule",
-			content: body(&SetRule{target: id("text"), args: []Arg{narg("size", &ConstExpr{value: Numeric{Value: 12, Unit: UnitPt}})}}),
+			content: body(&SetRule{target: id("text"), args: []Arg{narg("size", &ConstExpr{value: Length{Pt: 12}})}}),
 			want:    "#set text(size: 12pt)\n",
 		},
 		{

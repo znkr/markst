@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"znkr.io/writst/ir/internal/names"
 	"znkr.io/writst/ir/types"
 )
 
@@ -15,6 +16,18 @@ var (
 			{Name: "value", Type: types.Any},
 		},
 		F: builtinStrImpl,
+	}
+
+	builtinStrAt = &Function{
+		Name: "str.at",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Str)},
+			{Name: "index", Type: types.SetOf(types.Int)},
+		},
+		Named: NamedParams{
+			names.Default: Param{Name: "default", Type: types.Any},
+		},
+		F: builtinStrAtImpl,
 	}
 
 	builtinStrSplit = &Function{
@@ -58,6 +71,17 @@ func builtinStrSplitImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDe
 	default:
 		panic("unexpected type: " + pat.Type().String())
 	}
+}
+
+func builtinStrAtImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
+	s := string(args[0].(Str))
+	index := int(args[1].(Int))
+	for i, r := range s {
+		if i == index {
+			return Str(string(r)), nil
+		}
+	}
+	return named.Get(names.Default), nil
 }
 
 func builtinStrImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {

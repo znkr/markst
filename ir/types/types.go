@@ -17,6 +17,7 @@ const (
 	Float
 	Decimal
 	Length
+	Relative
 	Ratio
 	Angle
 	Fraction
@@ -39,6 +40,7 @@ var types = [...]string{
 	Float:         "float",
 	Decimal:       "decimal",
 	Length:        "length",
+	Relative:      "relative length",
 	Ratio:         "ratio",
 	Angle:         "angle",
 	Fraction:      "fraction",
@@ -70,6 +72,7 @@ var Any = SetOf(
 	Int,
 	Float,
 	Length,
+	Relative,
 	Ratio,
 	Angle,
 	Fraction,

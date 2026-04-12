@@ -190,9 +190,8 @@ _hello
 │       Space: " "
 │       Ident: "x"
 │       Space: " "
-│       Not: "not"
-│       Error
-│         Msg: "expected keyword `in`"
+│       Error: "not"
+│         Msg: "expected keyword `in` to follow `not` for `not in` operator"
 │       Space: " "
 │       Ident: "y"
 │       Space: " "

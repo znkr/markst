@@ -615,11 +615,17 @@ func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
 		var op syntax.BinaryOp
 		if p.atSet(syntax.BinaryOps) {
 			op = syntax.BinaryOpFromKind(p.cur.kind)
-		} else if minPrec <= syntax.NotIn.Precedence() && p.consumeIf(syntax.KindNot) {
+		} else if minPrec <= syntax.NotIn.Precedence() && p.at(syntax.KindNot) {
+			cp := p.checkpoint()
+			p.consume()
 			if p.at(syntax.KindIn) {
 				op = syntax.NotIn
 			} else {
-				p.expected("keyword `in`")
+				p.restore(cp)
+				// TODO: Is there a function that encapsulates this pattern?
+				n := asErrorNode(p.cur.node, "expected keyword `in` to follow `not` for `not in` operator")
+				p.nodes = append(p.nodes, n)
+				p.next() // skip the `not` to prevent cascading errors
 				break
 			}
 		} else {

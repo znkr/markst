@@ -50,6 +50,7 @@ var (
 	Signum      = unique.Make("signum")
 	Size        = unique.Make("size")
 	Slice       = unique.Make("slice")
+	Sorted      = unique.Make("sorted")
 	Split       = unique.Make("split")
 	Start       = unique.Make("start")
 	Step        = unique.Make("step")

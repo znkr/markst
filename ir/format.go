@@ -663,10 +663,29 @@ func (n Decimal) format(f *formatter) {
 	f.val(decimal128.Decimal(n))
 }
 
-func (n Numeric) format(f *formatter) {
+func (n Ratio) format(f *formatter) {
 	f.prefix()
-	f.val(float64(n.Value))
-	f.str(n.Unit.String())
+	f.val(n)
+}
+
+func (n Fraction) format(f *formatter) {
+	f.prefix()
+	f.val(n)
+}
+
+func (n Length) format(f *formatter) {
+	f.prefix()
+	f.val(n)
+}
+
+func (n Relative) format(f *formatter) {
+	f.prefix()
+	f.val(n)
+}
+
+func (n Angle) format(f *formatter) {
+	f.prefix()
+	f.val(n)
 }
 
 func (n Str) format(f *formatter) {

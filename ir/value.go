@@ -5,7 +5,9 @@ package ir
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
+	"strings"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
@@ -38,48 +40,108 @@ type Auto struct{}
 type Bool bool
 type Int int64
 type Float float64
+
 type Decimal decimal128.Decimal
 type Str string
 type Bytes string
 
-type Numeric struct {
-	Value float64
-	Unit  Unit
+type Ratio float64
+type Fraction float64
+
+type Length struct {
+	Pt float64
+	Em float64
 }
 
-func (None) aValue()    {}
-func (Auto) aValue()    {}
-func (Bool) aValue()    {}
-func (Int) aValue()     {}
-func (Float) aValue()   {}
-func (Decimal) aValue() {}
-func (Str) aValue()     {}
-func (Bytes) aValue()   {}
-func (Numeric) aValue() {}
+type Relative struct {
+	Ratio  Ratio
+	Length Length
+}
+type Angle float64
 
-func (None) Type() types.Type    { return types.None }
-func (Auto) Type() types.Type    { return types.Auto }
-func (Bool) Type() types.Type    { return types.Bool }
-func (Int) Type() types.Type     { return types.Int }
-func (Float) Type() types.Type   { return types.Float }
-func (Decimal) Type() types.Type { return types.Decimal }
-func (Str) Type() types.Type     { return types.Str }
-func (Bytes) Type() types.Type   { return types.Bytes }
+func (n Ratio) String() string {
+	return fmt.Sprintf("%g%%", float64(n)*100)
+}
 
-func (n Numeric) Type() types.Type {
-	switch n.Unit {
-	case UnitPt, UnitMm, UnitCm, UnitIn, UnitEm:
-		return types.Length
-	case UnitDeg, UnitRad:
-		return types.Angle
-	case UnitPercent:
-		return types.Ratio
-	case UnitFr:
-		return types.Fraction
+func (n Fraction) String() string {
+	return fmt.Sprintf("%gfr", float64(n))
+}
+
+func (n Float) String() string {
+	v := float64(n)
+	switch {
+	case math.IsInf(v, 1):
+		return "inf"
+	case math.IsInf(v, -1):
+		return "-inf"
+	case math.IsNaN(v):
+		return "float.nan"
 	default:
-		panic(fmt.Sprintf("invalid unit: %s", n.Unit))
+		return fmt.Sprintf("%g", n)
 	}
 }
+
+func (n Length) String() string {
+	if math.IsInf(n.Pt+n.Em, 1) {
+		return "inf"
+	}
+	if math.IsInf(n.Pt+n.Em, -1) {
+		return "-inf"
+	}
+	if math.IsNaN(n.Pt + n.Em) {
+		return "nan"
+	}
+	var sb strings.Builder
+	if n.Pt != 0 {
+		fmt.Fprintf(&sb, "%gpt", n.Pt)
+	}
+	if n.Pt != 0 && n.Em != 0 {
+		sb.WriteString(" + ")
+	}
+	if n.Em != 0 {
+		fmt.Fprintf(&sb, "%gem", n.Em)
+	}
+	if sb.Len() == 0 {
+		sb.WriteString("0pt")
+	}
+	return sb.String()
+}
+
+func (r Relative) String() string {
+	return fmt.Sprintf("%g%% + %s", float64(r.Ratio)*100, r.Length)
+}
+
+func (n Angle) String() string {
+	return fmt.Sprintf("%gdeg", float64(n*180/math.Pi))
+}
+
+func (None) aValue()     {}
+func (Auto) aValue()     {}
+func (Bool) aValue()     {}
+func (Int) aValue()      {}
+func (Float) aValue()    {}
+func (Decimal) aValue()  {}
+func (Str) aValue()      {}
+func (Bytes) aValue()    {}
+func (Ratio) aValue()    {}
+func (Fraction) aValue() {}
+func (Length) aValue()   {}
+func (Relative) aValue() {}
+func (Angle) aValue()    {}
+
+func (None) Type() types.Type     { return types.None }
+func (Auto) Type() types.Type     { return types.Auto }
+func (Bool) Type() types.Type     { return types.Bool }
+func (Int) Type() types.Type      { return types.Int }
+func (Float) Type() types.Type    { return types.Float }
+func (Decimal) Type() types.Type  { return types.Decimal }
+func (Str) Type() types.Type      { return types.Str }
+func (Bytes) Type() types.Type    { return types.Bytes }
+func (Ratio) Type() types.Type    { return types.Ratio }
+func (Fraction) Type() types.Type { return types.Fraction }
+func (Length) Type() types.Type   { return types.Length }
+func (Relative) Type() types.Type { return types.Relative }
+func (Angle) Type() types.Type    { return types.Angle }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
 

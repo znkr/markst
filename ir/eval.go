@@ -2,10 +2,11 @@ package ir
 
 import (
 	"fmt"
-	"math"
+	"regexp"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
+	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
 
@@ -225,17 +226,15 @@ func toContent(v Value) (Content, error) {
 	case Int:
 		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}, nil
 	case Float:
-		var s string
-		if math.IsInf(float64(v), 1) {
-			s = "inf"
-		} else if math.IsInf(float64(v), -1) {
-			s = "-inf"
-		} else if math.IsNaN(float64(v)) {
+		s := v.String()
+		if s == "float.nan" {
 			s = "nan"
-		} else {
-			s = fmt.Sprintf("%g", v)
 		}
 		return &Raw{Lines: []string{s}}, nil
+	case Length:
+		return &Raw{Lines: []string{v.String()}}, nil
+	case Relative:
+		return &Raw{Lines: []string{v.String()}}, nil
 	case Decimal:
 		d := decimal128.Decimal(v)
 		var s string
@@ -267,10 +266,22 @@ func (n *Ident) eval(ec *evalCtx) Value {
 	return val
 }
 
+var couldBeSubtractionRe = regexp.MustCompile(`(-)(\d+)$`)
+
 func (n *Ident) evalL(ec *evalCtx) (Value, setter) {
 	val, set, ok := ec.lookup(n.name)
 	if !ok {
-		panic("undefined identifier: " + n.name.Value())
+		var hints []string
+		if m := couldBeSubtractionRe.FindAllStringSubmatch(n.name.Value(), -1); m != nil {
+			sign := m[0][1]
+			num := m[0][2]
+			hints = append(hints, fmt.Sprintf("if you meant to use subtraction, try adding spaces around the minus sign: `%s %s %s`", n.name.Value()[:len(n.name.Value())-len(m[0][0])], sign, num))
+		}
+		raise(&ValueError{
+			span:  n.Span(),
+			msg:   fmt.Sprintf("unknown variable: %s", n.name.Value()),
+			hints: hints,
+		})
 	}
 	return val, set
 }
@@ -311,6 +322,13 @@ func (n *ContentBlock) eval(ec *evalCtx) Value {
 
 func (n *Parenthesized) eval(ec *evalCtx) Value {
 	return n.body.eval(ec)
+}
+
+func (n *Parenthesized) evalL(ec *evalCtx) (Value, setter) {
+	if l, ok := n.body.(lvalueExpr); ok {
+		return l.evalL(ec)
+	}
+	return n.body.eval(ec), nil
 }
 
 // Collections /////////////////////////////////////////////////////////////////////////////////////
@@ -366,41 +384,71 @@ func (n *Unary) eval(ec *evalCtx) Value {
 	x := n.operand.eval(ec)
 	op := unaryops[unaryopKey{n.op, x.Type()}]
 	if op == nil {
-		panic(fmt.Sprintf("unsupported unary operation: %s %s", n.op, x.Type()))
+		opstr := "'" + n.op.String() + "'"
+		if n.op == syntax.Pos {
+			opstr = "unary " + opstr
+		}
+		raise(&ValueError{
+			span: n.span,
+			msg:  fmt.Sprintf("cannot apply %s to %s", opstr, x.Type()),
+		})
 	}
-	return op(x)
+	v, err := op(x)
+	if err != nil {
+		raise(&ValueError{
+			span: n.span,
+			msg:  err.Error(),
+		})
+	}
+	return v
 }
 
 func (n *Binary) eval(ec *evalCtx) Value {
 	if n.op.IsAssign() {
 		lexpr, ok := n.left.(lvalueExpr)
 		if !ok {
-			panic("left-hand side of assignment must be an LValue")
+			// Evaluate the left hand side to surface any errors in the expression. Only report the
+			// error below if the expression is valid, to avoid confusing error messages.
+			_ = n.left.eval(ec)
+			raise(&ValueError{
+				span:  n.left.Span(),
+				msg:   "cannot mutate a temporary value",
+				hints: nil,
+			})
 		}
-		left, set := lexpr.evalL(ec)
 		v := n.right.eval(ec)
+		left, set := lexpr.evalL(ec)
 		if n.op != syntax.Assign {
-			op := binops[binopKey{n.op.StripAssign(), left.Type(), v.Type()}]
-			if op == nil {
-				panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, v.Type()))
+			var err error
+			v, err = binaryOp(n.op.StripAssign(), left, v)
+			if err != nil {
+				raise(&ValueError{
+					span: n.span,
+					msg:  err.Error(),
+				})
 			}
-			v = op(left, v)
 		}
 		set(v)
 		return none
 	} else {
-		left, right := n.left.eval(ec), n.right.eval(ec)
-		switch n.op {
-		case syntax.Eq:
-			return Bool(left.Equal(right))
-		case syntax.Neq:
-			return Bool(!left.Equal(right))
+		left := n.left.eval(ec)
+		if left.Type() == types.Bool {
+			if n.op == syntax.And && !left.(Bool) {
+				return Bool(false)
+			}
+			if n.op == syntax.Or && left.(Bool) {
+				return Bool(true)
+			}
 		}
-		op := binops[binopKey{n.op, left.Type(), right.Type()}]
-		if op == nil {
-			panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, right.Type()))
+		right := n.right.eval(ec)
+		v, err := binaryOp(n.op, left, right)
+		if err != nil {
+			raise(&ValueError{
+				span: n.span,
+				msg:  err.Error(),
+			})
 		}
-		return op(left, right)
+		return v
 	}
 }
 
@@ -528,6 +576,11 @@ func (n *FuncCall) eval0(ec *evalCtx, setter *setter) Value {
 				msg:   err.Error(),
 				hints: err.hints,
 			})
+		case *ValueError:
+			if err.span == (syntax.Span{}) {
+				err.span = n.span
+			}
+			raise(err)
 		default:
 			raise(&ValueError{
 				span: n.span,

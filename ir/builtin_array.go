@@ -226,6 +226,14 @@ var (
 		},
 		F: builtinArrayChunksImpl,
 	}
+
+	builtinArraySorted = &Function{
+		Name: "array.sorted",
+		Positional: []Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+		},
+		F: builtinArraySortedImpl,
+	}
 )
 
 func builtinArrayImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
@@ -485,7 +493,11 @@ func builtinArrayProductImpl(_ *FuncCallContext, args []Value, named NamedArgsWi
 		if op == nil {
 			return nil, ArgErrorPosf(0, "unsupported type for array.product: %s", product.Type())
 		}
-		product = op(product, v)
+		var err error
+		product, err = op(product, v)
+		if err != nil {
+			return nil, fmt.Errorf("error calculating the product: %v", err)
+		}
 	}
 	return product, nil
 }
@@ -504,7 +516,11 @@ func builtinArraySumImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDe
 		if op == nil {
 			return nil, ArgErrorPosf(0, "unsupported type for array.sum: %s", sum.Type())
 		}
-		sum = op(sum, v)
+		var err error
+		sum, err = op(sum, v)
+		if err != nil {
+			return nil, fmt.Errorf("error calculating the sum: %v", err)
+		}
 	}
 	return sum, nil
 }
@@ -646,4 +662,24 @@ func builtinArrayChunksImpl(_ *FuncCallContext, args []Value, named NamedArgsWit
 		chunks = append(chunks, &Array{Elems: slices.Clone(arr.Elems[i:end])})
 	}
 	return &Array{Elems: chunks}, nil
+}
+
+func builtinArraySortedImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
+	arr := args[0].(*Array)
+	sortedElems := slices.Clone(arr.Elems)
+	var err error
+	slices.SortFunc(sortedElems, func(a, b Value) int {
+		cmp, err0 := cmpValues(a, b)
+		if err0 != nil && err == nil {
+			err = err0
+		}
+		return cmp
+	})
+	if err != nil {
+		return nil, &ValueError{
+			msg:   err.Error(),
+			hints: []string{"consider choosing a `key` or defining the comparison with `by`"},
+		}
+	}
+	return &Array{Elems: sortedElems}, nil
 }

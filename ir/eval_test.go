@@ -60,6 +60,7 @@ func TestEval(t *testing.T) {
 								return ir.None{}, nil
 							},
 						},
+						unique.Make("dont-care"): nil,
 					}
 
 					contents, warnings, err := ir.Eval(exprs, ir.WithBindings(bindings))

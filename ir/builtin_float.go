@@ -92,8 +92,8 @@ func builtinFloatImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefau
 	case Decimal:
 		f := decimal128.Decimal(v).Float64()
 		return Float(f), nil
-	case Numeric:
-		return Float(v.Value), nil
+	case Ratio:
+		return Float(v), nil
 	case Str:
 		s := string(v)
 		switch s {
