@@ -6,7 +6,6 @@ import (
 	"testing"
 	"unique"
 
-	"github.com/google/go-cmp/cmp"
 	"znkr.io/diff/textdiff"
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
@@ -20,13 +19,17 @@ import (
 var update = flag.Bool("update", false, "update golden files")
 
 func TestEval(t *testing.T) {
-	files, err := filepath.Glob("testdata/*.test")
+	files, err := filepath.Glob("testdata/**/*.test")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, file := range files {
-		t.Run(filepath.Base(file), func(t *testing.T) {
+		name, err := filepath.Rel("testdata", file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			tests := testfile.Read(t, file)
 			for i, tc := range tests {
@@ -50,9 +53,9 @@ func TestEval(t *testing.T) {
 							Positional: []ir.Param{{Type: types.Any}, {Type: types.Any}},
 							F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
 								got, want := args[0], args[1]
-								if diff := cmp.Diff(ir.FormatValue(want), ir.FormatValue(got)); diff != "" {
+								if !got.Equal(want) {
 									call := tc.Input[fcc.Span.Start:fcc.Span.End]
-									t.Errorf("test failure. The following test failed:\n\n\t%s\n\nDiff (-want +got):\n%s", call, diff)
+									t.Errorf("test failure: %s\n\n\twant: %s\t got: %s", call, ir.FormatValue(want), ir.FormatValue(got))
 								}
 								return ir.None{}, nil
 							},

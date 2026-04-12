@@ -390,6 +390,12 @@ func (n *Binary) eval(ec *evalCtx) Value {
 		return none
 	} else {
 		left, right := n.left.eval(ec), n.right.eval(ec)
+		switch n.op {
+		case syntax.Eq:
+			return Bool(left.Equal(right))
+		case syntax.Neq:
+			return Bool(!left.Equal(right))
+		}
 		op := binops[binopKey{n.op, left.Type(), right.Type()}]
 		if op == nil {
 			panic(fmt.Sprintf("unsupported binary operation: %s %s %s", left.Type(), n.op, right.Type()))

@@ -15,6 +15,7 @@ import (
 
 type Value interface {
 	Type() types.Type
+	Equal(Value) bool
 
 	aValue()
 	formattable
@@ -497,5 +498,4 @@ type Label struct {
 }
 
 func (Label) aValue()           {}
-func (*Label) aElement()        {}
 func (*Label) Type() types.Type { return types.Label }
