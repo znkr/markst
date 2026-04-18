@@ -6,7 +6,7 @@
 │ #strong[#text("Hello")]
 │ #text("world!")
 
---- ops-unary-basic (skip: for loops not implemented yet) ---
+--- ops-unary-basic ---
 // Test math operators.
 
 // Test plus and minus.
@@ -32,13 +32,16 @@
 #test(13 * "a" + "bbbbbb", "aaaaaaaaaaaaabbbbbb")
 #test((1, 2) + (3, 4), (1, 2, 3, 4))
 #test((a: 1) + (b: 2, c: 3), (a: 1, b: 2, c: 3))
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
 
 --- ops-add-too-large ---
 // Error: 3-26 value is too large
 #(9223372036854775807 + 1)
 │ #raw("-9223372036854775808")
 
---- ops-binary-basic (skip: for loops not implemented yet) ---
+--- ops-binary-basic ---
 // Subtraction.
 #test(1-4, 3*-1)
 #test(4cm - 2cm, 2cm)
@@ -115,6 +118,14 @@
     test(b / (b * 2 + a), 0.5)
   }
 }
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
 
 --- ops-binary-decimal ---
 // Addition.

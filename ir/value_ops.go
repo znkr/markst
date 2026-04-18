@@ -24,14 +24,26 @@ var unaryops = map[unaryopKey]func(x Value) (Value, error){
 	{syntax.Not, types.Bool}: func(x Value) (Value, error) {
 		return !x.(Bool), nil
 	},
+	{syntax.Pos, types.Int}: func(x Value) (Value, error) {
+		return x, nil
+	},
 	{syntax.Neg, types.Int}: func(x Value) (Value, error) {
 		return -x.(Int), nil
+	},
+	{syntax.Pos, types.Float}: func(x Value) (Value, error) {
+		return x, nil
 	},
 	{syntax.Neg, types.Float}: func(x Value) (Value, error) {
 		return -x.(Float), nil
 	},
+	{syntax.Pos, types.Decimal}: func(x Value) (Value, error) {
+		return x, nil
+	},
 	{syntax.Neg, types.Decimal}: func(x Value) (Value, error) {
 		return Decimal(decimal128.Decimal(x.(Decimal)).Neg()), nil
+	},
+	{syntax.Pos, types.Length}: func(x Value) (Value, error) {
+		return x, nil
 	},
 	{syntax.Neg, types.Length}: func(x Value) (Value, error) {
 		l := x.(Length)
@@ -40,15 +52,27 @@ var unaryops = map[unaryopKey]func(x Value) (Value, error){
 	{syntax.Neg, types.Ratio}: func(x Value) (Value, error) {
 		return -x.(Ratio), nil
 	},
+	{syntax.Pos, types.Ratio}: func(x Value) (Value, error) {
+		return x, nil
+	},
+	{syntax.Pos, types.Angle}: func(x Value) (Value, error) {
+		return x, nil
+	},
 	{syntax.Neg, types.Angle}: func(x Value) (Value, error) {
 		return -x.(Angle), nil
 	},
 	{syntax.Neg, types.Fraction}: func(x Value) (Value, error) {
 		return -x.(Fraction), nil
 	},
+	{syntax.Pos, types.Fraction}: func(x Value) (Value, error) {
+		return x, nil
+	},
 	{syntax.Neg, types.Relative}: func(x Value) (Value, error) {
 		r := x.(Relative)
 		return Relative{Ratio: -r.Ratio, Length: Length{Pt: -r.Length.Pt, Em: -r.Length.Em}}, nil
+	},
+	{syntax.Pos, types.Relative}: func(x Value) (Value, error) {
+		return x, nil
 	},
 }
 
@@ -191,6 +215,25 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 		}
 		return nil, fmt.Errorf("cannot divide these two lengths")
 	},
+	{syntax.Div, types.Length, types.Relative}: func(x, y Value) (Value, error) {
+		l, r := x.(Length), y.(Relative)
+		if r.Ratio != 0 {
+			return nil, fmt.Errorf("cannot divide length by relative length")
+		}
+		if r.Length.Em == 0 && l.Em == 0 {
+			if r.Length.Pt == 0 {
+				return Float(l.Pt / r.Length.Pt), fmt.Errorf("cannot divide by zero")
+			}
+			return Float(l.Pt / r.Length.Pt), nil
+		}
+		if r.Length.Pt == 0 && l.Pt == 0 {
+			if r.Length.Em == 0 {
+				return Float(l.Em / r.Length.Em), fmt.Errorf("cannot divide by zero")
+			}
+			return Float(l.Em / r.Length.Em), nil
+		}
+		return nil, fmt.Errorf("cannot divide these lengths")
+	},
 
 	// Relative operations
 	{syntax.Add, types.Relative, types.Relative}: func(x, y Value) (Value, error) {
@@ -231,6 +274,35 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 			return nil, fmt.Errorf("cannot divide these two relative lengths")
 		}
 	},
+	{syntax.Div, types.Relative, types.Ratio}: func(x, y Value) (Value, error) {
+		r, ratio := x.(Relative), y.(Ratio)
+		if r.Length.Pt != 0 || r.Length.Em != 0 {
+			return nil, fmt.Errorf("cannot divide relative length by ratio")
+		}
+		if ratio == 0 {
+			return Float(float64(r.Ratio) / float64(ratio)), fmt.Errorf("cannot divide by zero")
+		}
+		return Float(float64(r.Ratio) / float64(ratio)), nil
+	},
+	{syntax.Div, types.Relative, types.Length}: func(x, y Value) (Value, error) {
+		r, l := x.(Relative), y.(Length)
+		if r.Ratio != 0 {
+			return nil, fmt.Errorf("cannot divide relative length by length")
+		}
+		if l.Em == 0 && r.Length.Em == 0 {
+			if l.Pt == 0 {
+				return Float(r.Length.Pt / l.Pt), fmt.Errorf("cannot divide by zero")
+			}
+			return Float(r.Length.Pt / l.Pt), nil
+		}
+		if l.Pt == 0 && r.Length.Pt == 0 {
+			if l.Em == 0 {
+				return Float(r.Length.Em / l.Em), fmt.Errorf("cannot divide by zero")
+			}
+			return Float(r.Length.Em / l.Em), nil
+		}
+		return nil, fmt.Errorf("cannot divide these lengths")
+	},
 
 	// Ratio operations
 	{syntax.Add, types.Ratio, types.Ratio}: func(x, y Value) (Value, error) {
@@ -241,6 +313,26 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 	},
 	{syntax.Mul, types.Ratio, types.Ratio}: func(x, y Value) (Value, error) {
 		return x.(Ratio) * y.(Ratio), nil
+	},
+	{syntax.Div, types.Ratio, types.Ratio}: func(x, y Value) (Value, error) {
+		xr, yr := x.(Ratio), y.(Ratio)
+		if yr == 0 {
+			return Float(float64(xr) / float64(yr)), fmt.Errorf("cannot divide by zero")
+		}
+		return Float(float64(xr) / float64(yr)), nil
+	},
+	{syntax.Div, types.Ratio, types.Float}: func(x, y Value) (Value, error) {
+		return Ratio(float64(x.(Ratio)) / float64(y.(Float))), nil
+	},
+	{syntax.Div, types.Ratio, types.Relative}: func(x, y Value) (Value, error) {
+		ratio, r := x.(Ratio), y.(Relative)
+		if r.Length.Pt != 0 || r.Length.Em != 0 {
+			return nil, fmt.Errorf("cannot divide ratio by relative length")
+		}
+		if r.Ratio == 0 {
+			return Float(float64(ratio) / float64(r.Ratio)), fmt.Errorf("cannot divide by zero")
+		}
+		return Float(float64(ratio) / float64(r.Ratio)), nil
 	},
 	{syntax.Mul, types.Float, types.Ratio}: func(x, y Value) (Value, error) {
 		return Ratio(float64(x.(Float)) * float64(y.(Ratio))), nil
@@ -262,9 +354,9 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 	{syntax.Div, types.Angle, types.Angle}: func(x, y Value) (Value, error) {
 		xa, ya := x.(Angle), y.(Angle)
 		if ya == 0 {
-			return Angle(float64(xa) / float64(ya)), fmt.Errorf("cannot divide by zero")
+			return Float(float64(xa) / float64(ya)), fmt.Errorf("cannot divide by zero")
 		}
-		return Angle(float64(xa) / float64(ya)), nil
+		return Float(float64(xa) / float64(ya)), nil
 	},
 
 	// Fraction operations
@@ -274,16 +366,33 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 	{syntax.Sub, types.Fraction, types.Fraction}: func(x, y Value) (Value, error) {
 		return x.(Fraction) - y.(Fraction), nil
 	},
+	{syntax.Mul, types.Fraction, types.Fraction}: func(x, y Value) (Value, error) {
+		return x.(Fraction) * y.(Fraction), nil
+	},
 	{syntax.Mul, types.Float, types.Fraction}: func(x, y Value) (Value, error) {
 		return Fraction(float64(x.(Float)) * float64(y.(Fraction))), nil
 	},
 	{syntax.Div, types.Fraction, types.Float}: func(x, y Value) (Value, error) {
 		return Fraction(float64(x.(Fraction)) / float64(y.(Float))), nil
 	},
+	{syntax.Div, types.Fraction, types.Fraction}: func(x, y Value) (Value, error) {
+		xf, yf := x.(Fraction), y.(Fraction)
+		if yf == 0 {
+			return Float(float64(xf) / float64(yf)), fmt.Errorf("cannot divide by zero")
+		}
+		return Float(float64(xf) / float64(yf)), nil
+	},
 
 	// Cross-type operations producing Relative
 	{syntax.Add, types.Length, types.Ratio}: func(x, y Value) (Value, error) {
 		return Relative{Ratio: y.(Ratio), Length: x.(Length)}, nil
+	},
+	{syntax.Sub, types.Length, types.Ratio}: func(x, y Value) (Value, error) {
+		return Relative{Ratio: -y.(Ratio), Length: x.(Length)}, nil
+	},
+	{syntax.Sub, types.Ratio, types.Length}: func(x, y Value) (Value, error) {
+		l := y.(Length)
+		return Relative{Ratio: x.(Ratio), Length: Length{Pt: -l.Pt, Em: -l.Em}}, nil
 	},
 
 	// String operations
@@ -323,9 +432,20 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 
 	// Dictionary operations
 	{syntax.In, types.Str, types.Dict}: func(x, y Value) (Value, error) {
-		dict := y.(Dict)
-		_, ok := dict[x.(Str)]
+		dict := y.(*Dict)
+		_, ok := dict.Elems.Get(x.(Str))
 		return Bool(ok), nil
+	},
+	{syntax.Add, types.Dict, types.Dict}: func(x, y Value) (Value, error) {
+		d1, d2 := x.(*Dict), y.(*Dict)
+		r := new(Dict)
+		for k, v := range d1.Elems.All() {
+			r.Elems.Put(k, v)
+		}
+		for k, v := range d2.Elems.All() {
+			r.Elems.Put(k, v)
+		}
+		return &Dict{Elems: r.Elems}, nil
 	},
 
 	// Arguments operations
@@ -475,7 +595,13 @@ func promote0(op syntax.BinaryOp, v Value, target types.Type) Value {
 
 // promote promotes x and y to the same type if possible, following the promotion rules.
 func promote(op syntax.BinaryOp, x, y Value) (Value, Value) {
-	switch xt, yt := x.Type(), y.Type(); {
+	xt, yt := x.Type(), y.Type()
+	// Special case: Int paired with unit types promotes Int to Float.
+	switch {
+	case xt == types.Int && promotesOtherArgFromIntToFloat.Contains(yt):
+		x = Float(x.(Int))
+	case yt == types.Int && promotesOtherArgFromIntToFloat.Contains(xt):
+		y = Float(y.(Int))
 	case promotionOrd(xt) < promotionOrd(yt):
 		x = promote0(op, x, yt)
 	case promotionOrd(xt) > promotionOrd(yt):
@@ -500,6 +626,10 @@ var floatOrInt = types.SetOf(
 func binaryOp(op syntax.BinaryOp, x, y Value) (Value, error) {
 	xt, yt := x.Type(), y.Type()
 	switch {
+	case op == syntax.Add && xt == types.None:
+		return y, nil
+	case op == syntax.Add && yt == types.None:
+		return x, nil
 	case op == syntax.NotIn:
 		v, err := binaryOp(syntax.In, x, y)
 		if err != nil {

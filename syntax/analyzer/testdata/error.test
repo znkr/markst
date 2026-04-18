@@ -77,3 +77,28 @@ Hello #0xG world
 // Error: 7-8 unexpected comma
 // Hint: 7-8 destructuring patterns must be wrapped in parentheses
 #for k, in () {}
+
+--- for-loop-missing-pattern ---
+// Error: 5 expected pattern
+#for
+
+--- for-loop-missing-iterable ---
+// Error: 10 expected expression
+#for v in
+
+--- for-loop-missing-body ---
+// Error: 15 expected block
+#for v in iter
+
+--- for-loop-pattern-on-next-line ---
+// Error: 5 expected pattern
+#for
+v in iter {}
+
+--- for-loop-string-as-pattern ---
+// Error: 6-9 expected pattern, found string
+#for "v" in iter {}
+
+--- for-loop-binary-as-pattern ---
+// Error: 7 expected keyword `in`
+#for a + b in iter {}

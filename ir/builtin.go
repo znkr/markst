@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/ir/types"
 )
 
@@ -33,12 +32,9 @@ func builtinReprImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaul
 	case None:
 		return Str("none"), nil
 	case Bool:
-		if v {
-			return Str("true"), nil
-		}
-		return Str("false"), nil
+		return Str(v.String()), nil
 	case Int:
-		return Str(strconv.FormatInt(int64(v), 10)), nil
+		return Str(v.String()), nil
 	case Float:
 		if math.IsInf(float64(v), 1) {
 			return Str("float.inf"), nil
@@ -54,17 +50,18 @@ func builtinReprImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaul
 			s += ".0"
 		}
 		return s, nil
+	case Length:
+		return Str(v.String()), nil
+	case Angle:
+		return Str(v.String()), nil
+	case Relative:
+		return Str(v.String()), nil
+	case Ratio:
+		return Str(v.String()), nil
+	case Fraction:
+		return Str(v.String()), nil
 	case Decimal:
-		if decimal128.Decimal(v).IsInf(1) {
-			return Str("decimal.inf"), nil
-		}
-		if decimal128.Decimal(v).IsInf(-1) {
-			return Str("-decimal.inf"), nil
-		}
-		if decimal128.Decimal(v).IsNaN() {
-			return Str("decimal.nan"), nil
-		}
-		s := decimal128.Format(decimal128.Decimal(v), 'f', -1)
+		s := v.String()
 		return Str(fmt.Sprintf("decimal(\"%s\")", s)), nil
 	default:
 		panic(fmt.Sprintf("repr() not implemented for type %s", args[0].Type()))

@@ -223,21 +223,21 @@ func generate(filename string) ([]byte, error) {
 		fmt.Fprintf(&buf, "}\n\n")
 
 		// Fields method
-		fmt.Fprintf(&buf, "func (n *%s) Fields() Dict {\n", typeName)
+		fmt.Fprintf(&buf, "func (n *%s) Fields() *Dict {\n", typeName)
 		if len(fields) > 0 {
-			fmt.Fprintf(&buf, "\tfields := make(Dict)\n")
+			fmt.Fprintf(&buf, "\tfields := new(Dict)\n")
 			for _, f := range fields {
 				if !f.Required {
 					fmt.Fprintf(&buf, "\tif f := n.Field(names.%s); f != nil {\n", f.Name)
-					fmt.Fprintf(&buf, "\t\tfields[Str(names.%s.Value())] = f\n", f.Name)
+					fmt.Fprintf(&buf, "\t\tfields.Elems.Put(Str(names.%s.Value()), f)\n", f.Name)
 					fmt.Fprintf(&buf, "\t}\n")
 				} else {
-					fmt.Fprintf(&buf, "\tfields[Str(names.%s.Value())] = n.Field(names.%s)\n", f.Name, f.Name)
+					fmt.Fprintf(&buf, "\tfields.Elems.Put(Str(names.%s.Value()), n.Field(names.%s))\n", f.Name, f.Name)
 				}
 			}
 			fmt.Fprintf(&buf, "\treturn fields\n")
 		} else {
-			fmt.Fprintf(&buf, "\treturn make(Dict)\n")
+			fmt.Fprintf(&buf, "\treturn new(Dict)\n")
 		}
 		fmt.Fprintf(&buf, "}\n\n")
 

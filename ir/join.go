@@ -2,9 +2,9 @@ package ir
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
+	"znkr.io/writst/internal/ordered"
 	"znkr.io/writst/ir/types"
 )
 
@@ -140,32 +140,39 @@ type arrayJoiner struct {
 }
 
 func (j *arrayJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	j.values = append(j.values, v)
 	return nil
 }
 func (j *arrayJoiner) result() Value { return &Array{Elems: j.values} }
 
 type dictJoiner struct {
-	dict Dict
+	dict ordered.Map[Str, Value]
 }
 
 func (j *dictJoiner) add(v Value) error {
 	if v == none {
 		return nil
 	}
-	if j.dict == nil {
-		j.dict = make(Dict)
+	for k, v := range v.(*Dict).Elems.All() {
+		j.dict.Put(k, v)
 	}
-	maps.Copy(j.dict, v.(Dict))
 	return nil
 }
-func (j *dictJoiner) result() Value { return j.dict }
+func (j *dictJoiner) result() Value {
+	return &Dict{Elems: j.dict}
+}
 
 type argumentJoiner struct {
 	args *Arguments
 }
 
 func (j *argumentJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	j.args = j.args.merge(v.(*Arguments))
 	return nil
 }

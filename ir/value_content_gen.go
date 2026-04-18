@@ -30,11 +30,11 @@ func (n *Emph) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Emph) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+func (n *Emph) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -74,11 +74,11 @@ func (n *Enum) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Enum) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Children.Value())] = n.Field(names.Children)
+func (n *Enum) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -121,14 +121,14 @@ func (n *EnumItem) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *EnumItem) Fields() Dict {
-	fields := make(Dict)
+func (n *EnumItem) Fields() *Dict {
+	fields := new(Dict)
 	if f := n.Field(names.Number); f != nil {
-		fields[Str(names.Number.Value())] = f
+		fields.Elems.Put(Str(names.Number.Value()), f)
 	}
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -168,12 +168,12 @@ func (n *Heading) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Heading) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Depth.Value())] = n.Field(names.Depth)
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+func (n *Heading) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Depth.Value()), n.Field(names.Depth))
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -192,8 +192,8 @@ func (n *Linebreak) HasField(name unique.Handle[string]) bool {
 	return false
 }
 
-func (n *Linebreak) Fields() Dict {
-	return make(Dict)
+func (n *Linebreak) Fields() *Dict {
+	return new(Dict)
 }
 
 func (n *Linebreak) SetLabel(label *Label) *Label {
@@ -229,12 +229,12 @@ func (n *Link) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Link) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Dest.Value())] = n.Field(names.Dest)
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+func (n *Link) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Dest.Value()), n.Field(names.Dest))
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -274,11 +274,11 @@ func (n *List) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *List) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Children.Value())] = n.Field(names.Children)
+func (n *List) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -314,11 +314,11 @@ func (n *ListItem) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *ListItem) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+func (n *ListItem) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -337,8 +337,8 @@ func (n *Parbreak) HasField(name unique.Handle[string]) bool {
 	return false
 }
 
-func (n *Parbreak) Fields() Dict {
-	return make(Dict)
+func (n *Parbreak) Fields() *Dict {
+	return new(Dict)
 }
 
 func (n *Parbreak) SetLabel(label *Label) *Label {
@@ -378,13 +378,13 @@ func (n *Raw) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Raw) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Block.Value())] = n.Field(names.Block)
+func (n *Raw) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Block.Value()), n.Field(names.Block))
 	if f := n.Field(names.Lang); f != nil {
-		fields[Str(names.Lang.Value())] = f
+		fields.Elems.Put(Str(names.Lang.Value()), f)
 	}
-	fields[Str(names.Lines.Value())] = n.Field(names.Lines)
+	fields.Elems.Put(Str(names.Lines.Value()), n.Field(names.Lines))
 	return fields
 }
 
@@ -424,14 +424,14 @@ func (n *Ref) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Ref) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Target.Value())] = n.Field(names.Target)
+func (n *Ref) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Target.Value()), n.Field(names.Target))
 	if f := n.Field(names.Supplement); f != nil {
-		fields[Str(names.Supplement.Value())] = f
+		fields.Elems.Put(Str(names.Supplement.Value()), f)
 	}
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -471,11 +471,11 @@ func (n *Sequence) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Sequence) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Children.Value())] = n.Field(names.Children)
+func (n *Sequence) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -511,11 +511,11 @@ func (n *Strong) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Strong) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Body.Value())] = n.Field(names.Body)
+func (n *Strong) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -555,12 +555,12 @@ func (n *TermItem) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *TermItem) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Term.Value())] = n.Field(names.Term)
-	fields[Str(names.Description.Value())] = n.Field(names.Description)
+func (n *TermItem) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Term.Value()), n.Field(names.Term))
+	fields.Elems.Put(Str(names.Description.Value()), n.Field(names.Description))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -600,11 +600,11 @@ func (n *Terms) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Terms) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Children.Value())] = n.Field(names.Children)
+func (n *Terms) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }
@@ -640,11 +640,11 @@ func (n *Text) HasField(name unique.Handle[string]) bool {
 	}
 }
 
-func (n *Text) Fields() Dict {
-	fields := make(Dict)
-	fields[Str(names.Text.Value())] = n.Field(names.Text)
+func (n *Text) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Text.Value()), n.Field(names.Text))
 	if f := n.Field(names.Label); f != nil {
-		fields[Str(names.Label.Value())] = f
+		fields.Elems.Put(Str(names.Label.Value()), f)
 	}
 	return fields
 }

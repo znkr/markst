@@ -351,9 +351,9 @@ _hello
 │         For: "for"
 │         Space: " "
 │         Ident: "x"
+│         Error
+│           Msg: "expected keyword `in`"
 │         Space: " "
-│         Error: "items"
-│           Msg: "expected in"
 │         Ident: "items"
 │         Space: " "
 │         CodeBlock
@@ -548,8 +548,8 @@ _hello
 │             Named
 │               Error
 │                 Msg: "expected identifier"
-│               Error
-│                 Msg: "expected pattern"
+│               Error: "1"
+│                 Msg: "expected pattern, found int"
 │               Int: "1"
 │               Colon: ":"
 │               Space: " "
@@ -575,11 +575,7 @@ _hello
 │         For: "for"
 │         Error
 │           Msg: "expected pattern"
-│         Space: " "
-│         Error
-│           Msg: "expected expression"
-│       Error: "else"
-│         Msg: "expected in"
+│       Space: " "
 │       Error: "else"
 │         Msg: "unexpected keyword `else`"
 │       Space: " "
@@ -912,8 +908,8 @@ _hello
 │           Named
 │             Error
 │               Msg: "expected identifier"
-│             Error
-│               Msg: "expected pattern"
+│             Error: "1"
+│               Msg: "expected pattern, found int"
 │             Int: "1"
 │             Colon: ":"
 │             Space: " "
@@ -940,8 +936,6 @@ _hello
 │         Error
 │           Msg: "expected pattern"
 │         Space: " "
-│         Error: "+"
-│           Msg: "expected in"
 │         Binary
 │           Unary
 │             Plus: "+"
@@ -1069,4 +1063,144 @@ _hello
 │       Space: " "
 │       Int: "2"
 │     RightParen: ")"
+│   Space: "\n"
+
+--- for-loop-missing-pattern ---
+#for
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Error
+│       Msg: "expected pattern"
+│   Space: "\n"
+
+--- for-loop-missing-pattern-with-comment ---
+#for//
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Error
+│       Msg: "expected pattern"
+│   LineComment: "//"
+│   Space: "\n"
+
+--- for-loop-missing-pattern-in-code-block ---
+#{for}
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       ForLoop
+│         For: "for"
+│         Error
+│           Msg: "expected pattern"
+│     RightBrace: "}"
+│   Space: "\n"
+
+--- for-loop-missing-in ---
+#for v
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Ident: "v"
+│     Error
+│       Msg: "expected keyword `in`"
+│   Space: "\n"
+
+--- for-loop-missing-iterable ---
+#for v in
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Ident: "v"
+│     Space: " "
+│     In: "in"
+│     Error
+│       Msg: "expected expression"
+│   Space: "\n"
+
+--- for-loop-missing-body ---
+#for v in iter
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Ident: "v"
+│     Space: " "
+│     In: "in"
+│     Space: " "
+│     Ident: "iter"
+│     Error
+│       Msg: "expected block"
+│   Space: "\n"
+
+--- for-loop-pattern-on-next-line ---
+#for
+v in iter {}
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Error
+│       Msg: "expected pattern"
+│   Space: "\n"
+│   Text: "v in iter"
+│   Space: " "
+│   Text: "{}"
+│   Space: "\n"
+
+--- for-loop-string-as-pattern ---
+#for "v" in iter {}
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Error: "\"v\""
+│       Msg: "expected pattern, found string"
+│     Str: "\"v\""
+│     Space: " "
+│     In: "in"
+│     Space: " "
+│     Ident: "iter"
+│     Space: " "
+│     CodeBlock
+│       LeftBrace: "{"
+│       Code
+│       RightBrace: "}"
+│   Space: "\n"
+
+--- for-loop-binary-as-pattern ---
+#for a + b in iter {}
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Ident: "a"
+│     Error
+│       Msg: "expected keyword `in`"
+│     Space: " "
+│     Binary
+│       Unary
+│         Plus: "+"
+│         Space: " "
+│         Ident: "b"
+│       Space: " "
+│       In: "in"
+│       Space: " "
+│       Ident: "iter"
+│     Space: " "
+│     CodeBlock
+│       LeftBrace: "{"
+│       Code
+│       RightBrace: "}"
 │   Space: "\n"

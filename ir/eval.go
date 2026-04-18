@@ -3,6 +3,8 @@ package ir
 import (
 	"fmt"
 	"regexp"
+	"unicode"
+	"unicode/utf8"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
@@ -351,7 +353,7 @@ func (n *ArrayExpr) eval(ec *evalCtx) Value {
 				elems = append(elems, v.Elems...)
 			case None:
 				// spreading none produces no elements
-			case Dict:
+			case *Dict:
 				raise(&ValueError{
 					span: spread.span,
 					msg:  "cannot spread dictionary into array",
@@ -374,14 +376,14 @@ func (n *SpreadExpr) eval(ec *evalCtx) Value {
 }
 
 func (n *DictExpr) eval(ec *evalCtx) Value {
-	dict := make(Dict, len(n.entries))
+	dict := new(Dict)
 	for _, ent := range n.entries {
 		keyVal := ent.key.eval(ec)
 		keyStr, ok := keyVal.(Str)
 		if !ok {
 			panic("dictionary key did not evaluate to a string")
 		}
-		dict[keyStr] = ent.value.eval(ec)
+		dict.Elems.Put(keyStr, ent.value.eval(ec))
 	}
 	return dict
 }
@@ -496,8 +498,8 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 			}
 		}
 		switch t := t.(type) {
-		case Dict:
-			if val, ok := t[Str(fname.Value())]; ok {
+		case *Dict:
+			if val, ok := t.Elems.Get(Str(fname.Value())); ok {
 				return val
 			} else {
 				raise(&ValueError{
@@ -690,7 +692,107 @@ func (n *Conditional) eval(ec *evalCtx) Value {
 }
 
 func (n *ForLoop) eval(ec *evalCtx) Value {
-	panic("TODO: implement for loops")
+	iterable := n.iterable.eval(ec)
+
+	ec.openScope()
+	defer ec.closeScope()
+	var setters []setter
+	for _, p := range n.pattern {
+		switch p := p.(type) {
+		case *DestructIdent:
+			setters = append(setters, func(v Value) {
+				ec.bind(p.ident.name, v)
+			})
+		default:
+			panic(fmt.Sprintf("not implemented for %T", p))
+		}
+	}
+
+	switch iterable := iterable.(type) {
+	case *Array:
+		set := func(v Value) {
+			switch v := v.(type) {
+			case *Array:
+				if len(setters) != len(v.Elems) {
+					panic("mismatched number of setters and array elements")
+				}
+				for i, elem := range v.Elems {
+					setters[i](elem)
+				}
+			default:
+				if len(setters) != 1 {
+					panic("multiple setters for non-array value")
+				}
+				setters[0](v)
+			}
+		}
+		values := make([]Value, 0, len(iterable.Elems))
+		var joinSel joinerSelector
+		for _, e := range iterable.Elems {
+			set(e)
+			v := n.body.eval(ec)
+			values = append(values, v)
+			joinSel.add(v.Type())
+		}
+		joiner := joinSel.joiner()
+		for _, e := range values {
+			joiner.add(e)
+		}
+		return joiner.result()
+	case *Dict:
+		set := func(k, v Value) {
+			switch len(setters) {
+			case 1:
+				setters[0](&Array{Elems: []Value{k, v}})
+			case 2:
+				setters[0](k)
+				setters[1](v)
+			default:
+				panic("expected exactly one or two setters for dict destructuring")
+			}
+		}
+		values := make([]Value, 0, iterable.Elems.Len())
+		var joinSel joinerSelector
+		for k, v := range iterable.Elems.All() {
+			set(k, v)
+			v := n.body.eval(ec)
+			values = append(values, v)
+			joinSel.add(v.Type())
+		}
+		joiner := joinSel.joiner()
+		for _, e := range values {
+			joiner.add(e)
+		}
+		return joiner.result()
+	case Str:
+		if len(setters) != 1 {
+			raise(&ValueError{
+				span: n.PatternSpan(),
+				msg:  "cannot destructure values of string",
+			})
+			panic("unreachable")
+		}
+		set := setters[0]
+		var values []Value
+		var joinSel joinerSelector
+		for g := range graphemes(string(iterable)) {
+			set(Str(g))
+			v := n.body.eval(ec)
+			values = append(values, v)
+			joinSel.add(v.Type())
+		}
+		joiner := joinSel.joiner()
+		for _, e := range values {
+			joiner.add(e)
+		}
+		return joiner.result()
+	default:
+		raise(&ValueError{
+			span: n.iterable.Span(),
+			msg:  fmt.Sprintf("cannot loop over %s", iterable.Type()),
+		})
+		panic("unreachable")
+	}
 }
 
 func (n *WhileLoop) eval(ec *evalCtx) Value {
@@ -714,3 +816,32 @@ func (n *FuncReturn) eval(ec *evalCtx) Value {
 func (n *Contextual) eval(ec *evalCtx) Value { panic("TODO: implement contextual") }
 
 func (n *ModuleInclude) eval(ec *evalCtx) Value { panic("TODO: implement module include") }
+
+// graphemes iterates over Unicode grapheme clusters in s.
+// This handles combining marks and ZWJ emoji sequences.
+func graphemes(s string) func(yield func(string) bool) {
+	return func(yield func(string) bool) {
+		for len(s) > 0 {
+			_, size := utf8.DecodeRuneInString(s)
+			end := size
+			// Extend to include combining marks, ZWJ sequences, and variation selectors.
+			for end < len(s) {
+				r, sz := utf8.DecodeRuneInString(s[end:])
+				if unicode.Is(unicode.M, r) || r == 0x200D || (r >= 0xFE00 && r <= 0xFE0F) {
+					end += sz
+					// After ZWJ, also consume the next character.
+					if r == 0x200D && end < len(s) {
+						_, sz2 := utf8.DecodeRuneInString(s[end:])
+						end += sz2
+					}
+				} else {
+					break
+				}
+			}
+			if !yield(s[:end]) {
+				return
+			}
+			s = s[end:]
+		}
+	}
+}

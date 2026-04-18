@@ -53,7 +53,7 @@ func TestEval(t *testing.T) {
 							Positional: []ir.Param{{Type: types.Any}, {Type: types.Any}},
 							F: func(fcc *ir.FuncCallContext, args []ir.Value, named ir.NamedArgsWithDefaults) (ir.Value, error) {
 								got, want := args[0], args[1]
-								if !got.Equal(want) {
+								if !ir.Equal(got, want) {
 									call := tc.Input[fcc.Span.Start:fcc.Span.End]
 									t.Errorf("test failure: %s\n\n\twant: %s\t got: %s", call, ir.FormatValue(want), ir.FormatValue(got))
 								}

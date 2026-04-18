@@ -16,7 +16,11 @@ var (
 )
 
 func builtinDictAtImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
-	dict := args[0].(Dict)
+	dict := args[0].(*Dict)
 	key := args[1].(Str)
-	return dict[key], nil
+	value, ok := dict.Elems.Get(key)
+	if !ok {
+		return none, nil
+	}
+	return value, nil
 }

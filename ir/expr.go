@@ -552,18 +552,20 @@ func (n *WhileLoop) Body() *CodeBlock { return n.body }
 
 type ForLoop struct {
 	expr
-	pattern  []DestructPattern
-	iterable Expr
-	body     *CodeBlock
+	pattern     []DestructPattern
+	patternSpan syntax.Span
+	iterable    Expr
+	body        Expr
 }
 
-func NewForLoop(span syntax.Span, pattern []DestructPattern, iterable Expr, body *CodeBlock) *ForLoop {
-	return &ForLoop{expr: expr{span: span}, pattern: pattern, iterable: iterable, body: body}
+func NewForLoop(span syntax.Span, pattern []DestructPattern, patternSpan syntax.Span, iterable Expr, body Expr) *ForLoop {
+	return &ForLoop{expr: expr{span: span}, pattern: pattern, patternSpan: patternSpan, iterable: iterable, body: body}
 }
 
 func (n *ForLoop) Pattern() []DestructPattern { return n.pattern }
+func (n *ForLoop) PatternSpan() syntax.Span   { return n.patternSpan }
 func (n *ForLoop) Iterable() Expr             { return n.iterable }
-func (n *ForLoop) Body() *CodeBlock           { return n.body }
+func (n *ForLoop) Body() Expr                 { return n.body }
 
 type LoopBreak struct {
 	expr

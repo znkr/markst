@@ -752,21 +752,22 @@ func (n *Array) format(f *formatter) {
 	f.str(")")
 }
 
-func (n Dict) format(f *formatter) {
+func (n *Dict) format(f *formatter) {
 	f.prefix()
-	if len(n) == 0 {
+	if n.Elems.Len() == 0 {
 		f.str("(:)")
 		return
 	}
 	f.str("(")
-	for i, key := range slices.Sorted(maps.Keys(n)) {
-		value := n[key]
+	i := 0
+	for k, v := range n.Elems.All() {
 		if i > 0 {
 			f.str(", ")
 		}
-		key.format(f)
+		k.format(f)
 		f.str(": ")
-		value.format(f)
+		v.format(f)
+		i++
 	}
 	f.str(")")
 }

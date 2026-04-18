@@ -7,6 +7,13 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Equal compares two values using the same promotion rules as the == operator
+// in the language.
+func Equal(a, b Value) bool {
+	x, y := promote(syntax.Eq, a, b)
+	return x.Equal(y)
+}
+
 func labelEqual(a, b *Label) bool {
 	if a == nil && b == nil {
 		return true
@@ -118,12 +125,12 @@ func (n *Array) Equal(other Value) bool {
 }
 
 func (n Dict) Equal(other Value) bool {
-	o, ok := other.(Dict)
-	if !ok || len(n) != len(o) {
+	o, ok := other.(*Dict)
+	if !ok || n.Elems.Len() != o.Elems.Len() {
 		return false
 	}
-	for k, v := range n {
-		ov, exists := o[k]
+	for k, v := range n.Elems.All() {
+		ov, exists := o.Elems.Get(k)
 		if !exists {
 			return false
 		}

@@ -7,10 +7,12 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"unique"
 
 	"github.com/woodsbury/decimal128"
+	"znkr.io/writst/internal/ordered"
 	"znkr.io/writst/ir/types"
 	"znkr.io/writst/syntax"
 )
@@ -87,6 +89,14 @@ type Relative struct {
 // Angle represents an angle in radians.
 type Angle float64
 
+func (n None) String() string { return "none" }
+
+func (n Auto) String() string { return "auto" }
+
+func (n Bool) String() string { return fmt.Sprintf("%t", n) }
+
+func (n Int) String() string { return strconv.FormatInt(int64(n), 10) }
+
 func (n Ratio) String() string {
 	return fmt.Sprintf("%g%%", float64(n)*100)
 }
@@ -99,14 +109,28 @@ func (n Float) String() string {
 	v := float64(n)
 	switch {
 	case math.IsInf(v, 1):
-		return "inf"
+		return "float.inf"
 	case math.IsInf(v, -1):
-		return "-inf"
+		return "float.-inf"
 	case math.IsNaN(v):
 		return "float.nan"
 	default:
-		return fmt.Sprintf("%g", n)
+		s := strconv.FormatFloat(float64(v), 'f', -1, 64)
+		return s
 	}
+}
+
+func (n Decimal) String() string {
+	if decimal128.Decimal(n).IsInf(1) {
+		return "decimal.inf"
+	}
+	if decimal128.Decimal(n).IsInf(-1) {
+		return "decimal.-inf"
+	}
+	if decimal128.Decimal(n).IsNaN() {
+		return "decimal.nan"
+	}
+	return decimal128.Format(decimal128.Decimal(n), 'f', -1)
 }
 
 func (n Length) String() string {
@@ -179,13 +203,15 @@ type Array struct {
 }
 
 // Dict is an ordered dictionary mapping string keys to values.
-type Dict map[Str]Value
+type Dict struct {
+	Elems ordered.Map[Str, Value]
+}
 
 func (*Array) aValue() {}
-func (Dict) aValue()   {}
+func (*Dict) aValue()  {}
 
 func (*Array) Type() types.Type { return types.Array }
-func (Dict) Type() types.Type   { return types.Dict }
+func (*Dict) Type() types.Type  { return types.Dict }
 
 // Functions ///////////////////////////////////////////////////////////////////
 
@@ -486,7 +512,7 @@ type Content interface {
 
 	Field(unique.Handle[string]) Value
 	HasField(unique.Handle[string]) bool
-	Fields() Dict
+	Fields() *Dict
 
 	aContent()
 }

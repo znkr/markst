@@ -544,7 +544,7 @@ func builtinArrayEnumerateImpl(_ *FuncCallContext, args []Value, named NamedArgs
 
 func builtinArrayToDictImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	arr := args[0].(*Array)
-	result := make(Dict)
+	result := new(Dict)
 	for _, elem := range arr.Elems {
 		pair, ok := elem.(*Array)
 		if !ok {
@@ -557,7 +557,7 @@ func builtinArrayToDictImpl(_ *FuncCallContext, args []Value, named NamedArgsWit
 		if !ok {
 			return nil, ArgErrorPosf(0, "expected key of type str, found %s", pair.Elems[0].Type())
 		}
-		result[key] = pair.Elems[1]
+		result.Elems.Put(key, pair.Elems[1])
 	}
 	return result, nil
 }

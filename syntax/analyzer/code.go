@@ -441,14 +441,35 @@ func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {
 }
 
 func (a *analyzer) analyzeForLoop(n syntax.Node) *ir.ForLoop {
+	// Check for error nodes or incomplete structure in the ForLoop children.
+	// This happens when the parser bails early due to syntax errors.
+	hasErrors := false
+	hasIn := false
+	for _, child := range n.(*syntax.Inner).Children() {
+		if err, ok := child.(*syntax.Error); ok {
+			a.error(err)
+			hasErrors = true
+		}
+		if child.Kind() == syntax.KindIn {
+			hasIn = true
+		}
+	}
+	// If there are errors, or the structure is incomplete (no `in` keyword),
+	// skip further processing. An incomplete for loop without an error node
+	// can happen when the parser bails out to avoid cascading errors.
+	if hasErrors || !hasIn {
+		return nil
+	}
+
 	ns := a.inner(n, syntax.KindForLoop)
 	defer ns.finish()
 	ns.take(syntax.KindFor)
-	pattern := a.unpackDestructuringPattern(ns.node())
+	patternNode := ns.node()
+	pattern := a.unpackDestructuringPattern(patternNode)
 	ns.take(syntax.KindIn)
 	iterable := a.analyzeExpr(ns.node())
-	body := a.analyzeCodeBlock(ns.node())
-	return ir.NewForLoop(n.Span(), pattern, iterable, body)
+	body := a.analyzeBlock(ns.node())
+	return ir.NewForLoop(n.Span(), pattern, patternNode.Span(), iterable, body)
 }
 
 func (a *analyzer) analyzeLoopBreak(n syntax.Node) *ir.LoopBreak {

@@ -220,6 +220,14 @@ func (p *parser) expect(kind syntax.Kind) bool {
 		p.expected(kind.Name())
 		p.next()
 		return false
+	} else if syntax.Keywords.Contains(kind) {
+		// For keyword expectations, use "keyword `x`" format.
+		// Don't create an error if the current token is already an error (e.g., unclosed string),
+		// or if there's already an error at this position (e.g., "expected pattern").
+		if p.cur.kind != syntax.KindError {
+			p.expected(fmt.Sprintf("keyword `%s`", kind.Name()))
+		}
+		return false
 	} else {
 		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
 		p.nodes = append(p.nodes, n)
@@ -1001,7 +1009,8 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 	if !reassignment {
 		node := p.nodes[start]
 		if node.Kind() != syntax.KindIdent {
-			p.expectedAt(start, "pattern")
+			err := asErrorNode(node, "expected pattern, found %s", node.Kind().Name())
+			p.nodes = slices.Insert(p.nodes, start, syntax.Node(err))
 		}
 	}
 }
@@ -1274,7 +1283,16 @@ func (p *parser) parseForLoop() {
 	start := len(p.nodes)
 	p.assert(syntax.KindFor)
 
+	patternStart := len(p.nodes)
 	p.parsePattern(false)
+	// Check if pattern parsing produced an error
+	hasPatternError := false
+	for i := patternStart; i < len(p.nodes); i++ {
+		if p.nodes[i].Kind() == syntax.KindError {
+			hasPatternError = true
+			break
+		}
+	}
 
 	if p.at(syntax.KindComma) {
 		err := p.unexpected()
@@ -1284,7 +1302,18 @@ func (p *parser) parseForLoop() {
 		}
 	}
 
-	p.expect(syntax.KindIn)
+	// If there was a pattern error, don't also report "expected keyword `in`".
+	// Just consume `in` if present and continue.
+	if hasPatternError {
+		p.consumeIf(syntax.KindIn)
+	} else if !p.expect(syntax.KindIn) {
+		// Bail early if we're at a terminator or an error token (like unclosed string)
+		// to avoid cascading errors. Otherwise, try to continue recovery.
+		if p.atSet(syntax.Terminator) || p.cur.kind == syntax.KindError {
+			p.wrap(start, syntax.KindForLoop)
+			return
+		}
+	}
 	p.parseCodeExpr()
 	p.parseBlock()
 	p.wrap(start, syntax.KindForLoop)

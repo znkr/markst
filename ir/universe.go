@@ -12,18 +12,22 @@ import (
 // from universe.
 var universe = &scope{
 	bindings: map[unique.Handle[string]]Value{
-		names.Array:     reflectedTypes[types.Array],
+		names.Angle:     reflectedTypes[types.Angle],
 		names.Arguments: reflectedTypes[types.Arguments],
+		names.Array:     reflectedTypes[types.Array],
 		names.Bytes:     reflectedTypes[types.Bytes],
+		names.Content:   reflectedTypes[types.Content],
 		names.Decimal:   reflectedTypes[types.Decimal],
-		names.Int:       reflectedTypes[types.Int],
 		names.Float:     reflectedTypes[types.Float],
+		names.Fraction:  reflectedTypes[types.Fraction],
+		names.Int:       reflectedTypes[types.Int],
+		names.Label:     reflectedTypes[types.Label],
 		names.Range:     builtinRange,
+		names.Ratio:     reflectedTypes[types.Ratio],
+		names.Relative:  reflectedTypes[types.Relative],
 		names.Repr:      builtinRepr,
 		names.Str:       reflectedTypes[types.Str],
 		names.Type:      reflectedTypes[types.ReflectedType],
-		names.Label:     reflectedTypes[types.Label],
-		names.Content:   reflectedTypes[types.Content],
 	},
 }
 
