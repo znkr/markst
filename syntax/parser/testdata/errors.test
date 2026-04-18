@@ -581,7 +581,7 @@ _hello
 │       Error: "else"
 │         Msg: "expected in"
 │       Error: "else"
-│         Msg: "unexpected else"
+│         Msg: "unexpected keyword `else`"
 │       Space: " "
 │       Ident: "items"
 │       Error

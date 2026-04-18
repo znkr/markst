@@ -20,6 +20,7 @@ var universe = &scope{
 		names.Str:       reflectedTypes[types.Str],
 		names.Type:      reflectedTypes[types.ReflectedType],
 		names.Label:     reflectedTypes[types.Label],
+		names.Content:   reflectedTypes[types.Content],
 	},
 }
 

@@ -230,6 +230,10 @@
 #{ let (a, b) = pair }
 │ #{ let (a, b) = pair }
 
+--- let-binding-without-assignment ---
+#{ let x }
+│ #{ let x }
+
 --- let-function ---
 #{ let add(x, y) = x + y }
 │ #{ let add(x, y) = x + y }

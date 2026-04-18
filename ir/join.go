@@ -94,6 +94,9 @@ type strJoiner struct {
 }
 
 func (j *strJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	j.sb.WriteString(string(v.(Str)))
 	return nil
 }
@@ -104,6 +107,9 @@ type bytesJoiner struct {
 }
 
 func (j *bytesJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	j.sb.WriteString(string(v.(Bytes)))
 	return nil
 }
@@ -114,6 +120,9 @@ type contentJoiner struct {
 }
 
 func (j *contentJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	c, err := toContent(v)
 	if err != nil {
 		return err
@@ -138,6 +147,9 @@ type dictJoiner struct {
 }
 
 func (j *dictJoiner) add(v Value) error {
+	if v == none {
+		return nil
+	}
 	if j.dict == nil {
 		j.dict = make(Dict)
 	}

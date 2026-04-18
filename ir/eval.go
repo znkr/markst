@@ -632,7 +632,15 @@ func (n *LetBinding) eval(ec *evalCtx) Value {
 	for _, p := range n.pattern {
 		switch p := p.(type) {
 		case *DestructIdent:
-			ec.bind(p.ident.name, n.value.eval(ec))
+			var v Value
+			if n.value != nil {
+				// #let x = ...
+				v = n.value.eval(ec)
+			} else {
+				// #let x
+				v = none
+			}
+			ec.bind(p.ident.name, v)
 		default:
 			panic("TODO: implement complex let patterns")
 		}
@@ -656,11 +664,14 @@ func (n *ShowRule) eval(ec *evalCtx) Value {
 
 func (n *Conditional) eval(ec *evalCtx) Value {
 	for i, cond := range n.conditions {
-		cond, ok := cond.eval(ec).(Bool)
-		if !ok {
-			panic("condition did not evaluate to a boolean")
+		condV := cond.eval(ec)
+		if condV.Type() != types.Bool {
+			raise(&ValueError{
+				span: cond.Span(),
+				msg:  fmt.Sprintf("expected boolean, found %s", condV.Type()),
+			})
 		}
-		if cond {
+		if condV.(Bool) {
 			return n.blocks[i].eval(ec)
 		}
 	}

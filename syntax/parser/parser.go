@@ -201,7 +201,12 @@ func (p *parser) expect(kind syntax.Kind) bool {
 
 func (p *parser) unexpected() *syntax.Error {
 	p.trimErrors()
-	n := asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
+	var n *syntax.Error
+	if syntax.Keywords.Contains(p.cur.kind) {
+		n = asErrorNode(p.cur.node, "unexpected keyword `%s`", p.cur.kind.Name())
+	} else {
+		n = asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
+	}
 	p.nodes = append(p.nodes, n)
 	p.next() // skip the error node we just inserted
 	return n

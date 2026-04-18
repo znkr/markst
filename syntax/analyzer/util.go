@@ -42,6 +42,10 @@ func (a *analyzer) expect(kind syntax.Kind, n syntax.Node) {
 	}
 }
 
+func (a *analyzer) unexpected(n syntax.Node) {
+	panic(unexpected{n: n})
+}
+
 func (a *analyzer) handleRecover(p0 any) bool {
 	if p0 == nil {
 		return false

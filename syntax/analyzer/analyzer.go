@@ -27,10 +27,15 @@ func (a *analyzer) error(n *syntax.Error) {
 
 func (a *analyzer) analyzeMarkup(n syntax.Node) []ir.Expr {
 	var body []ir.Expr
-	for n := range a.inner(n, syntax.KindMarkup).all() {
+	ns := a.inner(n, syntax.KindMarkup)
+	defer ns.finish()
+	for n := range ns.all() {
 		switch n.Kind() {
 		case syntax.KindHash:
 			// skip hash markers
+		case syntax.KindError:
+			// handle errors gracefully
+			a.error(n.(*syntax.Error))
 		default:
 			n0 := a.analyzeExpr(n)
 			if n0 == nil {
@@ -157,9 +162,9 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindUnderscore:
 		return ir.NewIdent(n.Span(), underscore)
 	case syntax.KindError:
-		a.error(n.(*syntax.Error))
-		return nil
+		a.unexpected(n)
 	default:
 		panic("unsupported syntax kind: " + n.Kind().String())
 	}
+	panic("never reached")
 }

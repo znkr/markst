@@ -426,8 +426,9 @@ func (a *analyzer) analyzeBlock(n syntax.Node) ir.Expr {
 	case syntax.KindContentBlock:
 		return a.analyzeContentBlock(n)
 	default:
-		panic("invalid block: " + n.Kind().String())
+		a.unexpected(n)
 	}
+	panic("never reached")
 }
 
 func (a *analyzer) analyzeWhileLoop(n syntax.Node) *ir.WhileLoop {

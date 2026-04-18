@@ -12,6 +12,7 @@ var (
 	Bytes       = unique.Make("bytes")
 	Children    = unique.Make("children")
 	Chunks      = unique.Make("chunks")
+	Content     = unique.Make("content")
 	Count       = unique.Make("count")
 	Decimal     = unique.Make("decimal")
 	Default     = unique.Make("default")
