@@ -50,6 +50,8 @@ func (a *analyzer) analyzeMarkup(n syntax.Node) []ir.Expr {
 	defer ns.finish()
 	for n := range ns.all() {
 		switch n.Kind() {
+		case syntax.KindSemicolon:
+			continue
 		case syntax.KindHash:
 			// skip hash markers
 		case syntax.KindError:

@@ -217,7 +217,9 @@ func (p *parser) expect(kind syntax.Kind) bool {
 		return true
 	} else if kind == syntax.KindIdent && syntax.Keywords.Contains(p.cur.kind) {
 		p.trimErrors()
-		p.expected(kind.Name())
+		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
+		n.Hint(fmt.Sprintf("keyword `%s` is not allowed as an identifier; try `%s_` instead", p.cur.kind.Name(), p.cur.kind.Name()))
+		p.nodes = append(p.nodes, n)
 		p.next()
 		return false
 	} else if syntax.Keywords.Contains(kind) {
@@ -229,9 +231,17 @@ func (p *parser) expect(kind syntax.Kind) bool {
 		}
 		return false
 	} else {
-		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
-		p.nodes = append(p.nodes, n)
 		if p.cur.kind == syntax.KindError {
+			// Current token is already an error; consume it.
+			p.consume()
+		} else if syntax.Terminator.Contains(p.cur.kind) {
+			// Don't consume closing delimiters or terminators — let the
+			// enclosing construct handle them. Use a zero-width error instead.
+			p.expected(kind.Name())
+		} else {
+			// Convert the current token to an error and consume it.
+			n := asErrorNode(p.cur.node, "expected %s", kind.Name())
+			p.nodes = append(p.nodes, n)
 			p.next()
 		}
 		return false
@@ -558,7 +568,8 @@ func (p *parser) parseEmbeddedCodeExpr() {
 		p.parseCodeExprPrec(true, 0)
 
 		// Consume error for things like `#12p` or `#"abc\"`.
-		if !at {
+		// Don't do this at a terminator to avoid consuming the next line's token.
+		if !at && !p.atSet(syntax.Terminator) {
 			p.unexpected()
 		}
 
@@ -706,17 +717,24 @@ func (p *parser) parseCodePrimary(atomic bool) {
 		}
 
 	case syntax.KindUnderscore:
+		if atomic {
+			n := asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
+			p.nodes = append(p.nodes, n)
+			p.next()
+			break
+		}
+
 		p.consume()
-		if !atomic && p.at(syntax.KindArrow) {
+		if p.at(syntax.KindArrow) {
 			p.wrap(start, syntax.KindParams)
 			p.assert(syntax.KindArrow)
 			p.parseCodeExpr()
 			p.wrap(start, syntax.KindClosure)
-		} else if !atomic && p.consumeIf(syntax.KindEq) {
+		} else if p.consumeIf(syntax.KindEq) {
 			p.parseCodeExpr()
 			p.wrap(start, syntax.KindDestructAssignment)
 		} else {
-			p.expectedAt(start, "expression")
+			p.nodes[start] = asErrorNode(p.nodes[start], "expected expression, found %s", syntax.KindUnderscore.Name())
 		}
 
 	case syntax.KindLeftBrace:
@@ -831,7 +849,7 @@ func (p *parser) parseExprWithParen(atomic bool) {
 	} else if p.at(syntax.KindEq) && kind != syntax.KindParenthesized {
 		p.restore(cp)
 		start := len(p.nodes)
-		p.parseDestructuringOrParenthesized(true)
+		p.parseDestructuringOrParenthesized(true, false)
 		if !p.expect(syntax.KindEq) {
 			return
 		}
@@ -907,17 +925,17 @@ func (p *parser) parsePattern(reassignment bool) {
 	case syntax.KindUnderscore:
 		p.consume()
 	case syntax.KindLeftParen:
-		p.parseDestructuringOrParenthesized(reassignment)
+		p.parseDestructuringOrParenthesized(reassignment, true)
 	default:
 		p.parsePatternLeaf(reassignment)
 	}
 }
 
 // parseDestructuringOrParenthesized parses a destructuring pattern or just a parenthesized pattern.
-func (p *parser) parseDestructuringOrParenthesized(reassignment bool) {
+func (p *parser) parseDestructuringOrParenthesized(reassignment bool, isDestruct bool) {
 	var sink bool
 	var count int
-	var notJustParens bool
+	notJustParens := isDestruct
 
 	start := len(p.nodes)
 	p.withNewlineMode(nlContinue, func() {
@@ -988,11 +1006,14 @@ func (p *parser) parseDestructuringItem(reassignment bool, notJustParens *bool, 
 	}
 }
 
-// parsePatternLeaf parses a leaf in a pattern - either an identifier or an expression
-// depending on whether it's a binding or reassignment pattern.
+// parsePatternLeaf parses a leaf in a pattern - either an identifier or an
+// expression depending on whether it's a binding or reassignment pattern.
 func (p *parser) parsePatternLeaf(reassignment bool) {
 	if p.atSet(syntax.Keywords) {
-		p.expected("pattern")
+		n := asErrorNode(p.cur.node, "expected pattern, found keyword `%s`", p.cur.kind.Name())
+		n.Hint(fmt.Sprintf("keyword `%s` is not allowed as an identifier; try `%s_` instead", p.cur.kind.Name(), p.cur.kind.Name()))
+		p.nodes = append(p.nodes, n)
+		p.next()
 		return
 	} else if !p.atSet(syntax.PatternLeaf) {
 		p.expected("pattern")
@@ -1010,7 +1031,7 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 		node := p.nodes[start]
 		if node.Kind() != syntax.KindIdent {
 			err := asErrorNode(node, "expected pattern, found %s", node.Kind().Name())
-			p.nodes = slices.Insert(p.nodes, start, syntax.Node(err))
+			p.nodes[start] = err
 		}
 	}
 }
@@ -1191,6 +1212,10 @@ func (p *parser) parseLetBinding() {
 	} else {
 		p.parsePattern(false)
 		other = true
+		if p.directlyAt(syntax.KindLeftParen) {
+			p.parseParams()
+			closure = true
+		}
 	}
 
 	if closure || other {

@@ -284,6 +284,9 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 		params = []ir.ClosureParam{ir.NewPositionalClosureParam(ir.NewIdent(n.Span(), underscore))}
 	case syntax.KindParams:
 		params = a.analyzeClosureParams(n)
+	case syntax.KindDestructuring:
+		// Unsupported (pattern)(params) => body
+		a.unexpected(syntax.NewError(n.Span(), "expected identifier or parameters", ""))
 	default:
 		panic("invalid closure syntax: " + n.Kind().String())
 	}
@@ -291,6 +294,9 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 	// Skip arrow or eq
 	if ns.at(syntax.KindArrow) || ns.at(syntax.KindEq) {
 		ns.node()
+	}
+	if ns.done() {
+		a.expected(ns, "expression")
 	}
 	body := a.analyzeExpr(ns.node())
 	return ir.NewClosure(n.Span(), name, params, body)
@@ -350,6 +356,9 @@ func (a *analyzer) analyzeLetBinding(n syntax.Node) *ir.LetBinding {
 	ns.take(syntax.KindLet)
 	if ns.at(syntax.KindClosure) {
 		closure := a.analyzeClosure(ns.node())
+		if closure == nil {
+			return nil
+		}
 		return ir.NewLetBinding(
 			n.Span(),
 			[]ir.DestructPattern{ir.NewDestructIdent(closure.Name())},
@@ -361,6 +370,8 @@ func (a *analyzer) analyzeLetBinding(n syntax.Node) *ir.LetBinding {
 	if ns.at(syntax.KindEq) {
 		ns.node() // consume eq
 		value = a.analyzeExpr(ns.node())
+	} else if ns.at(syntax.KindError) {
+		a.error(ns.node().(*syntax.Error))
 	}
 	return ir.NewLetBinding(n.Span(), pattern, value)
 }
@@ -560,6 +571,8 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPatter
 			ns.take(syntax.KindDots)
 			ident := a.analyzeIdent(ns.node())
 			pattern = append(pattern, ir.NewDestructSink(ident))
+		case syntax.KindError:
+			a.error(child.(*syntax.Error))
 		default:
 			panic("invalid destruct pattern: " + child.Kind().String())
 		}

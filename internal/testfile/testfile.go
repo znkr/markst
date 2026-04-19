@@ -37,7 +37,7 @@ var header = regexp.MustCompile(`^([a-z][a-z0-9-]*)(?: +\(skip: (.*)\))?$`)
 
 // Read parses a golden test file at path and returns the test cases.
 // It calls t.Fatal on I/O errors or invalid file format.
-func Read(t *testing.T, path string) []Test {
+func Read(t testing.TB, path string) []Test {
 	t.Helper()
 	var tests []Test
 	var name string
@@ -99,7 +99,7 @@ func Read(t *testing.T, path string) []Test {
 // Update rewrites the golden test file at path with updated expected output
 // from the given tests. Test names must match the existing file; only the
 // expected output sections are replaced. Preamble comments are preserved.
-func Update(t *testing.T, path string, tests []Test) {
+func Update(t testing.TB, path string, tests []Test) {
 	t.Helper()
 	var buf bytes.Buffer
 	cur := 0
@@ -163,7 +163,7 @@ type token struct {
 	lineno int
 }
 
-func scan(t *testing.T, path string) iter.Seq[token] {
+func scan(t testing.TB, path string) iter.Seq[token] {
 	t.Helper()
 	return func(yield func(token) bool) {
 		file, err := os.Open(path)

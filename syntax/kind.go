@@ -234,7 +234,7 @@ var kinds = [...]string{
 	KindSlash:        "slash",
 	KindHat:          "hat",
 	KindDot:          "dot",
-	KindEq:           "=",
+	KindEq:           "equals sign",
 	KindEqEq:         "==",
 	KindExclEq:       "!=",
 	KindLt:           "<",
@@ -273,7 +273,7 @@ var kinds = [...]string{
 
 	KindCode:               "code",
 	KindIdent:              "identifier",
-	KindBool:               "bool",
+	KindBool:               "boolean",
 	KindInt:                "int",
 	KindFloat:              "float",
 	KindNumeric:            "numeric",

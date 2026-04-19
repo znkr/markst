@@ -42,6 +42,16 @@ func (a *analyzer) expect(kind syntax.Kind, n syntax.Node) {
 	}
 }
 
+func (a *analyzer) expected(ns *nodes, expected string) {
+	span := syntax.Span{
+		Start: ns.items[ns.pos-1].Span().End,
+		End:   ns.items[ns.pos-1].Span().End,
+	}
+	panic(unexpected{
+		n: syntax.NewError(span, fmt.Sprintf("expected %s", expected), ""),
+	})
+}
+
 func (a *analyzer) unexpected(n syntax.Node) {
 	panic(unexpected{n: n})
 }

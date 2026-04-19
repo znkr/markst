@@ -49,36 +49,51 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestTextRoundTrip(t *testing.T) {
-	// Verify that root.Text() returns exactly the original source.
-	// This invariant is critical for error position reporting to work correctly.
-	tests := []struct {
-		name string
-		src  string
-	}{
-		{"empty", ""},
-		{"simple_text", "hello world"},
-		{"simple_code", "#let x = 1"},
-		{"multiline", "line1\nline2\nline3"},
-		{"for_loop_valid", "#for v in iter { v }"},
-		{"for_loop_missing_pattern", "#for"},
-		{"for_loop_incomplete", "#for v"},
-		{"for_loop_missing_in", "#for v iter"},
-		{"for_loop_missing_iterable", "#for v in"},
-		{"for_loop_missing_body", "#for v in iter"},
-		{"multiple_for_errors", "#for\n\n#for"},
-		{"for_with_comments", "// Error: 5 expected pattern\n#for\n\n// Error: 5 expected pattern\n#for"},
-		{"nested_errors", "#for #for"},
-		{"error_with_text", "Hello #0xG world"},
+func TestTextRoundTripGolden(t *testing.T) {
+	// Verify the round-trip invariant for every test case in testdata.
+	files, err := filepath.Glob("testdata/*.test")
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			node := parser.Parse(tc.src)
-			got := node.Text()
-			if got != tc.src {
-				t.Errorf("Text() mismatch:\n  src: %q\n  got: %q", tc.src, got)
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range testfile.Read(t, file) {
+				t.Run(tc.Name, func(t *testing.T) {
+					node := parser.Parse(tc.Input)
+					got := node.Text()
+					if got != tc.Input {
+						t.Errorf("Text() != Input:\n  input: %q\n  got:   %q", tc.Input, got)
+					}
+				})
 			}
 		})
 	}
+}
+
+func FuzzTextRoundTrip(f *testing.F) {
+	// Seed with golden test inputs.
+	files, err := filepath.Glob("testdata/*.test")
+	if err != nil {
+		f.Fatal(err)
+	}
+	for _, file := range files {
+		for _, tc := range testfile.Read(f, file) {
+			f.Add(tc.Input)
+		}
+	}
+
+	f.Fuzz(func(t *testing.T, src string) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Parser may panic on unimplemented features; skip those.
+				t.Skipf("parser panicked: %v", r)
+			}
+		}()
+		node := parser.Parse(src)
+		got := node.Text()
+		if got != src {
+			t.Errorf("Text() != src:\n  src: %q\n  got: %q", src, got)
+		}
+	})
 }

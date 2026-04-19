@@ -39,9 +39,9 @@
 │       FieldAccess
 │         Ident: "foo"
 │         Dot: "."
-│         Space: " "
-│       Error: "}"
-│         Msg: "expected identifier"
+│         Error
+│           Msg: "expected identifier"
+│       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -174,9 +174,9 @@ _hello
 │         Str: "\"foo\""
 │         Space: " "
 │         As: "as"
-│         Space: " "
-│       Error: "}"
-│         Msg: "expected identifier"
+│         Error
+│           Msg: "expected identifier"
+│       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -316,9 +316,8 @@ _hello
 │     LeftBrace: "{"
 │     Code
 │       Space: " "
-│       Error
-│         Msg: "expected expression"
-│       Underscore: "_"
+│       Error: "_"
+│         Msg: "expected expression, found underscore"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -383,9 +382,9 @@ _hello
 │           Space: " "
 │           Ident: "b"
 │           RightParen: ")"
-│         Space: " "
-│       Error: "}"
-│         Msg: "expected ="
+│         Error
+│           Msg: "expected equals sign"
+│       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -400,14 +399,8 @@ _hello
 │       SetRule
 │         Set: "set"
 │         Space: " "
-│         Error
-│           Msg: "expected argument list"
-│       Error
-│         Msg: "expected semicolon or line break"
-│       Error: "123"
-│         Msg: "expected identifier"
-│       FuncCall
-│         Int: "123"
+│         Error: "123"
+│           Msg: "expected identifier"
 │         Args
 │           LeftParen: "("
 │           Int: "1"
@@ -550,7 +543,6 @@ _hello
 │                 Msg: "expected identifier"
 │               Error: "1"
 │                 Msg: "expected pattern, found int"
-│               Int: "1"
 │               Colon: ":"
 │               Space: " "
 │               Int: "2"
@@ -573,21 +565,18 @@ _hello
 │       Space: " "
 │       ForLoop
 │         For: "for"
-│         Error
-│           Msg: "expected pattern"
-│       Space: " "
-│       Error: "else"
-│         Msg: "unexpected keyword `else`"
-│       Space: " "
-│       Ident: "items"
-│       Error
-│         Msg: "expected semicolon or line break"
-│       Space: " "
-│       CodeBlock
-│         LeftBrace: "{"
-│         Code
-│           Space: " "
-│         RightBrace: "}"
+│         Space: " "
+│         Error: "else"
+│           Msg: "expected pattern, found keyword `else`"
+│           Hint: "keyword `else` is not allowed as an identifier; try `else_` instead"
+│         Space: " "
+│         Ident: "items"
+│         Space: " "
+│         CodeBlock
+│           LeftBrace: "{"
+│           Code
+│             Space: " "
+│           RightBrace: "}"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -656,9 +645,9 @@ _hello
 │             Comma: ","
 │             Space: " "
 │             Ident: "y"
-│           Space: " "
-│       Error: "}"
-│         Msg: "expected ="
+│           Error
+│             Msg: "expected equals sign"
+│       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
 
@@ -715,10 +704,10 @@ _hello
 │     Space: " "
 │     Markup
 │       Text: "term"
-│     Space: "\n"
+│     Error
+│       Msg: "expected colon"
 │     Markup
-│   Error
-│     Msg: "expected colon"
+│   Space: "\n"
 
 --- non-ident-named-arg ---
 #{ foo(1: 2) }
@@ -758,9 +747,10 @@ _hello
 │         Str: "\"foo\""
 │         Space: " "
 │         As: "as"
-│         Error
-│           Msg: "expected identifier"
 │         Space: " "
+│         Error: "let"
+│           Msg: "expected identifier"
+│           Hint: "keyword `let` is not allowed as an identifier; try `let_` instead"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -880,7 +870,7 @@ _hello
 │       LetBinding
 │         Let: "let"
 │         Space: " "
-│         Parenthesized
+│         Destructuring
 │           LeftParen: "("
 │           Ident: "a"
 │           RightParen: ")"
@@ -910,7 +900,6 @@ _hello
 │               Msg: "expected identifier"
 │             Error: "1"
 │               Msg: "expected pattern, found int"
-│             Int: "1"
 │             Colon: ":"
 │             Space: " "
 │             Ident: "a"
@@ -1166,7 +1155,6 @@ v in iter {}
 │     Space: " "
 │     Error: "\"v\""
 │       Msg: "expected pattern, found string"
-│     Str: "\"v\""
 │     Space: " "
 │     In: "in"
 │     Space: " "
@@ -1203,4 +1191,25 @@ v in iter {}
 │       LeftBrace: "{"
 │       Code
 │       RightBrace: "}"
+│   Space: "\n"
+
+--- let-binding-keyword-in-markup ---
+#let as = 1 + 2
+│ Markup
+│   Hash: "#"
+│   LetBinding
+│     Let: "let"
+│     Space: " "
+│     Error: "as"
+│       Msg: "expected pattern, found keyword `as`"
+│       Hint: "keyword `as` is not allowed as an identifier; try `as_` instead"
+│     Space: " "
+│     Eq: "="
+│     Space: " "
+│     Binary
+│       Int: "1"
+│       Space: " "
+│       Plus: "+"
+│       Space: " "
+│       Int: "2"
 │   Space: "\n"
