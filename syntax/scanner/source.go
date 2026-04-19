@@ -7,6 +7,9 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// source implements [syntax.Source] using the newline offsets collected during
+// scanning. It maps between byte offsets and line/column positions using
+// binary search over the newline table.
 type source struct {
 	content  string
 	newlines []uint32

@@ -1,3 +1,17 @@
+// Package scanner implements the lexer (tokenizer) for Writst source code.
+//
+// The scanner operates in one of three lexical modes ([syntax.ModeMarkup],
+// [syntax.ModeMath], [syntax.ModeCode]) and produces tokens as ([syntax.Kind],
+// [syntax.Node]) pairs via the [Scanner.Next] method. The parser drives mode
+// switching by calling [Scanner.SetMode] as it enters and exits different
+// syntactic constructs (e.g. entering code mode after a # hash).
+//
+// Invalid input produces [syntax.KindError] tokens with an attached
+// [syntax.Error] node containing a diagnostic message and optional hints.
+//
+// Raw text blocks (backtick-delimited) are scanned as complete composite nodes
+// rather than individual tokens, since they require context-sensitive
+// whitespace handling (dedenting, trimming).
 package scanner
 
 import (
@@ -13,6 +27,11 @@ import (
 	"znkr.io/writst/syntax/scanner/internal/reader"
 )
 
+// Scanner tokenizes Writst source code. It is created with [New] and produces
+// tokens one at a time via [Next]. The parser controls the lexical mode via
+// [SetMode], which changes how the same characters are interpreted.
+//
+// A Scanner is not safe for concurrent use.
 type Scanner struct {
 	r *reader.Reader
 
@@ -27,18 +46,25 @@ type protoerr struct {
 	hints   []string
 }
 
+// New creates a scanner for the given source text, starting in markup mode.
 func New(src string) *Scanner {
 	return &Scanner{r: reader.New(src)}
 }
 
+// Mode returns the current lexical mode.
 func (s *Scanner) Mode() syntax.Mode {
 	return s.mode
 }
 
+// SetMode switches the scanner to the given lexical mode. This is called by
+// the parser when entering or leaving different syntactic contexts.
 func (s *Scanner) SetMode(mode syntax.Mode) {
 	s.mode = mode
 }
 
+// Source returns a [syntax.Source] that maps byte offsets to line/column
+// positions for the text being scanned. It should be called after scanning
+// is complete, as newline positions are tracked during scanning.
 func (s *Scanner) Source() syntax.Source {
 	return &source{
 		content:  s.r.Source(),
@@ -46,14 +72,23 @@ func (s *Scanner) Source() syntax.Source {
 	}
 }
 
+// Offset returns the current byte offset in the source text.
 func (s *Scanner) Offset() int {
 	return s.r.Offset()
 }
 
+// Seek moves the scanner to the given byte offset. Used by the parser for
+// backtracking.
 func (s *Scanner) Seek(offset int) {
 	s.r.Seek(offset)
 }
 
+// Next scans and returns the next token. It returns the token's kind and
+// either a [syntax.Leaf] node (for valid tokens) or a [syntax.Error] node
+// (for invalid input). At the end of input it returns [syntax.KindEnd].
+//
+// For raw text (backtick-delimited), Next returns a composite [syntax.Inner]
+// node of kind [syntax.KindRaw] containing the full raw block.
 func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	start := s.r.Offset()
 	ch := s.r.Next()
@@ -74,10 +109,13 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	}
 }
 
+// Column returns the current column number (0-based) in the source text.
 func (s *Scanner) Column() int {
 	return s.r.Column()
 }
 
+// Newline reports whether the most recently scanned token contained a newline.
+// The parser uses this to detect paragraph breaks and heading boundaries.
 func (s *Scanner) Newline() bool {
 	return s.newline
 }
