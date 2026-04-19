@@ -15,6 +15,8 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Value is the interface implemented by all Writst runtime values. Every value
+// has a [types.Type] and supports equality comparison.
 type Value interface {
 	Type() types.Type
 	Equal(Value) bool
@@ -23,8 +25,10 @@ type Value interface {
 	formattable
 }
 
-// Type ////////////////////////////////////////////////////////////////////////////////////////////
+// Type ////////////////////////////////////////////////////////////////////////
 
+// Type is a reflected Writst type value, used when the type itself is passed
+// as a value.
 type Type struct {
 	Reflected   types.Type
 	Constructor *Function
@@ -33,30 +37,54 @@ type Type struct {
 func (*Type) aValue()          {}
 func (*Type) Type() types.Type { return types.ReflectedType }
 
-// Scalars /////////////////////////////////////////////////////////////////////////////////////////
+// Scalars /////////////////////////////////////////////////////////////////////
 
+// None is the unit value, written as `none` in Writst.
 type None struct{}
+
+// Auto is the automatic value, written as `auto` in Writst.
 type Auto struct{}
+
+// Bool is a boolean value.
 type Bool bool
+
+// Int is a 64-bit signed integer.
 type Int int64
+
+// Float is a 64-bit floating-point number.
 type Float float64
 
+// Decimal is a 128-bit IEEE 754 decimal floating-point number.
 type Decimal decimal128.Decimal
+
+// Str is a string value.
 type Str string
+
+// Bytes is a byte string value.
 type Bytes string
 
+// Ratio represents a ratio (percentage), stored as a fraction of 1
+// (e.g. 0.5 for 50%).
 type Ratio float64
+
+// Fraction represents a fractional unit (e.g. 1fr, 2fr) used in layout.
 type Fraction float64
 
+// Length represents a physical length with absolute (pt) and font-relative
+// (em) components that are combined at layout time.
 type Length struct {
-	Pt float64
-	Em float64
+	Pt float64 // Points (absolute component)
+	Em float64 // Em units (font-relative component)
 }
 
+// Relative is the combination of a [Ratio] and a [Length], representing a
+// length that is partially proportional and partially absolute.
 type Relative struct {
 	Ratio  Ratio
 	Length Length
 }
+
+// Angle represents an angle in radians.
 type Angle float64
 
 func (n Ratio) String() string {
@@ -143,11 +171,14 @@ func (Length) Type() types.Type   { return types.Length }
 func (Relative) Type() types.Type { return types.Relative }
 func (Angle) Type() types.Type    { return types.Angle }
 
-// Collections /////////////////////////////////////////////////////////////////////////////////////
+// Collections /////////////////////////////////////////////////////////////////
 
+// Array is an ordered sequence of values.
 type Array struct {
 	Elems []Value
 }
+
+// Dict is an ordered dictionary mapping string keys to values.
 type Dict map[Str]Value
 
 func (*Array) aValue() {}
@@ -156,15 +187,33 @@ func (Dict) aValue()   {}
 func (*Array) Type() types.Type { return types.Array }
 func (Dict) Type() types.Type   { return types.Dict }
 
-// Functions ///////////////////////////////////////////////////////////////////////////////////////
+// Functions ///////////////////////////////////////////////////////////////////
 
+// Function represents a Writst function value, encompassing both user-defined
+// closures and built-in functions. It describes the parameter signature and
+// holds the implementation.
 type Function struct {
-	Name       string
-	Positional []Param     // allowed types for each positional argument
-	Variadic   *Param      // if set, collects remaining positional args into an *Array
-	Named      NamedParams // allowed named arguments (with default values)
-	WithArgs   *Arguments
-	F          func(call *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
+	// Name is the function's name.
+	Name string
+
+	// Positional describes the function's positional parameters in order.
+	Positional []Param
+
+	// Variadic, if set, describes the variadic parameter that collects any
+	// surplus positional arguments.
+	Variadic *Param
+
+	// Named describes the allowed named parameters.
+	Named NamedParams
+
+	// WithArgs, if set, contains arguments that are pre-bound to the function
+	// (partial application).
+	WithArgs *Arguments
+
+	// F is the function's implementation. It receives the call context and
+	// fully merged arguments (pre-bound + call-site) and returns the result or
+	// an error.
+	F func(call *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
 
 	// Bind, if set, overrides the default argument validation and slot
 	// mapping. It receives the merged arguments (WithArgs + call args) and
@@ -173,24 +222,32 @@ type Function struct {
 	Bind func(fn *Function, args *Arguments) (*Arguments, []int, error)
 }
 
+// NamedParams maps interned parameter names to their definitions.
 type NamedParams map[unique.Handle[string]]Param
 
+// Param describes a function parameter: its name, accepted types, and
+// optional default value (nil means required).
 type Param struct {
 	Name    string
 	Type    types.Set
 	Default Value
 }
 
+// NamedArgsWithDefaults pairs call-site named arguments with the function's
+// default values, providing [Get] and [IsSet] for convenient access.
 type NamedArgsWithDefaults struct {
 	Args     NamedArgs
 	Defaults NamedParams
 }
 
+// IsSet reports whether the named argument was explicitly provided at the call site.
 func (n *NamedArgsWithDefaults) IsSet(name unique.Handle[string]) bool {
 	_, ok := n.Args[name]
 	return ok
 }
 
+// Get returns the value of a named argument, falling back to its default
+// value if not explicitly provided, or [None] if there is no default.
 func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
 	v := n.Args[name]
 	if v == nil {
@@ -206,6 +263,9 @@ func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
 	return v
 }
 
+// With returns a copy of the function with args pre-bound (partial application).
+// This is used for method calls where the receiver is bound as the first
+// positional argument.
 func (n *Function) With(args *Arguments) (*Function, error) {
 	merged, _, err := n.bind(args)
 	if err != nil {
@@ -222,11 +282,11 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 	}, nil
 }
 
-// bind merges WithArgs with args, validates types and named arguments, and returns the merged
-// arguments along with a parameter slot mapping.
+// bind merges WithArgs with args, validates types and named arguments, and
+// returns the merged arguments along with a parameter slot mapping.
 //
-// mapping[paramIndex] is the arg index that fills that slot, or -1 if the slot uses its default, or
-// -2 if the slot is required but unfilled.
+// mapping[paramIndex] is the arg index that fills that slot, or -1 if the slot
+// uses its default, or -2 if the slot is required but unfilled.
 func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	merged := n.WithArgs.merge(args)
 	if n.Bind != nil {
@@ -238,7 +298,8 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 		return nil, nil, fmt.Errorf("too many positional arguments: expected at most %d, got %d", len(n.Positional), m)
 	}
 
-	// mapping[paramIndex]: arg index that fills the slot, -1 for default, -2 for unset.
+	// mapping[paramIndex]: arg index that fills the slot, -1 for default, -2
+	// for unset.
 	mapping := slices.Repeat([]int{-2}, len(n.Positional))
 
 	// Type-check each arg against the non-variadic parameter slots it could
@@ -263,7 +324,8 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 		argsLeft := nonVariadicArgs - i // args left including this one
 		matched := false
 		for slot := lo; slot <= hi; slot++ {
-			// Skip optional slots when remaining args can only cover required slots.
+			// Skip optional slots when remaining args can only cover required
+			// slots.
 			if n.Positional[slot].Default != nil && argsLeft <= reqRemaining {
 				continue
 			}
@@ -310,12 +372,14 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	return merged, mapping, nil
 }
 
+// FuncCallContext carries call-site information passed to function
+// implementations.
 type FuncCallContext struct {
 	Span syntax.Span
 
-	// setter can be set by the function to support assignment to the result of a function call,
-	// e.g. array.at(). This is a bit of a hack and there's probably better ways to support this,
-	// but it works for now.
+	// setter can be set by the function to support assignment to the result of
+	// a function call, e.g. array.at(). This is a bit of a hack and there's
+	// probably better ways to support this, but it works for now.
 	setter *setter
 }
 
@@ -364,8 +428,9 @@ func (n *Function) Apply(call *FuncCallContext, args *Arguments) (Value, error) 
 func (*Function) aValue()          {}
 func (*Function) Type() types.Type { return types.Function }
 
-// Arguments ///////////////////////////////////////////////////////////////////////////////////////
+// Arguments ///////////////////////////////////////////////////////////////////
 
+// Arguments holds positional and named arguments for a function call.
 type Arguments struct {
 	Positional []Value
 	Named      NamedArgs
@@ -406,10 +471,14 @@ func (n *Arguments) merge(args *Arguments) *Arguments {
 func (*Arguments) aValue()          {}
 func (*Arguments) Type() types.Type { return types.Arguments }
 
+// NamedArgs maps argument names to their values at a call site.
 type NamedArgs map[unique.Handle[string]]Value
 
-// Content /////////////////////////////////////////////////////////////////////////////////////////
+// Content /////////////////////////////////////////////////////////////////////
 
+// Content is the interface for values that represent document content. It
+// extends [Value] with label support and field access (for show/set rules).
+// All Content values have [types.Content] as their type.
 type Content interface {
 	Value
 
@@ -422,6 +491,8 @@ type Content interface {
 	aContent()
 }
 
+// Sequence is a flat list of content elements, produced by concatenating
+// content with the + operator or from markup blocks.
 type Sequence struct {
 	Children []Content `writst:"required"`
 	Label    *Label
@@ -553,8 +624,10 @@ func (*EnumItem) Type() types.Type  { return types.Content }
 func (*Terms) Type() types.Type     { return types.Content }
 func (*TermItem) Type() types.Type  { return types.Content }
 
-// Label ///////////////////////////////////////////////////////////////////////////////////////////
+// Label ///////////////////////////////////////////////////////////////////////
 
+// Label is a named marker that can be attached to content elements for
+// cross-referencing (e.g. <intro> in Writst markup).
 type Label struct {
 	Name unique.Handle[string]
 }
