@@ -1,3 +1,19 @@
+// Package analyzer performs semantic analysis on Writst's untyped concrete
+// syntax tree and produces the typed intermediate representation (IR) defined
+// in package [ir].
+//
+// The entry point is [Analyze], which walks the [syntax.RootNode] produced by
+// [parser.Parse] and converts each syntax node into an [ir.Expr] based on its
+// [syntax.Kind]. Markup constructs become content expressions (headings,
+// emphasis, etc.), code constructs become code expressions (let bindings,
+// function calls, closures, etc.).
+//
+// # Error Handling
+//
+// Scanner and parser errors are embedded in the syntax tree as [syntax.Error]
+// nodes. The analyzer collects these (along with any semantic errors it
+// discovers) into a [syntax.ErrorList] returned as the error value. If the tree
+// contains errors, the returned expression slice is nil.
 package analyzer
 
 import (
@@ -8,6 +24,9 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Analyze converts the syntax tree rooted at n into a slice of IR expressions.
+// If the tree contains any syntax errors, they are collected and returned as
+// a [syntax.ErrorList]; in that case the expression slice is nil.
 func Analyze(n syntax.RootNode) ([]ir.Expr, error) {
 	a := &analyzer{}
 	exprs := a.analyzeMarkup(n)
