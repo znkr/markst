@@ -6,6 +6,8 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Expr is the interface for all IR expression nodes. Each expression knows
+// its source [syntax.Span] and can be evaluated to produce a [Value].
 type Expr interface {
 	Span() syntax.Span
 
@@ -28,8 +30,9 @@ type expr struct {
 func (e *expr) Span() syntax.Span { return e.span }
 func (e *expr) aExpr()            {}
 
-// Content Expressions /////////////////////////////////////////////////////////////////////////////
+// Content Expressions /////////////////////////////////////////////////////////
 
+// HeadingExpr represents a section heading (= Introduction).
 type HeadingExpr struct {
 	expr
 	level int
@@ -128,8 +131,9 @@ func NewTermItemExpr(span syntax.Span, term, description []Expr) *TermItemExpr {
 func (n *TermItemExpr) Term() []Expr        { return n.term }
 func (n *TermItemExpr) Description() []Expr { return n.description }
 
-// Code Expressions ////////////////////////////////////////////////////////////////////////////////
+// Code Expressions ////////////////////////////////////////////////////////////
 
+// ConstExpr is a literal value.
 type ConstExpr struct {
 	expr
 	value Value
@@ -141,6 +145,7 @@ func NewConstExpr(span syntax.Span, value Value) *ConstExpr {
 
 func (n *ConstExpr) Value() Value { return n.value }
 
+// Ident is a variable reference, resolved at evaluation time via scope lookup.
 type Ident struct {
 	expr
 	name unique.Handle[string]
@@ -152,6 +157,7 @@ func NewIdent(span syntax.Span, name unique.Handle[string]) *Ident {
 
 func (n *Ident) Name() unique.Handle[string] { return n.name }
 
+// CodeBlock is a sequence of expressions in a code block ({ ... }).
 type CodeBlock struct {
 	expr
 	exprs []Expr
@@ -163,6 +169,7 @@ func NewCodeBlock(span syntax.Span, body []Expr) *CodeBlock {
 
 func (n *CodeBlock) Body() []Expr { return n.exprs }
 
+// ContentBlock is a content block ([ ... ]) that evaluates to Content.
 type ContentBlock struct {
 	expr
 	exprs []Expr
@@ -275,8 +282,9 @@ func NewFieldAccess(span syntax.Span, target Expr, field *Ident) *FieldAccess {
 func (n *FieldAccess) Target() Expr  { return n.target }
 func (n *FieldAccess) Field() *Ident { return n.field }
 
-// Arguments ///////////////////////////////////////////////////////////////////////////////////////
+// Arguments ///////////////////////////////////////////////////////////////////
 
+// Arg is a single argument in a function call's argument list.
 type Arg interface {
 	aArg()
 }
@@ -319,8 +327,9 @@ func (*ExprArg) aArg()   {}
 func (*NamedArg) aArg()  {}
 func (*SpreadArg) aArg() {}
 
-// Closure Parameters //////////////////////////////////////////////////////////////////////////////
+// Closure Parameters //////////////////////////////////////////////////////////
 
+// ClosureParam is a parameter in a closure definition.
 type ClosureParam interface {
 	aClosureParam()
 }
@@ -361,8 +370,10 @@ func (*PositionalClosureParam) aClosureParam() {}
 func (*NamedClosureParam) aClosureParam()      {}
 func (*SpreadClosureParam) aClosureParam()     {}
 
-// Functions ///////////////////////////////////////////////////////////////////////////////////////
+// Functions ///////////////////////////////////////////////////////////////////
 
+// FuncCall is a function or method invocation: f(x, y) or x.method(y).
+// Trailing content blocks are stored separately from parenthesized arguments.
 type FuncCall struct {
 	expr
 	callee Expr
@@ -378,6 +389,8 @@ func (n *FuncCall) Callee() Expr             { return n.callee }
 func (n *FuncCall) Args() []Arg              { return n.args }
 func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
 
+// Closure is a function definition: (x, y) => x + y, or a named function
+// via let binding.
 type Closure struct {
 	expr
 	name   *Ident
@@ -393,8 +406,9 @@ func (n *Closure) Name() *Ident           { return n.name }
 func (n *Closure) Params() []ClosureParam { return n.params }
 func (n *Closure) Body() Expr             { return n.body }
 
-// Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
+// Bindings & Rules ////////////////////////////////////////////////////////////
 
+// LetBinding is a let declaration: let x = 1 or let (a, b) = (1, 2).
 type LetBinding struct {
 	expr
 	pattern []DestructPattern
@@ -436,8 +450,9 @@ func NewShowRule(span syntax.Span, selector, transform Expr) *ShowRule {
 func (n *ShowRule) Selector() Expr  { return n.selector }
 func (n *ShowRule) Transform() Expr { return n.transform }
 
-// Destructuring ///////////////////////////////////////////////////////////////////////////////////
+// Destructuring ///////////////////////////////////////////////////////////////
 
+// Destructuring is a pattern that unpacks a value: (x, _, ..y).
 type Destructuring struct {
 	expr
 	items []Expr
@@ -462,6 +477,7 @@ func NewDestructAssignment(span syntax.Span, pattern []DestructPattern, value Ex
 func (n *DestructAssignment) Pattern() []DestructPattern { return n.pattern }
 func (n *DestructAssignment) Value() Expr                { return n.value }
 
+// DestructPattern is a single element in a destructuring pattern.
 type DestructPattern interface {
 	aDestructPattern()
 	format(f *formatter)
@@ -503,8 +519,9 @@ func (*DestructIdent) aDestructPattern() {}
 func (*DestructNamed) aDestructPattern() {}
 func (*DestructSink) aDestructPattern()  {}
 
-// Control Flow ////////////////////////////////////////////////////////////////////////////////////
+// Control Flow ////////////////////////////////////////////////////////////////
 
+// Conditional is an if-else expression: if x { y } else { z }.
 type Conditional struct {
 	expr
 	conditions []Expr
@@ -575,7 +592,7 @@ func NewFuncReturn(span syntax.Span, value Expr) *FuncReturn {
 
 func (n *FuncReturn) Value() Expr { return n.value }
 
-// Other ///////////////////////////////////////////////////////////////////////////////////////////
+// Other ///////////////////////////////////////////////////////////////////////
 
 type Contextual struct {
 	expr
@@ -588,6 +605,7 @@ func NewContextual(span syntax.Span, body Expr) *Contextual {
 
 func (n *Contextual) Body() Expr { return n.body }
 
+// ModuleInclude is an include statement: include "<filename>".
 type ModuleInclude struct {
 	expr
 	source Expr
