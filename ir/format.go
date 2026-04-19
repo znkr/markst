@@ -16,6 +16,9 @@ type formattable interface {
 	format(f *formatter)
 }
 
+// FormatContent returns a human-readable string representation of document
+// content, used in test golden files. The output format mirrors Typst's
+// repr() output for content values.
 func FormatContent(c Content) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
@@ -26,6 +29,8 @@ func FormatContent(c Content) string {
 	return sb.String()
 }
 
+// FormatExprs returns a string representation of IR expressions, used as
+// expected output in analyzer test golden files.
 func FormatExprs(exprs []Expr) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeMarkup}
@@ -36,6 +41,7 @@ func FormatExprs(exprs []Expr) string {
 	return sb.String()
 }
 
+// FormatValue returns a string representation of a single value in code mode.
 func FormatValue(value Value) string {
 	var sb strings.Builder
 	f := &formatter{sb: &sb, mode: syntax.ModeCode}

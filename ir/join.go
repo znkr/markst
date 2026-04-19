@@ -8,6 +8,9 @@ import (
 	"znkr.io/writst/ir/types"
 )
 
+// joinResultType defines which type combinations can be joined with the +
+// operator and what type the result has. For example, str + str = str,
+// content + content = content.
 var joinResultType = map[[2]types.Type]types.Type{
 	{types.Str, types.Str}:             types.Str,
 	{types.Bytes, types.Bytes}:         types.Bytes,
