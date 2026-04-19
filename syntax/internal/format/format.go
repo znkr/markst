@@ -1,3 +1,6 @@
+// Package format provides a tree-dump formatter for syntax nodes, used in
+// parser golden test files. The output shows each node on its own line with
+// indentation reflecting the tree structure.
 package format
 
 import (
@@ -7,6 +10,10 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Format returns a human-readable tree dump of the syntax node. Leaf nodes
+// show their kind and quoted text; Inner nodes show their kind and
+// recursively format children with increased indentation; Error nodes show
+// their kind, text, message, and hints.
 func Format(n syntax.Node) string {
 	if n, ok := n.(syntax.RootNode); ok {
 		return Format(n.Inner)

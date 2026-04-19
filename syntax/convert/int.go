@@ -1,3 +1,4 @@
+// Package convert provides conversion utilities for Writst literal values.
 package convert
 
 import (
@@ -5,6 +6,8 @@ import (
 	"strconv"
 )
 
+// ParseInt parses a Writst integer literal string, supporting decimal, binary
+// (0b), octal (0o), and hexadecimal (0x) prefixes.
 func ParseInt(s string) (int, error) {
 	base := 10
 	if len(s) >= 2 && s[0] == '0' {
