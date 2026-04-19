@@ -2,7 +2,10 @@ package syntax
 
 import "fmt"
 
-// UnaryOp is an unary operator
+// UnaryOp represents a unary operator in Writst's expression syntax.
+//
+// Each operator has a [Precedence] level used by the parser to resolve
+// ambiguity in expressions like -x + y.
 type UnaryOp int
 
 const (
@@ -11,6 +14,9 @@ const (
 	Not                // The boolean 'not'.
 )
 
+// UnaryOpFromKind converts a token [Kind] to its corresponding UnaryOp.
+//
+// It panics if kind is not a unary operator token.
 func UnaryOpFromKind(kind Kind) UnaryOp {
 	switch kind {
 	case KindPlus:
@@ -24,6 +30,8 @@ func UnaryOpFromKind(kind Kind) UnaryOp {
 	}
 }
 
+// Precedence returns the operator's binding strength. Higher values bind more
+// tightly.
 func (op UnaryOp) Precedence() int {
 	switch op {
 	case Pos, Neg:
@@ -56,7 +64,9 @@ const (
 	AssocRight              // Right-to-left associativity.
 )
 
-// BinaryOp is a binary operator.
+// BinaryOp represents a binary operator in Writst's expression syntax. Each
+// operator has a [Precedence] level and [Assoc] (associativity) that the parser
+// uses to build the correct expression tree.
 type BinaryOp int
 
 const (
@@ -81,6 +91,9 @@ const (
 	DivAssign                 // The divide-assign operator: /=
 )
 
+// BinaryOpFromKind converts a token [Kind] to its corresponding BinaryOp.
+// It panics if kind is not a binary operator token. Note that [KindNot] +
+// [KindIn] (the "not in" operator) is handled by the parser, not here.
 func BinaryOpFromKind(kind Kind) BinaryOp {
 	switch kind {
 	case KindPlus:
@@ -124,6 +137,8 @@ func BinaryOpFromKind(kind Kind) BinaryOp {
 	}
 }
 
+// Precedence returns the operator's binding strength. Higher values bind more
+// tightly.
 func (op BinaryOp) Precedence() int {
 	switch op {
 	case Mul, Div:
@@ -143,6 +158,8 @@ func (op BinaryOp) Precedence() int {
 	}
 }
 
+// Assoc returns the associativity of the operator. Assignment operators are
+// right-associative; all others are left-associative.
 func (op BinaryOp) Assoc() Assoc {
 	switch op {
 	case Assign, AddAssign, SubAssign, MulAssign, DivAssign:
@@ -152,6 +169,7 @@ func (op BinaryOp) Assoc() Assoc {
 	}
 }
 
+// IsAssign reports whether the operator is an assignment (=, +=, -=, *=, /=).
 func (op BinaryOp) IsAssign() bool {
 	switch op {
 	case Assign, AddAssign, SubAssign, MulAssign, DivAssign:
@@ -161,6 +179,9 @@ func (op BinaryOp) IsAssign() bool {
 	}
 }
 
+// StripAssign converts a compound assignment operator to its arithmetic
+// counterpart (e.g. AddAssign → Add). Non-assignment operators are returned
+// unchanged.
 func (op BinaryOp) StripAssign() BinaryOp {
 	switch op {
 	case AddAssign:
@@ -176,6 +197,8 @@ func (op BinaryOp) StripAssign() BinaryOp {
 	}
 }
 
+// IsComparision reports whether the operator is a comparison or containment
+// check (==, !=, <, <=, >, >=, in, not in).
 func (op BinaryOp) IsComparision() bool {
 	switch op {
 	case Eq, Neq, Lt, Leq, Gt, Geq, In, NotIn:
