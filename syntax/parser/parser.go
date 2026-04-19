@@ -1,3 +1,27 @@
+// Package parser implements a recursive descent parser for Writst source code.
+//
+// The entry point is [Parse], which takes a source string and returns a
+// [syntax.RootNode] — the root of an untyped concrete syntax tree (CST).
+// Every node in the tree is a [syntax.Node] whose role is determined by its
+// [syntax.Kind]. The tree preserves all source text including whitespace and
+// comments, making it suitable for formatting and error reporting.
+//
+// The parser drives the [scanner.Scanner], switching its lexical mode between
+// markup, math, and code as it enters and exits different syntactic contexts.
+// It also manages newline sensitivity: in markup mode, indentation determines
+// heading and list structure, while in code mode, newlines can terminate
+// expressions depending on context.
+//
+// # Error Recovery
+//
+// The parser produces a tree even for invalid input by inserting [syntax.Error]
+// nodes. Key error-handling strategies:
+//   - [parser.expect] creates an error from the current token without consuming
+//     it, allowing the caller to recover.
+//   - [parser.expected] creates a zero-width error; it deduplicates if there
+//     is already an error at the same position.
+//   - [parser.expectClosing] converts an opening delimiter to an "unclosed
+//     delimiter" error when the matching close is missing.
 package parser
 
 import (
@@ -10,6 +34,13 @@ import (
 
 var stopParse = syntax.SetOf(syntax.KindEnd)
 
+// Parse parses src as a Writst document and returns the root of the concrete
+// syntax tree. The returned [syntax.RootNode] always has kind
+// [syntax.KindMarkup] and carries a [syntax.Source] for offset-to-position
+// mapping.
+//
+// Parse never returns an error; invalid input is represented by [syntax.Error]
+// nodes in the tree.
 func Parse(src string) syntax.RootNode {
 	p := newParser(src)
 	p.parseMarkup(stopParse, mfAtStart|mfWrapTrivia)
