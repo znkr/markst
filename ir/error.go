@@ -7,6 +7,8 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Error is the interface for evaluation errors. Each error carries a source
+// [syntax.Span] for location reporting, a message, and optional hints.
 type Error interface {
 	Span() syntax.Span
 	Error() string
@@ -15,6 +17,8 @@ type Error interface {
 	aError()
 }
 
+// ValueError is an error produced during value evaluation, such as a type
+// mismatch or out-of-range value.
 type ValueError struct {
 	span  syntax.Span
 	msg   string
@@ -26,6 +30,8 @@ func (err *ValueError) Error() string     { return err.msg }
 func (err *ValueError) Hints() []string   { return err.hints }
 func (err *ValueError) aError()           {}
 
+// ErrorList is a collection of evaluation errors that implements the error
+// interface. Its Error method returns the first error's message.
 type ErrorList []Error
 
 func (err ErrorList) Error() string { return err[0].Error() }
@@ -37,14 +43,22 @@ func (err ErrorList) Unwrap() []error {
 	return r
 }
 
-// ArgError ////////////////////////////////////////////////////////////////////////////////////////
+// ArgError ////////////////////////////////////////////////////////////////////
 
+// ArgError is an error associated with a specific function argument.
 type ArgError struct {
+	// match is a function that checks whether a given argument matches the one
+	// associated with this error, and if so returns its source span for error
+	// reporting.
 	match func(i int, arg Arg) (syntax.Span, bool)
-	msg   string
+	// msg is the error message to report for this argument.
+	msg string
+	// hints are optional hints to provide to the user for this error.
 	hints []string
 }
 
+// ArgErrorPosf creates an [ArgError] pointing at positional argument idx.
+// Index 0 is "self" for method calls; index 1 is the first explicit argument.
 func ArgErrorPosf(idx int, format string, args ...any) *ArgError {
 	return &ArgError{
 		match: func(i int, arg Arg) (syntax.Span, bool) {
@@ -59,6 +73,8 @@ func ArgErrorPosf(idx int, format string, args ...any) *ArgError {
 	}
 }
 
+// ArgErrorNamedf creates an [ArgError] pointing at the value of the named
+// argument with the given name.
 func ArgErrorNamedf(name unique.Handle[string], format string, args ...any) *ArgError {
 	return &ArgError{
 		match: func(i int, arg Arg) (syntax.Span, bool) {
@@ -101,7 +117,7 @@ type ArgErrors []*ArgError
 
 func (e ArgErrors) Error() string { return e[0].msg }
 
-// IndexError //////////////////////////////////////////////////////////////////////////////////////
+// IndexError //////////////////////////////////////////////////////////////////
 
 type indexError struct {
 	err error
@@ -111,7 +127,7 @@ type indexError struct {
 func (e *indexError) Error() string { return e.err.Error() }
 func (e *indexError) Unwrap() error { return e.err }
 
-// panics //////////////////////////////////////////////////////////////////////////////////////////
+// panics //////////////////////////////////////////////////////////////////////
 
 type errWrapper struct {
 	err []Error

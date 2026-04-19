@@ -10,14 +10,22 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// EvalsOption configures the evaluation context for [Eval].
 type EvalsOption func(*evalCtx)
 
+// WithBindings adds initial variable bindings to the evaluation scope.
 func WithBindings(bindings map[unique.Handle[string]]Value) EvalsOption {
 	return func(ec *evalCtx) {
 		ec.scope.bindings = bindings
 	}
 }
 
+// Eval evaluates a slice of IR expressions and returns the resulting document
+// [Content].
+//
+// Evaluation errors are returned as an [ErrorList]; non-fatal warnings are
+// returned separately. The evaluation operates in a scope that inherits from
+// the built-in universe (global functions, types, and constructors).
 func Eval(exprs []Expr, opts ...EvalsOption) (c Content, warn []Error, err error) {
 	ec := &evalCtx{
 		scope: &scope{
@@ -48,7 +56,7 @@ func Eval(exprs []Expr, opts ...EvalsOption) (c Content, warn []Error, err error
 	return
 }
 
-// Context /////////////////////////////////////////////////////////////////////////////////////////
+// Context /////////////////////////////////////////////////////////////////////
 
 type EvalContext struct {
 	Bindings map[unique.Handle[string]]Value
@@ -91,7 +99,7 @@ func (ec *evalCtx) warn(warn Error) {
 	ec.warnings = append(ec.warnings, warn)
 }
 
-// Scope ///////////////////////////////////////////////////////////////////////////////////////////
+// Scope ///////////////////////////////////////////////////////////////////////
 
 type scope struct {
 	parent   *scope
@@ -108,7 +116,7 @@ func (s *scope) lookup(name unique.Handle[string]) (Value, setter, bool) {
 	return nil, nil, false
 }
 
-// Content Expressions /////////////////////////////////////////////////////////////////////////////
+// Content Expressions /////////////////////////////////////////////////////////
 
 func (n *HeadingExpr) eval(ec *evalCtx) Value {
 	return &Heading{
@@ -378,7 +386,7 @@ func (n *DictExpr) eval(ec *evalCtx) Value {
 	return dict
 }
 
-// Operations //////////////////////////////////////////////////////////////////////////////////////
+// Operations //////////////////////////////////////////////////////////////////
 
 func (n *Unary) eval(ec *evalCtx) Value {
 	x := n.operand.eval(ec)
@@ -517,7 +525,7 @@ func (n *FieldAccess) eval(ec *evalCtx) Value {
 	panic("unreachable")
 }
 
-// Functions ///////////////////////////////////////////////////////////////////////////////////////
+// Functions ///////////////////////////////////////////////////////////////////
 
 func (n *FuncCall) eval0(ec *evalCtx, setter *setter) Value {
 	callee := n.callee.eval(ec)
@@ -626,7 +634,7 @@ func (n *Closure) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
-// Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
+// Bindings & Rules ////////////////////////////////////////////////////////////
 
 func (n *LetBinding) eval(ec *evalCtx) Value {
 	for _, p := range n.pattern {
@@ -660,7 +668,7 @@ func (n *ShowRule) eval(ec *evalCtx) Value {
 	panic("TODO: implement show rules")
 }
 
-// Control Flow ////////////////////////////////////////////////////////////////////////////////////
+// Control Flow ////////////////////////////////////////////////////////////////
 
 func (n *Conditional) eval(ec *evalCtx) Value {
 	for i, cond := range n.conditions {
@@ -701,7 +709,7 @@ func (n *FuncReturn) eval(ec *evalCtx) Value {
 	panic("TODO: not actually an expression")
 }
 
-// Other ///////////////////////////////////////////////////////////////////////////////////////////
+// Other ///////////////////////////////////////////////////////////////////////
 
 func (n *Contextual) eval(ec *evalCtx) Value { panic("TODO: implement contextual") }
 

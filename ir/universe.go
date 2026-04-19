@@ -7,6 +7,9 @@ import (
 	"znkr.io/writst/ir/types"
 )
 
+// universe is the top-level scope containing all built-in type constructors
+// and global functions (range, repr, type). All evaluation scopes inherit
+// from universe.
 var universe = &scope{
 	bindings: map[unique.Handle[string]]Value{
 		names.Array:     reflectedTypes[types.Array],
@@ -24,6 +27,8 @@ var universe = &scope{
 	},
 }
 
+// reflectedTypes maps each type constant to its reflected Type value,
+// optionally with a constructor function (e.g. int() for type conversion).
 var reflectedTypes = [...]*Type{
 	types.None: {Reflected: types.None},
 	types.ReflectedType: {
@@ -74,6 +79,10 @@ var reflectedTypes = [...]*Type{
 	},
 }
 
+// typeFields maps each type to its available methods and fields. When a field
+// access like x.len() is evaluated, the evaluator looks up the field name in
+// typeFields[x.Type()] and returns the method function (pre-bound with x as the
+// receiver via [Function.With]).
 var typeFields = [...]map[unique.Handle[string]]Value{
 	types.None:          {},
 	types.ReflectedType: {},
