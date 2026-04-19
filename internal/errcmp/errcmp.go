@@ -1,3 +1,8 @@
+// Package errcmp compares expected errors (from inline comments in test
+// input) against actual errors produced by the analyzer or evaluator.
+//
+// The [Diff] function extracts these expectations from the syntax tree and
+// compares them against the provided actual errors using go-cmp.
 package errcmp
 
 import (
@@ -11,6 +16,8 @@ import (
 	"znkr.io/writst/syntax"
 )
 
+// Error represents an error expectation or actual error, with its source
+// span, type ("Error" or "Warning"), message, and optional hints.
 type Error struct {
 	Span    syntax.Span
 	Type    string // "Error" or "Warning"
@@ -18,6 +25,10 @@ type Error struct {
 	Hints   []string
 }
 
+// Diff extracts error expectations from inline comments in root's syntax tree
+// and compares them against got. It returns a human-readable diff string
+// (empty if they match). Errors are compared by span, type, message, and hints,
+// sorted by position.
 func Diff(root syntax.RootNode, got []Error) string {
 	want := collectErrors(root.Source, root.Children())
 	return cmp.Diff(want, got, errcmpopts)

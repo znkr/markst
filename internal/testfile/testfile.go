@@ -1,3 +1,16 @@
+// Package testfile reads and updates golden test files used by the parser,
+// analyzer, and evaluator tests.
+//
+// Test files use this format:
+//
+//	--- test-name ---
+//	input here
+//	│ expected output here
+//	│ (each line prefixed with "│ ")
+//
+// A test case consists of a header line (--- name ---), input lines, and
+// optional expected output lines prefixed with "│ ". Test names must match
+// [a-z][a-z0-9-]* and may include a skip annotation: --- name (skip: reason) ---.
 package testfile
 
 import (
@@ -11,16 +24,19 @@ import (
 	"testing"
 )
 
+// Test represents a single test case from a golden test file.
 type Test struct {
-	Name  string
-	Skip  string
-	Input string
-	Want  string
+	Name  string // Test name from the header line.
+	Skip  string // Skip reason, if any.
+	Input string // Input source text.
+	Want  string // Expected output (empty for error-only tests).
 }
 
 var testcase = regexp.MustCompile(`^--- (.+) ---$`)
 var header = regexp.MustCompile(`^([a-z][a-z0-9-]*)(?: +\(skip: (.*)\))?$`)
 
+// Read parses a golden test file at path and returns the test cases.
+// It calls t.Fatal on I/O errors or invalid file format.
 func Read(t *testing.T, path string) []Test {
 	t.Helper()
 	var tests []Test
@@ -80,6 +96,9 @@ func Read(t *testing.T, path string) []Test {
 	return tests
 }
 
+// Update rewrites the golden test file at path with updated expected output
+// from the given tests. Test names must match the existing file; only the
+// expected output sections are replaced. Preamble comments are preserved.
 func Update(t *testing.T, path string, tests []Test) {
 	t.Helper()
 	var buf bytes.Buffer
