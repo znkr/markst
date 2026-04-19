@@ -51,7 +51,7 @@
 #@
 
 --- missing-expression-after-hash ---
-// Error: 2-2 expected expression
+// Error: 2 expected expression
 #
 
 --- error-with-surrounding-content ---

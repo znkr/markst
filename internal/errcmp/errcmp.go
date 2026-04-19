@@ -2,17 +2,16 @@
 // input) against actual errors produced by the analyzer or evaluator.
 //
 // The [Diff] function extracts these expectations from the syntax tree and
-// compares them against the provided actual errors using go-cmp.
+// compares them against the provided actual errors, rendering mismatches
+// as a unified diff of the annotated source file.
 package errcmp
 
 import (
-	gocmp "cmp"
 	"fmt"
 	"regexp"
-	"strconv"
+	"strings"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"znkr.io/diff/textdiff"
 	"znkr.io/writst/syntax"
 )
 
@@ -27,103 +26,98 @@ type Error struct {
 
 // Diff extracts error expectations from inline comments in root's syntax tree
 // and compares them against got. It returns a human-readable diff string
-// (empty if they match). Errors are compared by span, type, message, and hints,
-// sorted by position.
+// (empty if they match). Mismatches are shown as a unified diff of the source
+// with error annotations as inline comments.
 func Diff(root syntax.RootNode, got []Error) string {
-	want := collectErrors(root.Source, root.Children())
-	return cmp.Diff(want, got, errcmpopts)
-}
-
-var errcmpopts = cmp.Options{
-	cmpopts.SortSlices(func(a, b Error) int {
-		if n := gocmp.Compare(a.Span.Start, b.Span.Start); n != 0 {
-			return n
-		}
-		if n := gocmp.Compare(a.Span.End, b.Span.End); n != 0 {
-			return n
-		}
-		return gocmp.Compare(a.Message, b.Message)
-	}),
+	src := root.Text()
+	gotAnnotated := annotateSource(root.Source, src, got)
+	return textdiff.Unified(src, gotAnnotated)
 }
 
 var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+)(?:-(\d+))?\s+(.+)$`)
 
-func collectErrors(source syntax.Source, ns []syntax.Node) []Error {
-	type pendingExpectation struct {
-		startCol int
-		endCol   int
-		typ      string
-		message  string
-		hints    []string
+// annotateSource strips existing error comments and inserts new ones based on errs.
+func annotateSource(source syntax.Source, src string, errs []Error) string {
+	lines := strings.Split(src, "\n")
+
+	// Keep non-comment lines with their original line numbers.
+	type keptLine struct {
+		origLine uint32
+		text     string
+	}
+	var kept []keptLine
+	for i, line := range lines {
+		if !errorExpectationRe.MatchString(strings.TrimSpace(line)) {
+			kept = append(kept, keptLine{uint32(i + 1), line})
+		}
 	}
 
-	var result []Error
-	var pending []pendingExpectation
-
-	for _, n := range ns {
-		// Read all error expectations from line comments. The format is:
-		//   // Error: <start>-<end> <message>
-		//   // Error: <start> <message>
-
-		if n.Kind() == syntax.KindLineComment {
-			lit := n.Text()
-			if match := errorExpectationRe.FindStringSubmatch(lit); match != nil {
-				typ := match[1]
-				startCol, _ := strconv.Atoi(match[2])
-				endCol := startCol
-				if match[3] != "" {
-					endCol, _ = strconv.Atoi(match[3])
-				}
-				switch typ {
-				case "Error", "Warning":
-					pending = append(pending, pendingExpectation{
-						typ:      typ,
-						message:  match[4],
-						startCol: startCol,
-						endCol:   endCol,
-					})
-				case "Hint":
-					if len(pending) == 0 {
-						panic("no pending error to attach hint to")
-					}
-					err := &pending[len(pending)-1]
-					if err.startCol != startCol || err.endCol != endCol {
-						panic(fmt.Sprintf("pending error expected at %d-%d, but hint is at %d-%d", err.startCol, err.endCol, startCol, endCol))
-					}
-					err.hints = append(err.hints, match[4])
-				}
-				continue
+	// Attach each error to a kept line (first kept line >= error's line, or past-EOF).
+	attachedErrs := make([][]Error, len(kept)+1)
+	for _, e := range errs {
+		errLine := source.Position(e.Span.Start).Line
+		target := len(kept)
+		for i, kl := range kept {
+			if kl.origLine >= errLine {
+				target = i
+				break
 			}
 		}
+		attachedErrs[target] = append(attachedErrs[target], e)
+	}
 
-		// Continue until the first non-trivia node is found. The non-trivia node is the one that
-		// the pending expectations refer to (or at least to one node on the same line).
-		if syntax.Trivia.Contains(n.Kind()) {
-			continue
+	// Build output.
+	var buf strings.Builder
+	for i, kl := range kept {
+		indent := leadingWhitespace(kl.text)
+		for _, e := range attachedErrs[i] {
+			writeError(&buf, source, e, indent)
 		}
-
-		// Resolve pending expectations to the current node. The line number is determined by the
-		// node's start position.
-		line := source.Position(n.Span().Start).Line
-		for _, p := range pending {
-			result = append(result, Error{
-				Span: syntax.Span{
-					Start: source.Offset(syntax.Position{Line: line, Column: uint32(p.startCol)}),
-					End:   source.Offset(syntax.Position{Line: line, Column: uint32(p.endCol)}),
-				},
-				Type:    p.typ,
-				Message: p.message,
-				Hints:   p.hints,
-			})
-		}
-		pending = nil
-
-		if inner, ok := n.(*syntax.Inner); ok {
-			result = append(result, collectErrors(source, inner.Children())...)
+		buf.WriteString(kl.text)
+		if i < len(kept)-1 {
+			buf.WriteByte('\n')
 		}
 	}
-	if len(pending) > 0 {
-		panic(fmt.Sprintf("pending error expectations without corresponding nodes: %+v", pending))
+
+	// Errors past EOF.
+	if len(attachedErrs[len(kept)]) > 0 {
+		buf.WriteByte('\n')
+		for _, e := range attachedErrs[len(kept)] {
+			writeError(&buf, source, e, "")
+		}
 	}
-	return result
+
+	return buf.String()
+}
+
+func leadingWhitespace(s string) string {
+	for i, c := range s {
+		if c != ' ' && c != '\t' {
+			return s[:i]
+		}
+	}
+	return ""
+}
+
+func writeError(buf *strings.Builder, source syntax.Source, e Error, indent string) {
+	pos := source.Position(e.Span.Start)
+	endPos := source.Position(e.Span.End)
+
+	startCol, endCol := pos.Column, endPos.Column
+	if e.Span.End > e.Span.Start && endPos.Line > pos.Line && endPos.Column == 1 {
+		endCol = startCol + (e.Span.End - e.Span.Start)
+	}
+
+	writeComment(buf, indent, e.Type, startCol, endCol, e.Message)
+	for _, h := range e.Hints {
+		writeComment(buf, indent, "Hint", startCol, endCol, h)
+	}
+}
+
+func writeComment(buf *strings.Builder, indent, typ string, startCol, endCol uint32, msg string) {
+	if startCol == endCol {
+		fmt.Fprintf(buf, "%s// %s: %d %s\n", indent, typ, startCol, msg)
+	} else {
+		fmt.Fprintf(buf, "%s// %s: %d-%d %s\n", indent, typ, startCol, endCol, msg)
+	}
 }
