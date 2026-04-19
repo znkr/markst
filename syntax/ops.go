@@ -197,9 +197,9 @@ func (op BinaryOp) StripAssign() BinaryOp {
 	}
 }
 
-// IsComparision reports whether the operator is a comparison or containment
+// IsComparison reports whether the operator is a comparison or containment
 // check (==, !=, <, <=, >, >=, in, not in).
-func (op BinaryOp) IsComparision() bool {
+func (op BinaryOp) IsComparison() bool {
 	switch op {
 	case Eq, Neq, Lt, Leq, Gt, Geq, In, NotIn:
 		return true

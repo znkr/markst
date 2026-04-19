@@ -467,37 +467,37 @@ func (s *Scanner) scanText() syntax.Kind {
 			if ch := s.r.Peek(); isAlphanumeric(ch) {
 				continue
 			}
-			goto BachupAndFinish
+			goto BackupAndFinish
 		case '/':
 			if ch := s.r.Peek(); ch == '/' || ch == '*' {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		case '-':
 			if ch := s.r.Peek(); ch == '-' || ch == '?' {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		case '.':
 			if s.r.ContinuesWith("..") {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		case 'h':
 			if s.r.ContinuesWith("ttp://") || s.r.ContinuesWith("ttps://") {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		case '@':
 			if ch := s.r.Peek(); isValidInLabelLiteral(ch) {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		case '\t', '\n', '\r', '\\', '[', ']', '~', '\'', '"', '*',
 			'_', ':', '`', '$', '<', '>', '#':
-			goto BachupAndFinish
+			goto BackupAndFinish
 		default:
 			if unicode.IsSpace(ch) {
-				goto BachupAndFinish
+				goto BackupAndFinish
 			}
 		}
 	}
-BachupAndFinish:
+BackupAndFinish:
 	s.r.Backup()
 Finish:
 	return syntax.KindText
