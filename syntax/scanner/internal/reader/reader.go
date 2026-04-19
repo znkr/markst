@@ -4,10 +4,14 @@ import (
 	"unicode/utf8"
 )
 
-// EOF represents the end of input
+// EOF represents the end of input. Returned by [Reader.Next] and [Reader.Peek]
+// when all source text has been consumed.
 const EOF rune = -1
 
-// Reader provides reading functionality tailored to the specific needs of Scanner.
+// Reader provides character-level reading over UTF-8 source text, tailored to
+// the needs of the [scanner.Scanner]. It supports single-rune lookahead and
+// lookbehind, conditional consumption, seeking, and tracks newline offsets and
+// column positions.
 type Reader struct {
 	src      string
 	ch       rune
@@ -209,6 +213,7 @@ func (b *Reader) Upto(end int) string {
 	return b.src[0:end]
 }
 
+// Source returns the full source text.
 func (b *Reader) Source() string {
 	return b.src
 }
