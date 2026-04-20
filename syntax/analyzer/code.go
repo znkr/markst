@@ -90,10 +90,15 @@ func (a *analyzer) analyzeIdent(n syntax.Node) *ir.Ident {
 func (a *analyzer) analyzeCode(n syntax.Node) []ir.Expr {
 	var exprs []ir.Expr
 	for child := range a.inner(n, syntax.KindCode).all() {
-		if child.Kind() == syntax.KindSemicolon {
+		switch child.Kind() {
+		case syntax.KindSemicolon:
 			continue
+		case syntax.KindError:
+			a.error(child.(*syntax.Error))
+			continue
+		default:
+			exprs = append(exprs, a.analyzeExpr(child))
 		}
-		exprs = append(exprs, a.analyzeExpr(child))
 	}
 	return exprs
 }
@@ -106,6 +111,9 @@ func (a *analyzer) analyzeCodeBlock(n syntax.Node) *ir.CodeBlock {
 		switch child.Kind() {
 		case syntax.KindCode:
 			exprs = append(exprs, a.analyzeCode(child)...)
+		case syntax.KindError:
+			a.error(child.(*syntax.Error))
+			continue
 		default:
 			exprs = append(exprs, a.analyzeExpr(child))
 		}

@@ -2,7 +2,7 @@
 ]
 │ Markup
 │   Error: "]"
-│     Msg: "unexpected ]"
+│     Msg: "unexpected closing bracket"
 │     Hint: "try using a backslash escape: \\]"
 │   Space: "\n"
 
@@ -1212,4 +1212,74 @@ v in iter {}
 │       Plus: "+"
 │       Space: " "
 │       Int: "2"
+│   Space: "\n"
+
+--- right-bracket-hash ---
+// Error: 2-3 unclosed delimiter
+// Error: 3-4 unclosed delimiter
+// Error: 4-5 unexpected closing bracket
+// Hint: 4-5 try using a backslash escape: \]
+#{{]}}
+│ Markup
+│   LineComment: "// Error: 2-3 unclosed delimiter"
+│   Space: "\n"
+│   LineComment: "// Error: 3-4 unclosed delimiter"
+│   Space: "\n"
+│   LineComment: "// Error: 4-5 unexpected closing bracket"
+│   Space: "\n"
+│   LineComment: "// Hint: 4-5 try using a backslash escape: \\]"
+│   Space: "\n"
+│   Hash: "#"
+│   CodeBlock
+│     Error: "{"
+│       Msg: "unclosed delimiter"
+│     Code
+│       CodeBlock
+│         Error: "{"
+│           Msg: "unclosed delimiter"
+│         Code
+│   Error: "]"
+│     Msg: "unexpected closing bracket"
+│     Hint: "try using a backslash escape: \\]"
+│   Text: "}}"
+│   Space: "\n"
+
+--- code-block-multiple-expressions-without-semicolon ---
+#{let x = -1 let y = 3 x + y}
+│ Markup
+│   Hash: "#"
+│   CodeBlock
+│     LeftBrace: "{"
+│     Code
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Ident: "x"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Unary
+│           Minus: "-"
+│           Int: "1"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       LetBinding
+│         Let: "let"
+│         Space: " "
+│         Ident: "y"
+│         Space: " "
+│         Eq: "="
+│         Space: " "
+│         Int: "3"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       Binary
+│         Ident: "x"
+│         Space: " "
+│         Plus: "+"
+│         Space: " "
+│         Ident: "y"
+│     RightBrace: "}"
 │   Space: "\n"

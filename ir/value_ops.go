@@ -459,6 +459,10 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 		c1, c2 := x.(Content), y.(Content)
 		return &Sequence{Children: []Content{c1, c2}}, nil
 	},
+	{syntax.Add, types.Content, types.Str}: func(x, y Value) (Value, error) {
+		c, s := x.(Content), y.(Str)
+		return &Sequence{Children: []Content{c, &Text{Text: string(s)}}}, nil
+	},
 	{syntax.Mul, types.Content, types.Int}: func(x, y Value) (Value, error) {
 		c, times := x.(Content), y.(Int)
 		if times < 0 {

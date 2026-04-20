@@ -97,10 +97,11 @@ type parser struct {
 	s *scanner.Scanner
 
 	// state
-	cur         token
-	nodes       []syntax.Node
-	newlineMode nlMode
-	memos       map[int]memo
+	cur            token
+	nodes          []syntax.Node
+	newlineMode    nlMode
+	memos          map[int]memo
+	bracketNesting int
 }
 
 type token struct {
@@ -397,16 +398,15 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 	if flags&mfWrapTrivia != 0 {
 		start -= p.cur.trivia
 	}
-	nesting := 0
 	atStart := p.cur.newline || flags&mfAtStart != 0
 	for !p.atSet(stops) {
 		switch p.cur.kind {
 		case syntax.KindLeftBracket:
-			nesting++
+			p.bracketNesting++
 			p.consumeAs(syntax.KindText)
 		case syntax.KindRightBracket:
-			if nesting > 0 {
-				nesting--
+			if p.bracketNesting > 0 {
+				p.bracketNesting--
 				p.consumeAs(syntax.KindText)
 			} else {
 				err := p.unexpected()
@@ -561,6 +561,8 @@ func (p *parser) parseEmbeddedCodeExpr() {
 		if p.cur.trivia > 0 || p.at(syntax.KindEnd) {
 			p.expected("expression")
 			return
+		} else if p.atSet(syntax.Terminator) {
+			p.unexpected()
 		}
 
 		stmt := p.atSet(syntax.Stmts)

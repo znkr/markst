@@ -145,7 +145,14 @@ func (ns *nodes) all() iter.Seq[syntax.Node] {
 
 // inside returns a sequence of nodes inside the given open and close delimiters.
 func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
-	ns.take(open)
+	if ns.at(syntax.KindError) {
+		// Most likely the error is about an unclosed delimiter. Handle it
+		// gracefully by reporting the error here and analyzing the nodes
+		// inside below.
+		ns.a.error(ns.node().(*syntax.Error))
+	} else {
+		ns.take(open)
+	}
 	return func(yield func(syntax.Node) bool) {
 		for !ns.done() {
 			n := ns.node()
@@ -156,7 +163,6 @@ func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
 				return
 			}
 		}
-		panic("expected closing delimiter: " + close.String())
 	}
 }
 

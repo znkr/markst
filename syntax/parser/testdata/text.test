@@ -99,7 +99,7 @@ Star NOT in word - after space: a *b
 │   Space: " "
 │   Text: "]"
 │   Error: "]"
-│     Msg: "unexpected ]"
+│     Msg: "unexpected closing bracket"
 │     Hint: "try using a backslash escape: \\]"
 │   Parbreak: "\n\n"
 │   Text: "There are a number of special characters like"
