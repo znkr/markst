@@ -174,27 +174,50 @@ func (p *parser) consumeIf(kind syntax.Kind) bool {
 	return false
 }
 
+// expected reports that the given construct was expected at the current
+// position. If the current token is already a scanner error, it is consumed
+// (after trimming preceding zero-width errors) so the token is recorded in
+// the correct lexing mode. Otherwise, it deduplicates: if there is already
+// an error node immediately before the trivia, it returns that existing
+// error instead of creating a new one. In the common case it inserts a
+// zero-width error without consuming the current token, so the caller can
+// continue recovery from the same position.
 func (p *parser) expected(expected string) *syntax.Error {
+	if p.at(syntax.KindError) {
+		// Consume erroneous tokens so they are recorded in the correct
+		// lexing mode (important for incremental reparsing).
+		p.trimErrors()
+		e := p.cur.node.(*syntax.Error)
+		p.consume()
+		return e
+	}
 	at := len(p.nodes) - p.cur.trivia
 	if at > 0 && p.nodes[at-1].Kind() == syntax.KindError {
 		// Already have an error at this position.
 		return p.nodes[at-1].(*syntax.Error)
 	}
-	return p.expectedAt(at, expected)
-}
-
-func (p *parser) expectedAt(i int, expected string) *syntax.Error {
 	var span syntax.Span
-	if i > 0 {
-		span = p.nodes[i-1].Span()
+	if at > 0 {
+		span = p.nodes[at-1].Span()
 	}
 	n := syntax.NewError(
 		syntax.Span{Start: span.End, End: span.End},
-		fmt.Sprintf("expected %s", expected),
+		"expected "+expected,
 		"",
 	)
-	p.nodes = slices.Insert(p.nodes, i, syntax.Node(n))
+	p.nodes = slices.Insert(p.nodes, at, syntax.Node(n))
 	return n
+}
+
+// errorf converts the current token into an error node with the given message,
+// appends it to the node list, and advances the scanner. This consumes the
+// problematic token so parsing can continue past it. Use this when the current
+// token itself is the error and should be absorbed into the tree.
+func (p *parser) errorf(format string, args ...any) *syntax.Error {
+	err := asErrorNode(p.cur.node, format, args...)
+	p.nodes = append(p.nodes, syntax.Node(err))
+	p.next()
+	return err
 }
 
 func (p *parser) consumeAs(kind syntax.Kind) {
@@ -212,54 +235,46 @@ func (p *parser) assert(expected syntax.Kind) {
 	p.consume()
 }
 
+// expect consumes the current token if it matches kind and returns true.
+// Otherwise, it delegates to [parser.expected] which inserts a zero-width
+// error without consuming the current token (or consumes it if it's already
+// a scanner error). This lets the enclosing construct continue recovery
+// from the same position.
 func (p *parser) expect(kind syntax.Kind) bool {
 	if p.cur.kind == kind {
 		p.consume()
 		return true
 	} else if kind == syntax.KindIdent && syntax.Keywords.Contains(p.cur.kind) {
 		p.trimErrors()
-		n := asErrorNode(p.cur.node, "expected %s", kind.Name())
-		n.Hint(fmt.Sprintf("keyword `%s` is not allowed as an identifier; try `%s_` instead", p.cur.kind.Name(), p.cur.kind.Name()))
-		p.nodes = append(p.nodes, n)
-		p.next()
-		return false
-	} else if syntax.Keywords.Contains(kind) {
-		// For keyword expectations, use "keyword `x`" format.
-		// Don't create an error if the current token is already an error (e.g., unclosed string),
-		// or if there's already an error at this position (e.g., "expected pattern").
-		if p.cur.kind != syntax.KindError {
-			p.expected(fmt.Sprintf("keyword `%s`", kind.Name()))
-		}
+		n := p.cur
+		e := p.errorf("expected %s", kind.Name())
+		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", n.kind.Name(), n.node.Text()))
 		return false
 	} else {
-		if p.cur.kind == syntax.KindError {
-			// Current token is already an error; consume it.
-			p.consume()
-		} else if syntax.Terminator.Contains(p.cur.kind) {
-			// Don't consume closing delimiters or terminators — let the
-			// enclosing construct handle them. Use a zero-width error instead.
-			p.expected(kind.Name())
-		} else {
-			// Convert the current token to an error and consume it.
-			n := asErrorNode(p.cur.node, "expected %s", kind.Name())
-			p.nodes = append(p.nodes, n)
-			p.next()
-		}
+		p.expected(kind.Name())
 		return false
 	}
 }
 
+// expectedAt replaces the node at index i with an error node, reporting that
+// the given construct was expected but the existing node was found instead. This
+// is used for retroactive errors — when we parsed something speculatively and
+// later determined it was invalid (e.g., a complex expression where only an
+// identifier was allowed). The error inherits the span of the replaced node.
+func (p *parser) expectedAt(i int, expected string) *syntax.Error {
+	cur := p.nodes[i]
+	n := asErrorNode(cur, "expected %s, found %s", expected, cur.Kind().Name())
+	p.nodes[i] = syntax.Node(n)
+	return n
+}
+
+// unexpected reports and consumes the current token as an unexpected error. It
+// first trims any trailing zero-width errors (via trimErrors) to avoid
+// cascading "expected X" messages at the same position. The token is consumed
+// so the parser can make forward progress past the unexpected input.
 func (p *parser) unexpected() *syntax.Error {
 	p.trimErrors()
-	var n *syntax.Error
-	if syntax.Keywords.Contains(p.cur.kind) {
-		n = asErrorNode(p.cur.node, "unexpected keyword `%s`", p.cur.kind.Name())
-	} else {
-		n = asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
-	}
-	p.nodes = append(p.nodes, n)
-	p.next() // skip the error node we just inserted
-	return n
+	return p.errorf("unexpected %s", p.cur.kind.Name())
 }
 
 // trimErrors removes trailing zero-width error nodes that might be left from previous error
@@ -276,6 +291,13 @@ func (p *parser) trimErrors() {
 	p.nodes = slices.Delete(p.nodes, start, end)
 }
 
+// expectClosing attempts to consume a closing delimiter (e.g., ')', ']', '}').
+// If the current token matches, it is consumed and nil is returned. Otherwise,
+// the opening delimiter at index open is retroactively converted to an
+// "unclosed delimiter" error — this places the error at the opening position
+// rather than at the current (possibly far away) position, which produces
+// better diagnostics. If the opening node is already an error, no additional
+// error is created.
 func (p *parser) expectClosing(open int, expected syntax.Kind) *syntax.Error {
 	if p.cur.kind == expected {
 		p.consume()
@@ -561,19 +583,10 @@ func (p *parser) parseEmbeddedCodeExpr() {
 		if p.cur.trivia > 0 || p.at(syntax.KindEnd) {
 			p.expected("expression")
 			return
-		} else if p.atSet(syntax.Terminator) {
-			p.unexpected()
 		}
 
 		stmt := p.atSet(syntax.Stmts)
-		at := p.atSet(syntax.AtomicCodeExpr)
 		p.parseCodeExprPrec(true, 0)
-
-		// Consume error for things like `#12p` or `#"abc\"`.
-		// Don't do this at a terminator to avoid consuming the next line's token.
-		if !at && !p.atSet(syntax.Terminator) {
-			p.unexpected()
-		}
 
 		semi := (stmt || p.directlyAt(syntax.KindSemicolon)) && p.consumeIf(syntax.KindSemicolon)
 		if stmt && !semi && !p.at(syntax.KindEnd) && !p.at(syntax.KindRightBracket) {
@@ -679,10 +692,7 @@ func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
 				op = syntax.NotIn
 			} else {
 				p.restore(cp)
-				// TODO: Is there a function that encapsulates this pattern?
-				n := asErrorNode(p.cur.node, "expected keyword `in` to follow `not` for `not in` operator")
-				p.nodes = append(p.nodes, n)
-				p.next() // skip the `not` to prevent cascading errors
+				p.errorf("expected keyword `in` to follow `not` for `not in` operator")
 				break
 			}
 		} else {
@@ -720,9 +730,7 @@ func (p *parser) parseCodePrimary(atomic bool) {
 
 	case syntax.KindUnderscore:
 		if atomic {
-			n := asErrorNode(p.cur.node, "unexpected %s", p.cur.kind.Name())
-			p.nodes = append(p.nodes, n)
-			p.next()
+			p.errorf("unexpected %s", p.cur.kind.Name())
 			break
 		}
 
@@ -736,7 +744,7 @@ func (p *parser) parseCodePrimary(atomic bool) {
 			p.parseCodeExpr()
 			p.wrap(start, syntax.KindDestructAssignment)
 		} else {
-			p.nodes[start] = asErrorNode(p.nodes[start], "expected expression, found %s", syntax.KindUnderscore.Name())
+			p.expectedAt(start, "expression")
 		}
 
 	case syntax.KindLeftBrace:
@@ -799,7 +807,12 @@ func (p *parser) parseCodePrimary(atomic bool) {
 		p.parseModuleInclude()
 
 	default:
-		p.expected("expression")
+		if atomic {
+			// Consume erroneous tokens for things like `#12p`, `#]`, or `#"abc\"`.
+			p.unexpected()
+		} else {
+			p.expected("expression")
+		}
 	}
 }
 
@@ -897,9 +910,6 @@ func (p *parser) parseParam(sink *bool) {
 			p.parsePatternLeaf(false)
 		}
 		p.wrap(start, syntax.KindSpread)
-		if *sink {
-			p.expectedAt(start, "only one arguments sink is allowed")
-		}
 		*sink = true
 		return
 	}
@@ -977,9 +987,6 @@ func (p *parser) parseDestructuringItem(reassignment bool, notJustParens *bool, 
 			p.parsePatternLeaf(reassignment)
 		}
 		p.wrap(start, syntax.KindSpread)
-		if *sink {
-			p.expectedAt(start, "only one destructuring sink is allowed")
-		}
 		*sink = true
 		return
 	}
@@ -1012,10 +1019,9 @@ func (p *parser) parseDestructuringItem(reassignment bool, notJustParens *bool, 
 // expression depending on whether it's a binding or reassignment pattern.
 func (p *parser) parsePatternLeaf(reassignment bool) {
 	if p.atSet(syntax.Keywords) {
-		n := asErrorNode(p.cur.node, "expected pattern, found keyword `%s`", p.cur.kind.Name())
-		n.Hint(fmt.Sprintf("keyword `%s` is not allowed as an identifier; try `%s_` instead", p.cur.kind.Name(), p.cur.kind.Name()))
-		p.nodes = append(p.nodes, n)
-		p.next()
+		tok := p.cur
+		e := p.errorf("expected pattern, found %s", tok.kind.Name())
+		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", tok.kind.Name(), tok.node.Text()))
 		return
 	} else if !p.atSet(syntax.PatternLeaf) {
 		p.expected("pattern")
@@ -1030,10 +1036,8 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 	p.parseCodeExprPrec(true, 0)
 
 	if !reassignment {
-		node := p.nodes[start]
-		if node.Kind() != syntax.KindIdent {
-			err := asErrorNode(node, "expected pattern, found %s", node.Kind().Name())
-			p.nodes[start] = err
+		if p.nodes[start].Kind() != syntax.KindIdent {
+			p.expectedAt(start, "pattern")
 		}
 	}
 }
@@ -1120,9 +1124,7 @@ func (p *parser) parseArrayOrDictItem(state *groupState) {
 		}
 	} else {
 		// Regular array item
-		if state.kind == syntax.KindDict {
-			p.expectedAt(start, "named or keyed pair")
-		} else {
+		if state.kind != syntax.KindDict {
 			state.kind = syntax.KindArray
 		}
 	}

@@ -15,12 +15,17 @@ var (
 	}
 )
 
-func builtinDictAtImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
+func builtinDictAtImpl(fc *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
 	dict := args[0].(*Dict)
 	key := args[1].(Str)
 	value, ok := dict.Elems.Get(key)
 	if !ok {
 		return none, nil
+	}
+	if fc.setter != nil {
+		*fc.setter = func(v Value) {
+			dict.Elems.Put(key, v)
+		}
 	}
 	return value, nil
 }

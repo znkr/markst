@@ -148,9 +148,9 @@ func (f *formatter) params(sep string, ps []ClosureParam) {
 		}
 		switch p := p.(type) {
 		case *PositionalClosureParam:
-			f.expr(p.ident)
+			f.expr(p.name)
 		case *NamedClosureParam:
-			f.str(p.name.Value())
+			f.str(p.name.name.Value())
 			if p.def != nil {
 				f.str(": ")
 				f.expr(p.def)

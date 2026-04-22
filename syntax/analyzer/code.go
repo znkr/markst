@@ -181,8 +181,10 @@ func (a *analyzer) analyzeDict(n syntax.Node) *ir.DictExpr {
 				key,
 				value,
 			))
+		case syntax.KindError:
+			a.error(child.(*syntax.Error))
 		default:
-			panic("invalid dict entry: " + child.Kind().String())
+			a.error(syntax.NewError(child.Span(), "expected named or keyed pair", child.Text()))
 		}
 	}
 	return ir.NewDictExpr(n.Span(), entries)
@@ -307,13 +309,41 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *ir.Closure {
 		a.expected(ns, "expression")
 	}
 	body := a.analyzeExpr(ns.node())
-	return ir.NewClosure(n.Span(), name, params, body)
+
+	// Compute captured variables: collect the parameter names as the initial
+	// bound set, then find all free variables in the body.
+	bound := make(map[unique.Handle[string]]bool)
+	if name != nil {
+		bound[name.Name()] = true
+	}
+	for _, p := range params {
+		switch p := p.(type) {
+		case *ir.PositionalClosureParam:
+			bound[p.Name().Name()] = true
+		case *ir.NamedClosureParam:
+			bound[p.Name().Name()] = true
+		case *ir.SpreadClosureParam:
+			bound[p.Ident().Name()] = true
+		}
+	}
+	captures := ir.FreeVars(body, bound)
+
+	return ir.NewClosure(n.Span(), name, params, body, captures)
 }
 
 func (a *analyzer) analyzeClosureParams(n syntax.Node) []ir.ClosureParam {
 	ns := a.inner(n, syntax.KindParams)
 	defer ns.finish()
 	var params []ir.ClosureParam
+	names := make(map[unique.Handle[string]]bool)
+	addName := func(ident *ir.Ident) {
+		name := ident.Name()
+		span := ident.Span()
+		if names[name] {
+			a.error(syntax.NewError(span, "duplicate parameter: "+name.Value(), name.Value()))
+		}
+		names[name] = true
+	}
 	if !ns.at(syntax.KindLeftParen) {
 		// Single param without parens
 		for child := range ns.all() {
@@ -321,7 +351,9 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []ir.ClosureParam {
 			case syntax.KindUnderscore:
 				params = append(params, ir.NewPositionalClosureParam(ir.NewIdent(child.Span(), underscore)))
 			default:
-				params = append(params, ir.NewPositionalClosureParam(a.analyzeIdent(child)))
+				ident := a.analyzeIdent(child)
+				addName(ident)
+				params = append(params, ir.NewPositionalClosureParam(ident))
 			}
 		}
 
@@ -332,24 +364,30 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []ir.ClosureParam {
 			case syntax.KindComma:
 				continue
 			case syntax.KindIdent:
-				params = append(params, ir.NewPositionalClosureParam(a.analyzeIdent(child)))
+				ident := a.analyzeIdent(child)
+				addName(ident)
+				params = append(params, ir.NewPositionalClosureParam(ident))
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
-				name := unique.Make(named.take(syntax.KindIdent))
+				name := a.analyzeIdent(named.node())
+				addName(name)
 				named.take(syntax.KindColon)
 				defaultExpr := a.analyzeExpr(named.node())
 				named.finish()
 				params = append(params, ir.NewNamedClosureParam(name, defaultExpr))
 			case syntax.KindSpread:
 				if hasSink {
-					panic("only one sink parameter allowed")
+					a.error(syntax.NewError(child.Span(), "only one arguments sink is allowed", child.Text()))
 				}
 				hasSink = true
 				ns := a.inner(child, syntax.KindSpread)
 				defer ns.finish()
 				ns.take(syntax.KindDots)
 				ident := a.analyzeIdent(ns.node())
+				addName(ident)
 				params = append(params, ir.NewSpreadClosureParam(ident))
+			case syntax.KindError:
+				a.error(child.(*syntax.Error))
 			default:
 				panic("invalid parameter: " + child.Kind().String())
 			}
@@ -571,7 +609,7 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []ir.DestructPatter
 			pattern = append(pattern, ir.NewDestructNamed(name, patternIdent))
 		case syntax.KindSpread:
 			if haveSink {
-				panic("only one destruct sink allowed in destruct pattern")
+				a.error(syntax.NewError(child.Span(), "only one destructuring sink is allowed", child.Text()))
 			}
 			haveSink = true
 			ns := a.inner(child, syntax.KindSpread)

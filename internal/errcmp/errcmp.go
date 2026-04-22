@@ -34,7 +34,7 @@ func Diff(root syntax.RootNode, got []Error) string {
 	return textdiff.Unified(src, gotAnnotated)
 }
 
-var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+)(?:-(\d+))?\s+(.+)$`)
+var errorExpectationRe = regexp.MustCompile(`^// (Error|Warning|Hint): (\d+(?::\d+)?)(?:-(\d+(?::\d+)?))?\s+(.+)$`)
 
 // annotateSource strips existing error comments and inserts new ones based on errs.
 func annotateSource(source syntax.Source, src string, errs []Error) string {
@@ -70,8 +70,10 @@ func annotateSource(source syntax.Source, src string, errs []Error) string {
 	var buf strings.Builder
 	for i, kl := range kept {
 		indent := leadingWhitespace(kl.text)
+		// Multi-line spans use line numbers relative to the attached content line.
+		baseLine := kl.origLine - 1
 		for _, e := range attachedErrs[i] {
-			writeError(&buf, source, e, indent)
+			writeError(&buf, source, e, indent, baseLine)
 		}
 		buf.WriteString(kl.text)
 		if i < len(kept)-1 {
@@ -82,8 +84,12 @@ func annotateSource(source syntax.Source, src string, errs []Error) string {
 	// Errors past EOF.
 	if len(attachedErrs[len(kept)]) > 0 {
 		buf.WriteByte('\n')
+		var eof uint32
+		if len(kept) > 0 {
+			eof = kept[len(kept)-1].origLine - 1
+		}
 		for _, e := range attachedErrs[len(kept)] {
-			writeError(&buf, source, e, "")
+			writeError(&buf, source, e, "", eof)
 		}
 	}
 
@@ -99,25 +105,35 @@ func leadingWhitespace(s string) string {
 	return ""
 }
 
-func writeError(buf *strings.Builder, source syntax.Source, e Error, indent string) {
+func writeError(buf *strings.Builder, source syntax.Source, e Error, indent string, baseLine uint32) {
 	pos := source.Position(e.Span.Start)
 	endPos := source.Position(e.Span.End)
 
-	startCol, endCol := pos.Column, endPos.Column
-	if e.Span.End > e.Span.Start && endPos.Line > pos.Line && endPos.Column == 1 {
-		endCol = startCol + (e.Span.End - e.Span.Start)
-	}
-
-	writeComment(buf, indent, e.Type, startCol, endCol, e.Message)
+	span := formatSpan(pos, endPos, e.Span, baseLine)
+	writeComment(buf, indent, e.Type, span, e.Message)
 	for _, h := range e.Hints {
-		writeComment(buf, indent, "Hint", startCol, endCol, h)
+		writeComment(buf, indent, "Hint", span, h)
 	}
 }
 
-func writeComment(buf *strings.Builder, indent, typ string, startCol, endCol uint32, msg string) {
-	if startCol == endCol {
-		fmt.Fprintf(buf, "%s// %s: %d %s\n", indent, typ, startCol, msg)
-	} else {
-		fmt.Fprintf(buf, "%s// %s: %d-%d %s\n", indent, typ, startCol, endCol, msg)
+func formatSpan(pos, endPos syntax.Position, span syntax.Span, baseLine uint32) string {
+	// A span ending at column 1 of the next line logically belongs to the
+	// start line. Only use line:col-line:col for truly multi-line spans.
+	crossesLines := span.End > span.Start && endPos.Line > pos.Line
+	if crossesLines && (endPos.Line != pos.Line+1 || endPos.Column != 1) {
+		return fmt.Sprintf("%d:%d-%d:%d", pos.Line-baseLine, pos.Column, endPos.Line-baseLine, endPos.Column)
 	}
+
+	startCol, endCol := pos.Column, endPos.Column
+	if crossesLines {
+		endCol = startCol + (span.End - span.Start)
+	}
+	if startCol == endCol {
+		return fmt.Sprintf("%d", startCol)
+	}
+	return fmt.Sprintf("%d-%d", startCol, endCol)
+}
+
+func writeComment(buf *strings.Builder, indent, typ, span, msg string) {
+	fmt.Fprintf(buf, "%s// %s: %s %s\n", indent, typ, span, msg)
 }

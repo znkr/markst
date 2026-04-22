@@ -86,10 +86,7 @@ func (ec *evalCtx) lookup(name unique.Handle[string]) (Value, setter, bool) {
 }
 
 func (ec *evalCtx) bind(name unique.Handle[string], val Value) {
-	if ec.scope.bindings == nil {
-		ec.scope.bindings = make(map[unique.Handle[string]]Value)
-	}
-	ec.scope.bindings[name] = val
+	ec.scope.bind(name, val)
 }
 
 func (ec *evalCtx) warn(warn Error) {
@@ -106,6 +103,13 @@ func (ec *evalCtx) warn(warn Error) {
 type scope struct {
 	parent   *scope
 	bindings map[unique.Handle[string]]Value
+}
+
+func (s *scope) bind(name unique.Handle[string], val Value) {
+	if s.bindings == nil {
+		s.bindings = make(map[unique.Handle[string]]Value)
+	}
+	s.bindings[name] = val
 }
 
 func (s *scope) lookup(name unique.Handle[string]) (Value, setter, bool) {
@@ -259,6 +263,8 @@ func toContent(v Value) (Content, error) {
 		}
 		return &Raw{Lines: []string{s}}, nil
 	case *Array:
+		return &Raw{Lines: []string{FormatValue(v)}}, nil
+	case *Dict:
 		return &Raw{Lines: []string{FormatValue(v)}}, nil
 	default:
 		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
@@ -548,6 +554,12 @@ func (n *FuncCall) eval0(ec *evalCtx, setter *setter) Value {
 	for _, arg := range n.args {
 		switch a := arg.(type) {
 		case *ExprArg:
+			if len(args.Positional) >= len(fn.Positional) && fn.Variadic == nil && fn.Bind == nil {
+				raise(&ValueError{
+					span: a.expr.Span(),
+					msg:  "unexpected argument",
+				})
+			}
 			args.Positional = append(args.Positional, a.expr.eval(ec))
 		case *NamedArg:
 			if args.Named == nil {
@@ -633,7 +645,68 @@ func (n *FuncCall) locateArgErrSpan(fn *Function, err *ArgError) syntax.Span {
 }
 
 func (n *Closure) eval(ec *evalCtx) Value {
-	panic("TODO: not actually an expression")
+	f := &Function{}
+	if n.name != nil {
+		f.Name = n.name.name.Value()
+	}
+
+	var positional []unique.Handle[string]
+	for _, p := range n.params {
+		switch p := p.(type) {
+		case *PositionalClosureParam:
+			positional = append(positional, p.Name().Name())
+			f.Positional = append(f.Positional, Param{
+				Name: p.Name().Name().Value(),
+				Type: types.Any,
+			})
+		case *NamedClosureParam:
+			if f.Named == nil {
+				f.Named = make(map[unique.Handle[string]]Param)
+			}
+			f.Named[p.Name().Name()] = Param{
+				Name:    p.Name().Name().Value(),
+				Type:    types.Any,
+				Default: p.Default().eval(ec),
+			}
+		default:
+			panic(fmt.Sprintf("not implemented for %T", p))
+		}
+	}
+
+	captures := make(map[unique.Handle[string]]Value)
+	for _, cap := range n.captures {
+		if val, _, ok := ec.lookup(cap.Name); ok {
+			captures[cap.Name] = val
+		} else {
+			raise(&ValueError{
+				span: cap.Span,
+				msg:  fmt.Sprintf("unknown variable: %s", cap.Name.Value()),
+			})
+		}
+	}
+	scope := &scope{
+		bindings: captures,
+	}
+	f.F = func(call *FuncCallContext, args []Value, named NamedArgsWithDefaults) (Value, error) {
+		origScope := ec.scope
+		ec.scope = scope
+		ec.openScope()
+		defer func() {
+			ec.scope = origScope
+		}()
+
+		for i, arg := range args {
+			ec.bind(positional[i], arg)
+		}
+		for name := range f.Named {
+			val := named.Get(name)
+			ec.bind(name, val)
+		}
+
+		v := n.body.eval(ec)
+		return v, nil
+	}
+	return f
 }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////

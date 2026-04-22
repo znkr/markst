@@ -13,7 +13,7 @@ func id(s string) *Ident                     { return &Ident{name: unique.Make(s
 func text(s string) *ConstExpr               { return &ConstExpr{value: &Text{Text: s}} }
 func str(s string) *ConstExpr                { return &ConstExpr{value: Str(s)} }
 func num(n int) *ConstExpr                   { return &ConstExpr{value: Int(n)} }
-func param(s string) *PositionalClosureParam { return &PositionalClosureParam{ident: id(s)} }
+func param(s string) *PositionalClosureParam { return &PositionalClosureParam{name: id(s)} }
 func destruct(s string) *DestructIdent       { return &DestructIdent{ident: id(s)} }
 func narg(name string, expr Expr) *NamedArg  { return &NamedArg{name: unique.Make(name), expr: expr} }
 

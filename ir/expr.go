@@ -12,6 +12,7 @@ type Expr interface {
 	Span() syntax.Span
 
 	eval(ec *evalCtx) Value
+	visitChildren(fn func(Expr) bool) bool
 	aExpr()
 	formattable
 }
@@ -335,26 +336,26 @@ type ClosureParam interface {
 }
 
 type PositionalClosureParam struct {
-	ident *Ident
+	name *Ident
 }
 
 func NewPositionalClosureParam(ident *Ident) *PositionalClosureParam {
-	return &PositionalClosureParam{ident: ident}
+	return &PositionalClosureParam{name: ident}
 }
 
-func (n *PositionalClosureParam) Ident() *Ident { return n.ident }
+func (n *PositionalClosureParam) Name() *Ident { return n.name }
 
 type NamedClosureParam struct {
-	name unique.Handle[string]
+	name *Ident
 	def  Expr
 }
 
-func NewNamedClosureParam(name unique.Handle[string], def Expr) *NamedClosureParam {
+func NewNamedClosureParam(name *Ident, def Expr) *NamedClosureParam {
 	return &NamedClosureParam{name: name, def: def}
 }
 
-func (n *NamedClosureParam) Name() unique.Handle[string] { return n.name }
-func (n *NamedClosureParam) Default() Expr               { return n.def }
+func (n *NamedClosureParam) Name() *Ident  { return n.name }
+func (n *NamedClosureParam) Default() Expr { return n.def }
 
 type SpreadClosureParam struct {
 	ident *Ident
@@ -389,22 +390,31 @@ func (n *FuncCall) Callee() Expr             { return n.callee }
 func (n *FuncCall) Args() []Arg              { return n.args }
 func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
 
+// Capture records a variable captured by a closure, along with the span of
+// the first reference to that variable within the closure body.
+type Capture struct {
+	Name unique.Handle[string]
+	Span syntax.Span
+}
+
 // Closure is a function definition: (x, y) => x + y, or a named function
 // via let binding.
 type Closure struct {
 	expr
-	name   *Ident
-	params []ClosureParam
-	body   Expr
+	name     *Ident
+	params   []ClosureParam
+	body     Expr
+	captures []Capture
 }
 
-func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr) *Closure {
-	return &Closure{expr: expr{span: span}, name: name, params: params, body: body}
+func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr, captures []Capture) *Closure {
+	return &Closure{expr: expr{span: span}, name: name, params: params, body: body, captures: captures}
 }
 
-func (n *Closure) Name() *Ident           { return n.name }
+func (n *Closure) Name() *Ident          { return n.name }
 func (n *Closure) Params() []ClosureParam { return n.params }
 func (n *Closure) Body() Expr             { return n.body }
+func (n *Closure) Captures() []Capture    { return n.captures }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////
 

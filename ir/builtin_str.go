@@ -102,6 +102,8 @@ func builtinStrImpl(_ *FuncCallContext, args []Value, named NamedArgsWithDefault
 		return Str(r), nil
 	case *Label:
 		return Str(v.Name.Value()), nil
+	case *Type:
+		return Str(v.Reflected.String()), nil
 	default:
 		panic("unexpected type: " + v.Type().String())
 	}

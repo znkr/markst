@@ -118,8 +118,8 @@ var (
 	CodeExpr          = CodePrimary.union(UnaryOps)
 	ArrayOrDictItem   = CodeExpr.add(KindDots)
 	Arg               = CodeExpr.add(KindDots)
-	Param             = CodeExpr.add(KindDots)
-	DestructuringItem = CodeExpr.add(KindDots)
+	Param             = Pattern.add(KindDots)
+	DestructuringItem = Pattern.add(KindDots)
 
 	PatternLeaf = AtomicCodeExpr
 	Pattern     = PatternLeaf.add(KindLeftParen, KindUnderscore)

@@ -82,7 +82,7 @@ _hello
 │         ImportItems
 │           ImportItemPath
 │             Error: "123"
-│               Msg: "unexpected int"
+│               Msg: "unexpected integer"
 │       Space: " "
 │     RightBrace: "}"
 │   Space: "\n"
@@ -97,9 +97,8 @@ _hello
 │       Space: " "
 │       ShowRule
 │         Show: "show"
-│         Error
-│           Msg: "expected colon"
-│         Space: " "
+│         Error: " "
+│           Msg: "expected colon, found space"
 │         Ident: "heading"
 │       Error
 │         Msg: "expected semicolon or line break"
@@ -398,9 +397,13 @@ _hello
 │       Space: " "
 │       SetRule
 │         Set: "set"
-│         Space: " "
-│         Error: "123"
+│         Error
 │           Msg: "expected identifier"
+│       Error
+│         Msg: "expected semicolon or line break"
+│       Space: " "
+│       FuncCall
+│         Int: "123"
 │         Args
 │           LeftParen: "("
 │           Int: "1"
@@ -429,8 +432,6 @@ _hello
 │               Ident: "a"
 │             Comma: ","
 │             Space: " "
-│             Error
-│               Msg: "expected only one arguments sink is allowed"
 │             Spread
 │               Dots: ".."
 │               Ident: "b"
@@ -461,8 +462,6 @@ _hello
 │             Ident: "a"
 │           Comma: ","
 │           Space: " "
-│           Error
-│             Msg: "expected only one destructuring sink is allowed"
 │           Spread
 │             Dots: ".."
 │             Ident: "b"
@@ -515,8 +514,6 @@ _hello
 │           Int: "1"
 │         Comma: ","
 │         Space: " "
-│         Error
-│           Msg: "expected named or keyed pair"
 │         Int: "2"
 │         RightParen: ")"
 │       Space: " "
@@ -539,10 +536,8 @@ _hello
 │           Params
 │             LeftParen: "("
 │             Named
-│               Error
-│                 Msg: "expected identifier"
 │               Error: "1"
-│                 Msg: "expected pattern, found int"
+│                 Msg: "expected pattern, found integer"
 │               Colon: ":"
 │               Space: " "
 │               Int: "2"
@@ -722,9 +717,8 @@ _hello
 │         Args
 │           LeftParen: "("
 │           Named
-│             Error
-│               Msg: "expected identifier"
-│             Int: "1"
+│             Error: "1"
+│               Msg: "expected identifier, found integer"
 │             Colon: ":"
 │             Space: " "
 │             Int: "2"
@@ -896,10 +890,8 @@ _hello
 │         Destructuring
 │           LeftParen: "("
 │           Named
-│             Error
-│               Msg: "expected identifier"
 │             Error: "1"
-│               Msg: "expected pattern, found int"
+│               Msg: "expected pattern, found integer"
 │             Colon: ":"
 │             Space: " "
 │             Ident: "a"

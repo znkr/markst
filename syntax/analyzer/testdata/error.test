@@ -102,3 +102,15 @@ v in iter {}
 --- for-loop-binary-as-pattern ---
 // Error: 7 expected keyword `in`
 #for a + b in iter {}
+
+--- duplicate-args-sink ---
+// Error: 15-18 only one arguments sink is allowed
+#{ let f(..a, ..b) = 1 }
+
+--- duplicate-destructuring-sink ---
+// Error: 14-17 only one destructuring sink is allowed
+#{ let (..a, ..b) = x }
+
+--- plain-value-in-dict ---
+// Error: 17-18 expected named or keyed pair
+#{ (a: 1, b: 2, 3) }
