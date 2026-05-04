@@ -5,27 +5,28 @@ import (
 	"strings"
 	"unique"
 
-	"znkr.io/writst/ir"
+	"znkr.io/writst/expr"
 	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
-func (a *analyzer) analyzeHeading(n syntax.Node) *ir.HeadingExpr {
+func (a *analyzer) analyzeHeading(n syntax.Node) *expr.HeadingExpr {
 	ns := a.inner(n, syntax.KindHeading)
 	defer ns.finish()
 	level := len(ns.take(syntax.KindHeadingMarker))
 	body := a.analyzeMarkup(ns.node())
-	return ir.NewHeadingExpr(n.Span(), level, body)
+	return expr.NewHeadingExpr(n.Span(), level, body)
 }
 
-func (a *analyzer) analyzeListItem(n syntax.Node) *ir.ListItemExpr {
+func (a *analyzer) analyzeListItem(n syntax.Node) *expr.ListItemExpr {
 	ns := a.inner(n, syntax.KindListItem)
 	defer ns.finish()
 	ns.take(syntax.KindListMarker)
 	body := a.analyzeMarkup(ns.node())
-	return ir.NewListItemExpr(n.Span(), body)
+	return expr.NewListItemExpr(n.Span(), body)
 }
 
-func (a *analyzer) analyzeEnumItem(n syntax.Node) *ir.EnumItemExpr {
+func (a *analyzer) analyzeEnumItem(n syntax.Node) *expr.EnumItemExpr {
 	ns := a.inner(n, syntax.KindEnumItem)
 	defer ns.finish()
 	number := -1
@@ -38,41 +39,41 @@ func (a *analyzer) analyzeEnumItem(n syntax.Node) *ir.EnumItemExpr {
 		number = int(n)
 	}
 	body := a.analyzeMarkup(ns.node())
-	return ir.NewEnumItemExpr(n.Span(), number, body)
+	return expr.NewEnumItemExpr(n.Span(), number, body)
 }
 
-func (a *analyzer) analyzeTermItem(n syntax.Node) *ir.TermItemExpr {
+func (a *analyzer) analyzeTermItem(n syntax.Node) *expr.TermItemExpr {
 	ns := a.inner(n, syntax.KindTermItem)
 	defer ns.finish()
 	ns.take(syntax.KindTermMarker)
 	term := a.analyzeMarkup(ns.node())
 	ns.take(syntax.KindColon)
 	body := a.analyzeMarkup(ns.node())
-	return ir.NewTermItemExpr(n.Span(), term, body)
+	return expr.NewTermItemExpr(n.Span(), term, body)
 }
 
-func (a *analyzer) analyzeRef(n syntax.Node) *ir.RefExpr {
+func (a *analyzer) analyzeRef(n syntax.Node) *expr.RefExpr {
 	ns := a.inner(n, syntax.KindRef)
 	defer ns.finish()
 	marker := ns.take(syntax.KindRefMarker)
 	target := marker[1:] // trim '@'
-	var supplement *ir.ContentBlock
+	var supplement *expr.ContentBlock
 	if !ns.done() {
 		supplement = a.analyzeContentBlock(ns.node())
 	}
-	return ir.NewRefExpr(n.Span(), unique.Make(target), supplement)
+	return expr.NewRefExpr(n.Span(), unique.Make(target), supplement)
 }
 
-func (a *analyzer) analyzeContentBlock(n syntax.Node) *ir.ContentBlock {
+func (a *analyzer) analyzeContentBlock(n syntax.Node) *expr.ContentBlock {
 	ns := a.inner(n, syntax.KindContentBlock)
 	defer ns.finish()
 	ns.take(syntax.KindLeftBracket)
 	n0 := ns.node()
 	ns.take(syntax.KindRightBracket)
-	return ir.NewContentBlock(n.Span(), a.analyzeMarkup(n0))
+	return expr.NewContentBlock(n.Span(), a.analyzeMarkup(n0))
 }
 
-func (a *analyzer) analyzeRaw(n syntax.Node) *ir.ConstExpr {
+func (a *analyzer) analyzeRaw(n syntax.Node) *expr.ConstExpr {
 	ns := a.inner(n, syntax.KindRaw)
 	defer ns.finish()
 	marker := ns.take(syntax.KindRawDelim)
@@ -94,5 +95,5 @@ func (a *analyzer) analyzeRaw(n syntax.Node) *ir.ConstExpr {
 			lines = append(lines, child.Text())
 		}
 	}
-	return ir.NewConstExpr(n.Span(), &ir.Raw{Block: marker != "`", Lang: lang, Lines: lines})
+	return expr.NewConstExpr(n.Span(), &value.Raw{Block: marker != "`", Lang: lang, Lines: lines})
 }

@@ -28,7 +28,10 @@
 
 --- content-block-in-code ---
 #{ [hello *world*] }
-│ #{ [#text("hello") #strong[#text("world")]] }
+│ #{ [
+│   #text("hello")
+│   #strong[#text("world")]
+│ ] }
 
 --- parenthesized ---
 #{ (1) }

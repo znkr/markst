@@ -3,7 +3,7 @@
 // in package [ir].
 //
 // The entry point is [Analyze], which walks the [syntax.RootNode] produced by
-// [parser.Parse] and converts each syntax node into an [ir.Expr] based on its
+// [parser.Parse] and converts each syntax node into an [expr.Expr] based on its
 // [syntax.Kind]. Markup constructs become content expressions (headings,
 // emphasis, etc.), code constructs become code expressions (let bindings,
 // function calls, closures, etc.).
@@ -20,14 +20,15 @@ import (
 	"strings"
 	"unique"
 
-	"znkr.io/writst/ir"
+	"znkr.io/writst/expr"
 	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
 // Analyze converts the syntax tree rooted at n into a slice of IR expressions.
 // If the tree contains any syntax errors, they are collected and returned as
 // a [syntax.ErrorList]; in that case the expression slice is nil.
-func Analyze(n syntax.RootNode) ([]ir.Expr, error) {
+func Analyze(n syntax.RootNode) ([]expr.Expr, error) {
 	a := &analyzer{}
 	exprs := a.analyzeMarkup(n)
 	if len(a.errors) > 0 {
@@ -44,8 +45,8 @@ func (a *analyzer) error(n *syntax.Error) {
 	a.errors = append(a.errors, n)
 }
 
-func (a *analyzer) analyzeMarkup(n syntax.Node) []ir.Expr {
-	var body []ir.Expr
+func (a *analyzer) analyzeMarkup(n syntax.Node) []expr.Expr {
+	var body []expr.Expr
 	ns := a.inner(n, syntax.KindMarkup)
 	defer ns.finish()
 	for n := range ns.all() {
@@ -68,12 +69,12 @@ func (a *analyzer) analyzeMarkup(n syntax.Node) []ir.Expr {
 	return body
 }
 
-func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
+func (a *analyzer) analyzeExpr(n syntax.Node) expr.Expr {
 	switch n.Kind() {
 	case syntax.KindLabel:
 		label := a.leaf(n, syntax.KindLabel)
 		label = label[1 : len(label)-1] // trim '<>'
-		return ir.NewConstExpr(n.Span(), &ir.Label{Name: unique.Make(label)})
+		return expr.NewConstExpr(n.Span(), &value.Label{Name: unique.Make(label)})
 	case syntax.KindHeading:
 		return a.analyzeHeading(n)
 	case syntax.KindListItem:
@@ -83,47 +84,47 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindTermItem:
 		return a.analyzeTermItem(n)
 	case syntax.KindText:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Text: strings.TrimSpace(n.Text())})
+		return expr.NewConstExpr(n.Span(), &value.Text{Text: strings.TrimSpace(n.Text())})
 	case syntax.KindEscape:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Text: unescape(n.Text())})
+		return expr.NewConstExpr(n.Span(), &value.Text{Text: unescape(n.Text())})
 	case syntax.KindShorthand:
-		return ir.NewConstExpr(n.Span(), &ir.Text{Text: unshorthand(n.Text())})
+		return expr.NewConstExpr(n.Span(), &value.Text{Text: unshorthand(n.Text())})
 	case syntax.KindSmartQuote:
 		// TODO: implement smart quotes properly.
-		return ir.NewConstExpr(n.Span(), &ir.Text{Text: n.Text()})
+		return expr.NewConstExpr(n.Span(), &value.Text{Text: n.Text()})
 	case syntax.KindLinebreak:
-		return ir.NewConstExpr(n.Span(), &ir.Linebreak{})
+		return expr.NewConstExpr(n.Span(), &value.Linebreak{})
 	case syntax.KindParbreak:
-		return ir.NewConstExpr(n.Span(), &ir.Parbreak{})
+		return expr.NewConstExpr(n.Span(), &value.Parbreak{})
 	case syntax.KindStrong:
 		ns := a.inner(n, syntax.KindStrong)
 		defer ns.finish()
 		ns.take(syntax.KindStar)
 		n0 := ns.node()
 		ns.take(syntax.KindStar)
-		return ir.NewStrongExpr(n.Span(), a.analyzeMarkup(n0))
+		return expr.NewStrongExpr(n.Span(), a.analyzeMarkup(n0))
 	case syntax.KindEmph:
 		ns := a.inner(n, syntax.KindEmph)
 		defer ns.finish()
 		ns.take(syntax.KindUnderscore)
 		n0 := ns.node()
 		ns.take(syntax.KindUnderscore)
-		return ir.NewEmphExpr(n.Span(), a.analyzeMarkup(n0))
+		return expr.NewEmphExpr(n.Span(), a.analyzeMarkup(n0))
 	case syntax.KindRaw:
 		return a.analyzeRaw(n)
 	case syntax.KindLink:
 		lit := n.Text()
-		return ir.NewLinkExpr(
+		return expr.NewLinkExpr(
 			n.Span(),
 			lit,
-			[]ir.Expr{ir.NewConstExpr(n.Span(), &ir.Text{Text: lit})},
+			[]expr.Expr{expr.NewConstExpr(n.Span(), &value.Text{Text: lit})},
 		)
 	case syntax.KindRef:
 		return a.analyzeRef(n)
 	case syntax.KindNone:
-		return ir.NewConstExpr(n.Span(), ir.None{})
+		return expr.NewConstExpr(n.Span(), value.None{})
 	case syntax.KindAuto:
-		return ir.NewConstExpr(n.Span(), ir.Auto{})
+		return expr.NewConstExpr(n.Span(), value.Auto{})
 	case syntax.KindBool:
 		return a.analyzeBool(n)
 	case syntax.KindInt:
@@ -181,7 +182,7 @@ func (a *analyzer) analyzeExpr(n syntax.Node) ir.Expr {
 	case syntax.KindDestructAssignment:
 		return a.analyzeDestructAssignment(n)
 	case syntax.KindUnderscore:
-		return ir.NewIdent(n.Span(), underscore)
+		return expr.NewIdent(n.Span(), underscore)
 	case syntax.KindError:
 		a.unexpected(n)
 	default:

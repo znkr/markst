@@ -7,9 +7,9 @@ import (
 
 	"znkr.io/diff/textdiff"
 
+	"znkr.io/writst/expr"
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
@@ -42,7 +42,7 @@ func TestAnalyze(t *testing.T) {
 						return
 					}
 
-					got := ir.FormatExprs(exprs)
+					got := expr.FormatExprs(exprs)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}

@@ -1,0 +1,151 @@
+package builtin
+
+import (
+	"unique"
+
+	"znkr.io/writst/internal/names"
+	"znkr.io/writst/types"
+	"znkr.io/writst/value"
+)
+
+// Universe is the top-level scope containing all built-in type constructors
+// and global functions (range, repr, type).
+var Universe = map[unique.Handle[string]]value.Value{
+	names.Angle:     reflectedTypes[types.Angle],
+	names.Arguments: reflectedTypes[types.Arguments],
+	names.Array:     reflectedTypes[types.Array],
+	names.Bytes:     reflectedTypes[types.Bytes],
+	names.Content:   reflectedTypes[types.Content],
+	names.Decimal:   reflectedTypes[types.Decimal],
+	names.Float:     reflectedTypes[types.Float],
+	names.Fraction:  reflectedTypes[types.Fraction],
+	names.Int:       reflectedTypes[types.Int],
+	names.Label:     reflectedTypes[types.Label],
+	names.Range:     Range,
+	names.Ratio:     reflectedTypes[types.Ratio],
+	names.Relative:  reflectedTypes[types.Relative],
+	names.Repr:      Repr,
+	names.Str:       reflectedTypes[types.Str],
+	names.Type:      reflectedTypes[types.ReflectedType],
+}
+
+// reflectedTypes maps each type constant to its reflected Type value,
+// optionally with a constructor function (e.g. int() for type conversion).
+var reflectedTypes = [...]*value.Type{
+	types.None: {Reflected: types.None},
+	types.ReflectedType: {
+		Reflected:   types.ReflectedType,
+		Constructor: Type,
+	},
+	types.Auto: {Reflected: types.Auto},
+	types.Bool: {Reflected: types.Bool},
+	types.Int: {
+		Reflected:   types.Int,
+		Constructor: Int,
+	},
+	types.Float: {
+		Reflected:   types.Float,
+		Constructor: Float,
+	},
+	types.Decimal: {
+		Reflected:   types.Decimal,
+		Constructor: Decimal,
+	},
+	types.Length:   {Reflected: types.Length},
+	types.Relative: {Reflected: types.Relative},
+	types.Ratio:    {Reflected: types.Ratio},
+	types.Angle:    {Reflected: types.Angle},
+	types.Fraction: {Reflected: types.Fraction},
+	types.Str: {
+		Reflected:   types.Str,
+		Constructor: Str,
+	},
+	types.Bytes: {
+		Reflected:   types.Bytes,
+		Constructor: Bytes,
+	},
+	types.Array: {
+		Reflected:   types.Array,
+		Constructor: Array,
+	},
+	types.Dict:     {Reflected: types.Dict},
+	types.Function: {Reflected: types.Function},
+	types.Arguments: {
+		Reflected:   types.Arguments,
+		Constructor: Arguments,
+	},
+	types.Content: {Reflected: types.Content},
+	types.Label: {
+		Reflected:   types.Label,
+		Constructor: Label,
+	},
+}
+
+// TypeFields maps each type to its available methods and fields. When a field
+// access like x.len() is evaluated, the evaluator looks up the field name in
+// TypeFields[x.Type()] and returns the method function (pre-bound with x as the
+// receiver via [Function.With]).
+var TypeFields = [...]map[unique.Handle[string]]value.Value{
+	types.None:          {},
+	types.ReflectedType: {},
+	types.Auto:          {},
+	types.Bool:          {},
+	types.Int: {
+		names.FromBytes: IntFromBytes,
+		names.Signum:    Signum,
+		names.ToBytes:   IntToBytes,
+	},
+	types.Float: {
+		names.FromBytes:  FloatFromBytes,
+		names.Inf:        FloatInf,
+		names.IsInfinite: FloatIsInfinite,
+		names.IsNan:      FloatIsNan,
+		names.Nan:        FloatNan,
+		names.Signum:     FloatSignum,
+		names.ToBytes:    FloatToBytes,
+	},
+	types.Decimal:  {},
+	types.Length:   {},
+	types.Relative: {},
+	types.Ratio:    {},
+	types.Angle:    {},
+	types.Fraction: {},
+	types.Str: {
+		names.Split: StrSplit,
+		names.At:    StrAt,
+	},
+	types.Bytes: {
+		names.Slice: BytesSlice,
+	},
+	types.Array: {
+		names.At:          ArrayAt,
+		names.Chunks:      ArrayChunks,
+		names.Enumerate:   ArrayEnumerate,
+		names.First:       ArrayFirst,
+		names.Insert:      ArrayInsert,
+		names.Intersperse: ArrayIntersperse,
+		names.Join:        ArrayJoin,
+		names.Last:        ArrayLast,
+		names.Len:         ArrayLen,
+		names.Pop:         ArrayPop,
+		names.Product:     ArrayProduct,
+		names.Push:        ArrayPush,
+		names.Remove:      ArrayRemove,
+		names.Rev:         ArrayRev,
+		names.Slice:       ArraySlice,
+		names.Sorted:      ArraySorted,
+		names.Sum:         ArraySum,
+		names.ToDict:      ArrayToDict,
+		names.Windows:     ArrayWindows,
+		names.Zip:         ArrayZip,
+	},
+	types.Dict: {
+		names.At: DictAt,
+	},
+	types.Function: {},
+	types.Arguments: {
+		names.Len: ArgumentsLen,
+		names.At:  ArgumentsAt,
+	},
+	types.Content: {},
+}

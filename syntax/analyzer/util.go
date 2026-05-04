@@ -9,16 +9,16 @@ import (
 	"unicode/utf8"
 	"unique"
 
-	"znkr.io/writst/ir"
 	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
 var (
 	underscore = unique.Make("_")
 
-	bools = map[string]ir.Bool{
-		"true":  ir.Bool(true),
-		"false": ir.Bool(false),
+	bools = map[string]value.Bool{
+		"true":  value.Bool(true),
+		"false": value.Bool(false),
 	}
 
 	shorthandMap = map[string]string{

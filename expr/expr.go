@@ -1,0 +1,633 @@
+package expr
+
+import (
+	"unique"
+
+	"znkr.io/writst/internal/formatter"
+	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
+)
+
+// Expr is the interface for all IR expression nodes. Each expression knows
+// its source [syntax.Span] and can be evaluated to produce a [Value].
+type Expr interface {
+	Span() syntax.Span
+
+	formatter.Formattable
+
+	eval(ec *evalCtx) value.Value
+	visitChildren(fn func(Expr) bool) bool
+	aExpr()
+}
+
+type lvalueExpr interface {
+	Expr
+	evalL(ec *evalCtx) (value.Value, setter)
+}
+
+type setter = func(value.Value)
+
+type expr struct {
+	span syntax.Span
+}
+
+func (e *expr) Span() syntax.Span { return e.span }
+func (e *expr) aExpr()            {}
+
+// Content Expressions /////////////////////////////////////////////////////////
+
+// HeadingExpr represents a section heading (= Introduction).
+type HeadingExpr struct {
+	expr
+	level int
+	body  []Expr
+}
+
+func NewHeadingExpr(span syntax.Span, level int, body []Expr) *HeadingExpr {
+	return &HeadingExpr{expr: expr{span: span}, level: level, body: body}
+}
+
+func (n *HeadingExpr) Level() int   { return n.level }
+func (n *HeadingExpr) Body() []Expr { return n.body }
+
+type StrongExpr struct {
+	expr
+	body []Expr
+}
+
+func NewStrongExpr(span syntax.Span, body []Expr) *StrongExpr {
+	return &StrongExpr{expr: expr{span: span}, body: body}
+}
+
+func (n *StrongExpr) Body() []Expr { return n.body }
+
+type EmphExpr struct {
+	expr
+	body []Expr
+}
+
+func NewEmphExpr(span syntax.Span, body []Expr) *EmphExpr {
+	return &EmphExpr{expr: expr{span: span}, body: body}
+}
+
+func (n *EmphExpr) Body() []Expr { return n.body }
+
+type LinkExpr struct {
+	expr
+	dest string
+	body []Expr
+}
+
+func NewLinkExpr(span syntax.Span, dest string, body []Expr) *LinkExpr {
+	return &LinkExpr{expr: expr{span: span}, dest: dest, body: body}
+}
+
+func (n *LinkExpr) Dest() string { return n.dest }
+func (n *LinkExpr) Body() []Expr { return n.body }
+
+type RefExpr struct {
+	expr
+	target     unique.Handle[string]
+	supplement *ContentBlock
+}
+
+func NewRefExpr(span syntax.Span, target unique.Handle[string], supplement *ContentBlock) *RefExpr {
+	return &RefExpr{expr: expr{span: span}, target: target, supplement: supplement}
+}
+
+func (n *RefExpr) Target() unique.Handle[string] { return n.target }
+func (n *RefExpr) Supplement() *ContentBlock     { return n.supplement }
+
+type ListItemExpr struct {
+	expr
+	body []Expr
+}
+
+func NewListItemExpr(span syntax.Span, body []Expr) *ListItemExpr {
+	return &ListItemExpr{expr: expr{span: span}, body: body}
+}
+
+func (n *ListItemExpr) Body() []Expr { return n.body }
+
+type EnumItemExpr struct {
+	expr
+	number int
+	body   []Expr
+}
+
+func NewEnumItemExpr(span syntax.Span, number int, body []Expr) *EnumItemExpr {
+	return &EnumItemExpr{expr: expr{span: span}, number: number, body: body}
+}
+
+func (n *EnumItemExpr) Number() int  { return n.number }
+func (n *EnumItemExpr) Body() []Expr { return n.body }
+
+type TermItemExpr struct {
+	expr
+	term        []Expr
+	description []Expr
+}
+
+func NewTermItemExpr(span syntax.Span, term, description []Expr) *TermItemExpr {
+	return &TermItemExpr{expr: expr{span: span}, term: term, description: description}
+}
+
+func (n *TermItemExpr) Term() []Expr        { return n.term }
+func (n *TermItemExpr) Description() []Expr { return n.description }
+
+// Code Expressions ////////////////////////////////////////////////////////////
+
+// ConstExpr is a literal value.
+type ConstExpr struct {
+	expr
+	value value.Value
+}
+
+func NewConstExpr(span syntax.Span, value value.Value) *ConstExpr {
+	return &ConstExpr{expr: expr{span: span}, value: value}
+}
+
+func (n *ConstExpr) Value() value.Value { return n.value }
+
+// Ident is a variable reference, resolved at evaluation time via scope lookup.
+type Ident struct {
+	expr
+	name unique.Handle[string]
+}
+
+func NewIdent(span syntax.Span, name unique.Handle[string]) *Ident {
+	return &Ident{expr: expr{span: span}, name: name}
+}
+
+func (n *Ident) Name() unique.Handle[string] { return n.name }
+
+// CodeBlock is a sequence of expressions in a code block ({ ... }).
+type CodeBlock struct {
+	expr
+	exprs []Expr
+}
+
+func NewCodeBlock(span syntax.Span, body []Expr) *CodeBlock {
+	return &CodeBlock{expr: expr{span: span}, exprs: body}
+}
+
+func (n *CodeBlock) Body() []Expr { return n.exprs }
+
+// ContentBlock is a content block ([ ... ]) that evaluates to Content.
+type ContentBlock struct {
+	expr
+	exprs []Expr
+}
+
+func NewContentBlock(span syntax.Span, body []Expr) *ContentBlock {
+	return &ContentBlock{expr: expr{span: span}, exprs: body}
+}
+
+func (n *ContentBlock) Body() []Expr { return n.exprs }
+
+type Parenthesized struct {
+	expr
+	body Expr
+}
+
+func NewParenthesized(span syntax.Span, body Expr) *Parenthesized {
+	return &Parenthesized{expr: expr{span: span}, body: body}
+}
+
+func (n *Parenthesized) Body() Expr { return n.body }
+
+// Collections /////////////////////////////////////////////////////////////////////////////////////
+
+type ArrayExpr struct {
+	expr
+	elements []Expr
+}
+
+func NewArrayExpr(span syntax.Span, elements []Expr) *ArrayExpr {
+	return &ArrayExpr{expr: expr{span: span}, elements: elements}
+}
+
+func (n *ArrayExpr) Elements() []Expr { return n.elements }
+
+type SpreadExpr struct {
+	expr
+	inner Expr
+}
+
+func NewSpreadExpr(span syntax.Span, inner Expr) *SpreadExpr {
+	return &SpreadExpr{expr: expr{span: span}, inner: inner}
+}
+
+func (n *SpreadExpr) Inner() Expr { return n.inner }
+
+type DictExpr struct {
+	expr
+	entries []DictItemExpr
+}
+
+func NewDictExpr(span syntax.Span, entries []DictItemExpr) *DictExpr {
+	return &DictExpr{expr: expr{span: span}, entries: entries}
+}
+
+func (n *DictExpr) Entries() []DictItemExpr { return n.entries }
+
+type DictItemExpr struct {
+	key   Expr
+	value Expr
+}
+
+func NewDictItemExpr(key, value Expr) DictItemExpr {
+	return DictItemExpr{key: key, value: value}
+}
+
+func (n DictItemExpr) Key() Expr   { return n.key }
+func (n DictItemExpr) Value() Expr { return n.value }
+
+// Operators ///////////////////////////////////////////////////////////////////////////////////////
+
+type Unary struct {
+	expr
+	op      syntax.UnaryOp
+	operand Expr
+}
+
+func NewUnary(span syntax.Span, op syntax.UnaryOp, operand Expr) *Unary {
+	return &Unary{expr: expr{span: span}, op: op, operand: operand}
+}
+
+func (n *Unary) Op() syntax.UnaryOp { return n.op }
+func (n *Unary) Operand() Expr      { return n.operand }
+
+type Binary struct {
+	expr
+	left  Expr
+	op    syntax.BinaryOp
+	right Expr
+}
+
+func NewBinary(span syntax.Span, left Expr, op syntax.BinaryOp, right Expr) *Binary {
+	return &Binary{expr: expr{span: span}, left: left, op: op, right: right}
+}
+
+func (n *Binary) Left() Expr          { return n.left }
+func (n *Binary) Op() syntax.BinaryOp { return n.op }
+func (n *Binary) Right() Expr         { return n.right }
+
+type FieldAccess struct {
+	expr
+	target Expr
+	field  *Ident
+}
+
+func NewFieldAccess(span syntax.Span, target Expr, field *Ident) *FieldAccess {
+	return &FieldAccess{expr: expr{span: span}, target: target, field: field}
+}
+
+func (n *FieldAccess) Target() Expr  { return n.target }
+func (n *FieldAccess) Field() *Ident { return n.field }
+
+// Arguments ///////////////////////////////////////////////////////////////////
+
+// Arg is a single argument in a function call's argument list.
+type Arg interface {
+	aArg()
+}
+
+type ExprArg struct {
+	expr Expr
+}
+
+func NewExprArg(expr Expr) *ExprArg {
+	return &ExprArg{expr: expr}
+}
+
+func (n *ExprArg) Expr() Expr { return n.expr }
+
+type NamedArg struct {
+	span syntax.Span
+	name unique.Handle[string]
+	expr Expr
+}
+
+func NewNamedArg(span syntax.Span, name unique.Handle[string], expr Expr) *NamedArg {
+	return &NamedArg{span: span, name: name, expr: expr}
+}
+
+func (n *NamedArg) Span() syntax.Span           { return n.span }
+func (n *NamedArg) Name() unique.Handle[string] { return n.name }
+func (n *NamedArg) Expr() Expr                  { return n.expr }
+
+type SpreadArg struct {
+	expr Expr
+}
+
+func NewSpreadArg(expr Expr) *SpreadArg {
+	return &SpreadArg{expr: expr}
+}
+
+func (n *SpreadArg) Expr() Expr { return n.expr }
+
+func (*ExprArg) aArg()   {}
+func (*NamedArg) aArg()  {}
+func (*SpreadArg) aArg() {}
+
+// Closure Parameters //////////////////////////////////////////////////////////
+
+// ClosureParam is a parameter in a closure definition.
+type ClosureParam interface {
+	aClosureParam()
+}
+
+type PositionalClosureParam struct {
+	name *Ident
+}
+
+func NewPositionalClosureParam(ident *Ident) *PositionalClosureParam {
+	return &PositionalClosureParam{name: ident}
+}
+
+func (n *PositionalClosureParam) Name() *Ident { return n.name }
+
+type NamedClosureParam struct {
+	name *Ident
+	def  Expr
+}
+
+func NewNamedClosureParam(name *Ident, def Expr) *NamedClosureParam {
+	return &NamedClosureParam{name: name, def: def}
+}
+
+func (n *NamedClosureParam) Name() *Ident  { return n.name }
+func (n *NamedClosureParam) Default() Expr { return n.def }
+
+type SpreadClosureParam struct {
+	ident *Ident
+}
+
+func NewSpreadClosureParam(ident *Ident) *SpreadClosureParam {
+	return &SpreadClosureParam{ident: ident}
+}
+
+func (n *SpreadClosureParam) Ident() *Ident { return n.ident }
+
+func (*PositionalClosureParam) aClosureParam() {}
+func (*NamedClosureParam) aClosureParam()      {}
+func (*SpreadClosureParam) aClosureParam()     {}
+
+// Functions ///////////////////////////////////////////////////////////////////
+
+// FuncCall is a function or method invocation: f(x, y) or x.method(y).
+// Trailing content blocks are stored separately from parenthesized arguments.
+type FuncCall struct {
+	expr
+	callee Expr
+	args   []Arg
+	blocks []*ContentBlock
+}
+
+func NewFuncCall(span syntax.Span, callee Expr, args []Arg, blocks []*ContentBlock) *FuncCall {
+	return &FuncCall{expr: expr{span: span}, callee: callee, args: args, blocks: blocks}
+}
+
+func (n *FuncCall) Callee() Expr             { return n.callee }
+func (n *FuncCall) Args() []Arg              { return n.args }
+func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
+
+// Capture records a variable captured by a closure, along with the span of
+// the first reference to that variable within the closure body.
+type Capture struct {
+	Name unique.Handle[string]
+	Span syntax.Span
+}
+
+// Closure is a function definition: (x, y) => x + y, or a named function
+// via let binding.
+type Closure struct {
+	expr
+	name     *Ident
+	params   []ClosureParam
+	body     Expr
+	captures []Capture
+}
+
+func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr, captures []Capture) *Closure {
+	return &Closure{expr: expr{span: span}, name: name, params: params, body: body, captures: captures}
+}
+
+func (n *Closure) Name() *Ident           { return n.name }
+func (n *Closure) Params() []ClosureParam { return n.params }
+func (n *Closure) Body() Expr             { return n.body }
+func (n *Closure) Captures() []Capture    { return n.captures }
+
+// Bindings & Rules ////////////////////////////////////////////////////////////
+
+// LetBinding is a let declaration: let x = 1 or let (a, b) = (1, 2).
+type LetBinding struct {
+	expr
+	pattern []DestructPattern
+	value   Expr
+}
+
+func NewLetBinding(span syntax.Span, pattern []DestructPattern, value Expr) *LetBinding {
+	return &LetBinding{expr: expr{span: span}, pattern: pattern, value: value}
+}
+
+func (n *LetBinding) Pattern() []DestructPattern { return n.pattern }
+func (n *LetBinding) Value() Expr                { return n.value }
+
+type SetRule struct {
+	expr
+	target    Expr
+	args      []Arg
+	condition Expr
+}
+
+func NewSetRule(span syntax.Span, target Expr, args []Arg, condition Expr) *SetRule {
+	return &SetRule{expr: expr{span: span}, target: target, args: args, condition: condition}
+}
+
+func (n *SetRule) Target() Expr    { return n.target }
+func (n *SetRule) Args() []Arg     { return n.args }
+func (n *SetRule) Condition() Expr { return n.condition }
+
+type ShowRule struct {
+	expr
+	selector  Expr
+	transform Expr
+}
+
+func NewShowRule(span syntax.Span, selector, transform Expr) *ShowRule {
+	return &ShowRule{expr: expr{span: span}, selector: selector, transform: transform}
+}
+
+func (n *ShowRule) Selector() Expr  { return n.selector }
+func (n *ShowRule) Transform() Expr { return n.transform }
+
+// Destructuring ///////////////////////////////////////////////////////////////
+
+// Destructuring is a pattern that unpacks a value: (x, _, ..y).
+type Destructuring struct {
+	expr
+	items []Expr
+}
+
+func NewDestructuring(span syntax.Span, items []Expr) *Destructuring {
+	return &Destructuring{expr: expr{span: span}, items: items}
+}
+
+func (n *Destructuring) Items() []Expr { return n.items }
+
+type DestructAssignment struct {
+	expr
+	pattern []DestructPattern
+	value   Expr
+}
+
+func NewDestructAssignment(span syntax.Span, pattern []DestructPattern, value Expr) *DestructAssignment {
+	return &DestructAssignment{expr: expr{span: span}, pattern: pattern, value: value}
+}
+
+func (n *DestructAssignment) Pattern() []DestructPattern { return n.pattern }
+func (n *DestructAssignment) Value() Expr                { return n.value }
+
+// DestructPattern is a single element in a destructuring pattern.
+type DestructPattern interface {
+	aDestructPattern()
+	Format(f *formatter.Formatter)
+}
+
+type DestructIdent struct {
+	ident *Ident
+}
+
+func NewDestructIdent(ident *Ident) *DestructIdent {
+	return &DestructIdent{ident: ident}
+}
+
+func (n *DestructIdent) Ident() *Ident { return n.ident }
+
+type DestructNamed struct {
+	name    unique.Handle[string]
+	pattern *Ident
+}
+
+func NewDestructNamed(name unique.Handle[string], pattern *Ident) *DestructNamed {
+	return &DestructNamed{name: name, pattern: pattern}
+}
+
+func (n *DestructNamed) Name() unique.Handle[string] { return n.name }
+func (n *DestructNamed) Pattern() *Ident             { return n.pattern }
+
+type DestructSink struct {
+	ident *Ident
+}
+
+func NewDestructSink(ident *Ident) *DestructSink {
+	return &DestructSink{ident: ident}
+}
+
+func (n *DestructSink) Ident() *Ident { return n.ident }
+
+func (*DestructIdent) aDestructPattern() {}
+func (*DestructNamed) aDestructPattern() {}
+func (*DestructSink) aDestructPattern()  {}
+
+// Control Flow ////////////////////////////////////////////////////////////////
+
+// Conditional is an if-else expression: if x { y } else { z }.
+type Conditional struct {
+	expr
+	conditions []Expr
+	blocks     []Expr
+	def        Expr
+}
+
+func NewConditional(span syntax.Span, conditions []Expr, blocks []Expr, def Expr) *Conditional {
+	return &Conditional{expr: expr{span: span}, conditions: conditions, blocks: blocks, def: def}
+}
+
+func (n *Conditional) Conditions() []Expr { return n.conditions }
+func (n *Conditional) Blocks() []Expr     { return n.blocks }
+func (n *Conditional) Default() Expr      { return n.def }
+
+type WhileLoop struct {
+	expr
+	condition Expr
+	body      *CodeBlock
+}
+
+func NewWhileLoop(span syntax.Span, condition Expr, body *CodeBlock) *WhileLoop {
+	return &WhileLoop{expr: expr{span: span}, condition: condition, body: body}
+}
+
+func (n *WhileLoop) Condition() Expr  { return n.condition }
+func (n *WhileLoop) Body() *CodeBlock { return n.body }
+
+type ForLoop struct {
+	expr
+	pattern     []DestructPattern
+	patternSpan syntax.Span
+	iterable    Expr
+	body        Expr
+}
+
+func NewForLoop(span syntax.Span, pattern []DestructPattern, patternSpan syntax.Span, iterable Expr, body Expr) *ForLoop {
+	return &ForLoop{expr: expr{span: span}, pattern: pattern, patternSpan: patternSpan, iterable: iterable, body: body}
+}
+
+func (n *ForLoop) Pattern() []DestructPattern { return n.pattern }
+func (n *ForLoop) PatternSpan() syntax.Span   { return n.patternSpan }
+func (n *ForLoop) Iterable() Expr             { return n.iterable }
+func (n *ForLoop) Body() Expr                 { return n.body }
+
+type LoopBreak struct {
+	expr
+}
+
+func NewLoopBreak(span syntax.Span) *LoopBreak {
+	return &LoopBreak{expr: expr{span: span}}
+}
+
+type LoopContinue struct {
+	expr
+}
+
+func NewLoopContinue(span syntax.Span) *LoopContinue {
+	return &LoopContinue{expr: expr{span: span}}
+}
+
+type FuncReturn struct {
+	expr
+	value Expr
+}
+
+func NewFuncReturn(span syntax.Span, value Expr) *FuncReturn {
+	return &FuncReturn{expr: expr{span: span}, value: value}
+}
+
+func (n *FuncReturn) Value() Expr { return n.value }
+
+// Other ///////////////////////////////////////////////////////////////////////
+
+type Contextual struct {
+	expr
+	body Expr
+}
+
+func NewContextual(span syntax.Span, body Expr) *Contextual {
+	return &Contextual{expr: expr{span: span}, body: body}
+}
+
+func (n *Contextual) Body() Expr { return n.body }
+
+// ModuleInclude is an include statement: include "<filename>".
+type ModuleInclude struct {
+	expr
+	source Expr
+}
+
+func NewModuleInclude(span syntax.Span, source Expr) *ModuleInclude {
+	return &ModuleInclude{expr: expr{span: span}, source: source}
+}
+
+func (n *ModuleInclude) Source() Expr { return n.source }
