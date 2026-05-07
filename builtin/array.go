@@ -44,6 +44,15 @@ var (
 		F: arrayAtImpl,
 	}
 
+	ArrayPosition = &value.Function{
+		Name: "array.position",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "searcher", Type: types.SetOf(types.Function)},
+		},
+		F: arrayPositionImpl,
+	}
+
 	ArrayFirst = &value.Function{
 		Name: "array.first",
 		Positional: []value.Param{
@@ -235,7 +244,59 @@ var (
 		Positional: []value.Param{
 			{Name: "self", Type: types.SetOf(types.Array)},
 		},
+		Named: value.NamedParams{
+			names.Key: value.Param{Name: "key", Type: types.SetOf(types.Function)},
+			names.By:  value.Param{Name: "by", Type: types.SetOf(types.Function)},
+		},
 		F: arraySortedImpl,
+	}
+
+	ArrayFilter = &value.Function{
+		Name: "array.filter",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "test", Type: types.SetOf(types.Function)},
+		},
+		F: arrayFilterImpl,
+	}
+
+	ArrayMap = &value.Function{
+		Name: "array.map",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "mapper", Type: types.SetOf(types.Function)},
+		},
+		F: arrayMapImpl,
+	}
+
+	ArrayFold = &value.Function{
+		Name: "array.fold",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "init", Type: types.Any},
+			{Name: "folder", Type: types.SetOf(types.Function)},
+		},
+		F: arrayFoldImpl,
+	}
+
+	ArrayReduce = &value.Function{
+		Name: "array.reduce",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "reducer", Type: types.SetOf(types.Function)},
+		},
+		F: arrayReduceImpl,
+	}
+
+	ArrayDedup = &value.Function{
+		Name: "array.dedup",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Array)},
+		},
+		Named: value.NamedParams{
+			names.Key: {Name: "key", Type: types.SetOf(types.Function)},
+		},
+		F: arrayDedupImpl,
 	}
 )
 
@@ -303,6 +364,26 @@ func arrayAtImpl(call *value.FunctionCallContext, args []value.Value, named valu
 		}
 	}
 	return arr.Elems[index], nil
+}
+
+func arrayPositionImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+	fn := args[1].(*value.Function)
+	for i, v := range arr.Elems {
+		fcc := &value.FunctionCallContext{} // TODO: no span!
+		match, err := fn.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+		if err != nil {
+			return nil, fmt.Errorf("error calling searcher function: %w", err)
+		}
+		found, ok := match.(value.Bool)
+		if !ok {
+			return nil, fmt.Errorf("searcher function must return a boolean")
+		}
+		if found {
+			return value.Int(i), nil
+		}
+	}
+	return value.None{}, nil
 }
 
 func arrayFirstImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -659,19 +740,206 @@ func arrayChunksImpl(_ *value.FunctionCallContext, args []value.Value, named val
 func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	sortedElems := slices.Clone(arr.Elems)
+
+	if !named.IsSet(names.Key) && !named.IsSet(names.By) {
+		var err error
+		slices.SortStableFunc(sortedElems, func(a, b value.Value) int {
+			cmp, err0 := value.Compare(a, b)
+			if err0 != nil && err == nil {
+				err = err0
+			}
+			return cmp
+		})
+		if err != nil {
+			return nil, &value.FunctionCallError{
+				Msg:   err.Error(),
+				Hints: []string{"consider choosing a `key` or defining the comparison with `by`"},
+			}
+		}
+	}
+
+	val := func(v value.Value) (value.Value, error) { return v, nil }
+	cmp := func(a, b value.Value) (int, error) {
+		a0, err := val(a)
+		if err != nil {
+			return 0, err
+		}
+		b0, err := val(b)
+		if err != nil {
+			return 0, err
+		}
+		cmp, err := value.Compare(a0, b0)
+		if err != nil {
+			return 0, &value.FunctionCallError{
+				Msg:   err.Error(),
+				Hints: []string{"consider defining the comparison with `by` or choosing a different `key`"},
+			}
+		}
+		return cmp, nil
+	}
+	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
+		val = func(v value.Value) (value.Value, error) {
+			// TODO: no span for the call context!
+			fcc := &value.FunctionCallContext{}
+			return keyFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+		}
+	}
+	if byFunc, ok := named.Get(names.By).(*value.Function); ok {
+		less := func(a, b value.Value) (bool, error) {
+			a0, err := val(a)
+			if err != nil {
+				return false, err
+			}
+			b0, err := val(b)
+			if err != nil {
+				return false, err
+			}
+			fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
+			lt0, err := byFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{a0, b0}})
+			if err != nil {
+				return false, err
+			}
+			lt, ok := lt0.(value.Bool)
+			if !ok {
+				return false, fmt.Errorf("expected boolean from `by` function, got %s", lt0.Type())
+			}
+			return bool(lt), nil
+		}
+		cmp = func(a, b value.Value) (int, error) {
+			l, err := less(a, b)
+			if err != nil {
+				return 0, err
+			}
+			if l {
+				return -1, nil
+			}
+			g, err := less(b, a)
+			if err != nil {
+				return 0, err
+			}
+			if g {
+				return 1, nil
+			}
+			return 0, nil
+		}
+	}
 	var err error
-	slices.SortFunc(sortedElems, func(a, b value.Value) int {
-		cmp, err0 := value.Compare(a, b)
+	slices.SortStableFunc(sortedElems, func(a, b value.Value) int {
+		cmp, err0 := cmp(a, b)
 		if err0 != nil && err == nil {
 			err = err0
 		}
 		return cmp
 	})
 	if err != nil {
-		return nil, &value.FunctionCallError{
-			Msg:   err.Error(),
-			Hints: []string{"consider choosing a `key` or defining the comparison with `by`"},
-		}
+		return nil, err
 	}
 	return &value.Array{Elems: sortedElems}, nil
+}
+
+func arrayFilterImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+	test := args[1].(*value.Function)
+
+	var filtered []value.Value
+	for _, v := range arr.Elems {
+		include, err := applyPredicate(test, v)
+		if err != nil {
+			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if include {
+			filtered = append(filtered, v)
+		}
+	}
+	return &value.Array{Elems: filtered}, nil
+}
+
+func arrayMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+	mapper := args[1].(*value.Function)
+
+	mapped := make([]value.Value, len(arr.Elems))
+	for i, v := range arr.Elems {
+		res, err := applyMapper(mapper, v)
+		if err != nil {
+			return nil, fmt.Errorf("error calling mapper function: %w", err)
+		}
+		mapped[i] = res
+	}
+	return &value.Array{Elems: mapped}, nil
+}
+
+func arrayFoldImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+	init := args[1]
+	folder := args[2].(*value.Function)
+
+	acc := init
+	for _, v := range arr.Elems {
+		fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
+		res, err := folder.Apply(fcc, &value.Arguments{Positional: []value.Value{acc, v}})
+		if err != nil {
+			return nil, fmt.Errorf("error calling folder function: %w", err)
+		}
+		acc = res
+	}
+	return acc, nil
+}
+
+func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+	reducer := args[1].(*value.Function)
+
+	if len(arr.Elems) == 0 {
+		return value.None{}, nil
+	}
+
+	acc := arr.Elems[0]
+	for _, v := range arr.Elems[1:] {
+		fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
+		res, err := reducer.Apply(fcc, &value.Arguments{Positional: []value.Value{acc, v}})
+		if err != nil {
+			return nil, fmt.Errorf("error calling reducer function: %w", err)
+		}
+		acc = res
+	}
+	return acc, nil
+}
+
+func arrayDedupImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	arr := args[0].(*value.Array)
+
+	key := func(v value.Value) (value.Value, error) { return v, nil }
+	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
+		key = func(v value.Value) (value.Value, error) {
+			fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
+			return keyFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+		}
+	}
+
+	var seen []value.Value
+	var result []value.Value
+	var err error
+	for _, v := range arr.Elems {
+		k, err := key(v)
+		if err != nil {
+			return nil, fmt.Errorf("error calling key function: %w", err)
+		}
+		idx, found := slices.BinarySearchFunc(seen, k, func(a, b value.Value) int {
+			cmp, err0 := value.Compare(a, b)
+			if err0 != nil && err == nil {
+				err = err0
+			}
+			return cmp
+		})
+		if found {
+			continue
+		}
+		seen = slices.Insert(seen, idx, k)
+		result = append(result, v)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &value.Array{Elems: result}, nil
 }

@@ -68,7 +68,7 @@
 │ #parbreak()
 │ #text("Six.")
 
---- if-else-if-else (skip: closures not implemented yet) ---
+--- if-else-if-else ---
 // Test else if.
 
 #let nth(n) = {
@@ -84,6 +84,8 @@
 #test(nth(3), "3rd")
 #test(nth(4), "4th")
 #test(nth(5), "5th")
+│ #parbreak()
+│ #parbreak()
 
 --- if-expression ---
 // Value of if expressions.

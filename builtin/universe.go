@@ -19,6 +19,7 @@ var Universe = map[unique.Handle[string]]value.Value{
 	names.Decimal:   reflectedTypes[types.Decimal],
 	names.Float:     reflectedTypes[types.Float],
 	names.Fraction:  reflectedTypes[types.Fraction],
+	names.Function:  reflectedTypes[types.Function],
 	names.Int:       reflectedTypes[types.Int],
 	names.Label:     reflectedTypes[types.Label],
 	names.Range:     Range,
@@ -113,6 +114,7 @@ var TypeFields = [...]map[unique.Handle[string]]value.Value{
 	types.Str: {
 		names.Split: StrSplit,
 		names.At:    StrAt,
+		names.Len:   StrLen,
 	},
 	types.Bytes: {
 		names.Slice: BytesSlice,
@@ -120,16 +122,22 @@ var TypeFields = [...]map[unique.Handle[string]]value.Value{
 	types.Array: {
 		names.At:          ArrayAt,
 		names.Chunks:      ArrayChunks,
+		names.Dedup:       ArrayDedup,
 		names.Enumerate:   ArrayEnumerate,
 		names.First:       ArrayFirst,
+		names.Filter:      ArrayFilter,
+		names.Fold:        ArrayFold,
 		names.Insert:      ArrayInsert,
 		names.Intersperse: ArrayIntersperse,
 		names.Join:        ArrayJoin,
 		names.Last:        ArrayLast,
 		names.Len:         ArrayLen,
+		names.Map:         ArrayMap,
 		names.Pop:         ArrayPop,
+		names.Position:    ArrayPosition,
 		names.Product:     ArrayProduct,
 		names.Push:        ArrayPush,
+		names.Reduce:      ArrayReduce,
 		names.Remove:      ArrayRemove,
 		names.Rev:         ArrayRev,
 		names.Slice:       ArraySlice,
@@ -142,10 +150,14 @@ var TypeFields = [...]map[unique.Handle[string]]value.Value{
 	types.Dict: {
 		names.At: DictAt,
 	},
-	types.Function: {},
+	types.Function: {
+		names.With: FunctionWith,
+	},
 	types.Arguments: {
-		names.Len: ArgumentsLen,
-		names.At:  ArgumentsAt,
+		names.At:     ArgumentsAt,
+		names.Filter: ArgumentsFilter,
+		names.Len:    ArgumentsLen,
+		names.Map:    ArgumentsMap,
 	},
 	types.Content: {},
 }

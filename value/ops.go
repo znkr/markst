@@ -581,6 +581,15 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 }
 
 var cmpops = map[types.Type]func(x, y Value) (int, error){
+	types.Bool: func(x, y Value) (int, error) {
+		if x.(Bool) == y.(Bool) {
+			return 0, nil
+		} else if !x.(Bool) && y.(Bool) {
+			return -1, nil
+		} else {
+			return 1, nil
+		}
+	},
 	types.Int: func(x, y Value) (int, error) { return cmp.Compare(x.(Int), y.(Int)), nil },
 	types.Float: func(x, y Value) (int, error) {
 		xf, yf := float64(x.(Float)), float64(y.(Float))

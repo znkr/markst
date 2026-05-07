@@ -115,7 +115,7 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 
 	m := len(merged.Positional)
 	if n.Variadic == nil && m > len(n.Positional) {
-		return nil, nil, fmt.Errorf("too many positional arguments: expected at most %d, got %d", len(n.Positional), m)
+		return nil, nil, ArgErrorPosf(len(n.Positional), "unexpected argument")
 	}
 
 	// mapping[paramIndex]: arg index that fills the slot, -1 for default, -2

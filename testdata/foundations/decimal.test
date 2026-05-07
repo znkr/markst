@@ -33,7 +33,7 @@
 #decimal(float.nan)
 │ #raw("nan")
 
---- decimal-scale-is-observable (skip: closures not implemented yet) ---
+--- decimal-scale-is-observable (skip: not supported by underlying decimal implementation) ---
 // Ensure equal decimals with different scales produce different strings.
 #let f1(x) = str(x)
 #let f2(x) = f1(x)

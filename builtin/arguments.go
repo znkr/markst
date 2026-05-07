@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"fmt"
 	"unique"
 
 	"znkr.io/writst/types"
@@ -32,6 +33,24 @@ var (
 		},
 		F: argumentsAtImpl,
 	}
+
+	ArgumentsFilter = &value.Function{
+		Name: "arguments.filter",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+			{Name: "test", Type: types.SetOf(types.Function)},
+		},
+		F: argumentsFilterImpl,
+	}
+
+	ArgumentsMap = &value.Function{
+		Name: "arguments.map",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+			{Name: "mapper", Type: types.SetOf(types.Function)},
+		},
+		F: argumentsMapImpl,
+	}
 )
 
 func argumentsImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -60,4 +79,64 @@ func argumentsAtImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	default:
 		panic("unexpected type: " + key.Type().String())
 	}
+}
+
+func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	v := args[0].(*value.Arguments)
+	test := args[1].(*value.Function)
+
+	var filteredPos []value.Value
+	for _, elem := range v.Positional {
+		include, err := applyPredicate(test, elem)
+		if err != nil {
+			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if include {
+			filteredPos = append(filteredPos, elem)
+		}
+	}
+
+	var filteredNamed value.NamedArgs
+	for k, elem := range v.Named {
+		include, err := applyPredicate(test, elem)
+		if err != nil {
+			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if include {
+			if filteredNamed == nil {
+				filteredNamed = make(value.NamedArgs)
+			}
+			filteredNamed[k] = elem
+		}
+	}
+
+	return &value.Arguments{Positional: filteredPos, Named: filteredNamed}, nil
+}
+
+func argumentsMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	v := args[0].(*value.Arguments)
+	mapper := args[1].(*value.Function)
+
+	mappedPos := make([]value.Value, len(v.Positional))
+	for i, elem := range v.Positional {
+		res, err := applyMapper(mapper, elem)
+		if err != nil {
+			return nil, fmt.Errorf("error calling mapper function: %w", err)
+		}
+		mappedPos[i] = res
+	}
+
+	var mappedNamed value.NamedArgs
+	if len(v.Named) > 0 {
+		mappedNamed = make(value.NamedArgs, len(v.Named))
+		for k, elem := range v.Named {
+			res, err := applyMapper(mapper, elem)
+			if err != nil {
+				return nil, fmt.Errorf("error calling mapper function: %w", err)
+			}
+			mappedNamed[k] = res
+		}
+	}
+
+	return &value.Arguments{Positional: mappedPos, Named: mappedNamed}, nil
 }

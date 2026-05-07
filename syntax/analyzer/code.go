@@ -387,6 +387,9 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []expr.ClosureParam {
 				ident := a.analyzeIdent(ns.node())
 				addName(ident)
 				params = append(params, expr.NewSpreadClosureParam(ident))
+			case syntax.KindUnderscore:
+				ident := expr.NewIdent(child.Span(), underscore)
+				params = append(params, expr.NewPositionalClosureParam(ident))
 			case syntax.KindError:
 				a.error(child.(*syntax.Error))
 			default:
