@@ -335,3 +335,9 @@ func (n *TermItem) Format(f *formatter.Formatter) {
 func (n *Label) Format(f *formatter.Formatter) {
 	f.FuncCall("label", []formatter.Arg{formatter.PositionalArg(n.Name.Value())})
 }
+
+// Module //////////////////////////////////////////////////////////////////////
+
+func (n *Module) Format(f *formatter.Formatter) {
+	f.Str("module")
+}

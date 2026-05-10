@@ -16,7 +16,7 @@
 // Error: 10-17 invalid decimal: 1.2.3
 #decimal("1.2.3")
 
---- decimal-constructor-float-literal (skip: warning not implemented yet) ---
+--- decimal-constructor-float-literal ---
 // Warning: 18-25 creating a decimal using imprecise float literal
 // Hint: 18-25 use a string in the decimal constructor to avoid loss of precision: `decimal("1.32523")`
 #let _ = decimal(1.32523)
@@ -97,16 +97,19 @@
 │ #linebreak()
 │ #raw("-4")
 
---- decimal-display-round (skip: calc not implemented yet) ---
+--- decimal-display-round ---
 // Display less digits.
 #calc.round(decimal("-3.9191919191919191919191919195"), digits: 4) \
 #calc.round(decimal("5.0000000000"), digits: 4)
+│ #raw("-3.9192")
+│ #linebreak()
+│ #raw("5")
 
---- decimal-expected-float-error (skip: calc not implemented yet) ---
+--- decimal-expected-float-error ---
 // Error: 11-25 expected integer, float, or angle, found decimal
 // Hint: 11-25 if loss of precision is acceptable, explicitly cast the decimal to a float with `float(value)`
 #calc.sin(decimal("1.1"))
 
---- decimal-expected-integer-error (skip: calc not implemented yet) ---
+--- decimal-expected-integer-error ---
 // Error: 11-25 expected integer, found decimal
 #calc.odd(decimal("1.1"))

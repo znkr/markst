@@ -432,6 +432,15 @@ func (n *FieldAccess) eval(ec *evalCtx) value.Value {
 			})
 		}
 		return f
+	case *value.Module:
+		def := t.Definitions[n.field.Name()]
+		if def == nil {
+			raise(&ValueError{
+				span: n.span,
+				msg:  fmt.Sprintf("module %s has no definition `%s`", t.Name, n.field.Name().Value()),
+			})
+		}
+		return def
 	case value.Value:
 		if f := builtin.TypeFields[t.Type()][fname]; f != nil {
 			switch f := f.(type) {
@@ -555,6 +564,21 @@ func (n *FuncCall) eval0(ec *evalCtx, setter *func(value.Value)) value.Value {
 	for _, block := range n.blocks {
 		args.Positional = append(args.Positional, block.eval(ec))
 	}
+	// Warn when a literal float is passed to decimal().
+	if fn.Name == "decimal" && len(n.args) > 0 {
+		if ea, ok := n.args[0].(*ExprArg); ok {
+			if ce, ok := ea.expr.(*ConstExpr); ok {
+				if f, ok := ce.value.(value.Float); ok {
+					ec.warn(&ValueError{
+						span:  ea.expr.Span(),
+						msg:   "creating a decimal using imprecise float literal",
+						hints: []string{"use a string in the decimal constructor to avoid loss of precision: `decimal(\"" + f.String() + "\")`"},
+					})
+				}
+			}
+		}
+	}
+
 	fcc := value.FunctionCallContext{
 		Span:   n.span,
 		Setter: setter,

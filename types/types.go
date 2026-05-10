@@ -38,6 +38,7 @@ const (
 	Arguments
 	Content
 	Label
+	Module
 )
 
 var types = [...]string{
@@ -61,6 +62,7 @@ var types = [...]string{
 	Arguments:     "arguments",
 	Content:       "content",
 	Label:         "label",
+	Module:        "module",
 }
 
 func (t Type) String() string {
@@ -97,6 +99,7 @@ var Any = SetOf(
 	Arguments,
 	Content,
 	Label,
+	Module,
 )
 
 // SetOf creates a Set containing the given types.

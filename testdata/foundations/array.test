@@ -263,8 +263,8 @@
 
 --- array-filter ---
 // Test the `filter` method.
-// TODO: #test(().filter(calc.even), ())
-// TODO: #test((1, 2, 3, 4).filter(calc.even), (2, 4))
+#test(().filter(calc.even), ())
+#test((1, 2, 3, 4).filter(calc.even), (2, 4))
 #test((7, 3, 2, 5, 1).filter(x => x < 5), (3, 2, 1))
 
 --- array-filter-error ---
@@ -287,7 +287,7 @@
 // TODO: #test(().fold("hi", grid), "hi")
 #test((1, 2, 3, 4).fold(0, (s, x) => s + x), 10)
 
---- array-fold-closure-without-params (skip: not implemented yet) ---
+--- array-fold-closure-without-params (skip: incorrect span in error) ---
 // Error: 20-22 unexpected argument
 #(1, 2, 3).fold(0, () => none)
 
@@ -457,8 +457,8 @@
 
 --- array-dedup-key ---
 // Test the `dedup` method with the `key` argument.
-// TODO: #test((1, 2, 3, 4, 5, 6).dedup(key: x => calc.rem(x, 2)), (1, 2))
-// TODO: #test((1, 2, 3, 4, 5, 6).dedup(key: x => calc.rem(x, 3)), (1, 2, 3))
+#test((1, 2, 3, 4, 5, 6).dedup(key: x => calc.rem(x, 2)), (1, 2))
+#test((1, 2, 3, 4, 5, 6).dedup(key: x => calc.rem(x, 3)), (1, 2, 3))
 #test(("Hello", "World", "Hi", "There").dedup(key: x => x.len()), ("Hello", "Hi"))
 #test(("Hello", "World", "Hi", "There").dedup(key: x => x.at(0)), ("Hello", "World", "There"))
 

@@ -15,6 +15,7 @@ var Universe = map[unique.Handle[string]]value.Value{
 	names.Arguments: reflectedTypes[types.Arguments],
 	names.Array:     reflectedTypes[types.Array],
 	names.Bytes:     reflectedTypes[types.Bytes],
+	names.Calc:      Calc,
 	names.Content:   reflectedTypes[types.Content],
 	names.Decimal:   reflectedTypes[types.Decimal],
 	names.Float:     reflectedTypes[types.Float],

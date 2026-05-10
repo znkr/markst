@@ -160,7 +160,9 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			continue
 		}
 		if !p.Type.Contains(merged.Positional[argIdx].Type()) {
-			return nil, nil, ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
+			err := ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
+			hintDecimal(err, merged.Positional[argIdx].Type(), p.Type)
+			return nil, nil, err
 		}
 		mapping[postSinkSlots[i]] = argIdx
 	}
@@ -204,7 +206,9 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			}
 		}
 		if !matched {
-			return nil, nil, ArgErrorPosf(i, "expected %s, found %s", preSink[lo].Type, arg.Type())
+			err := ArgErrorPosf(i, "expected %s, found %s", preSink[lo].Type, arg.Type())
+			hintDecimal(err, arg.Type(), preSink[lo].Type)
+			return nil, nil, err
 		}
 	}
 	for i := lo; i < len(preSink); i++ {
@@ -309,3 +313,14 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 
 func (*Function) aValue()          {}
 func (*Function) Type() types.Type { return types.Function }
+
+// hintDecimal adds a helpful hint when a decimal is passed where float/angle/int
+// is expected but decimal is not.
+func hintDecimal(err *FunctionCallError, got types.Type, expected types.Set) {
+	if got != types.Decimal || expected.Contains(types.Decimal) {
+		return
+	}
+	if expected.Contains(types.Float) || expected.Contains(types.Angle) {
+		err.Hint("if loss of precision is acceptable, explicitly cast the decimal to a float with `float(value)`")
+	}
+}
