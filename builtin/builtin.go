@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"znkr.io/writst/internal/lorem"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
@@ -22,10 +23,18 @@ var (
 		Positional: []value.Param{{Type: types.Any}},
 		// F is set in init() to avoid an initialization cycle.
 	}
+
+	Lorem = &value.Function{
+		Name: "lorem",
+		Positional: []value.Param{
+			{Name: "words", Type: types.SetOf(types.Int)},
+		},
+		F: loremImpl,
+	}
 )
 
 func init() {
-	Type.F = TypeImpl
+	Type.F = typeImpl
 }
 
 func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -91,6 +100,12 @@ func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.Name
 	}
 }
 
-func TypeImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func typeImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	return reflectedTypes[args[0].Type()], nil
+}
+
+func loremImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	words := int(args[0].(value.Int))
+	lg := lorem.NewGenerator()
+	return value.Str(lg.Words(words)), nil
 }

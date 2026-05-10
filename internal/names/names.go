@@ -52,6 +52,7 @@ var (
 	Last        = unique.Make("last")
 	Len         = unique.Make("len")
 	Lines       = unique.Make("lines")
+	Lorem       = unique.Make("lorem")
 	Map         = unique.Make("map")
 	Nan         = unique.Make("nan")
 	Named       = unique.Make("named")

@@ -23,6 +23,7 @@ var Universe = map[unique.Handle[string]]value.Value{
 	names.Function:  reflectedTypes[types.Function],
 	names.Int:       reflectedTypes[types.Int],
 	names.Label:     reflectedTypes[types.Label],
+	names.Lorem:     Lorem,
 	names.Range:     Range,
 	names.Ratio:     reflectedTypes[types.Ratio],
 	names.Relative:  reflectedTypes[types.Relative],
