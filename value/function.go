@@ -17,11 +17,16 @@ type Function struct {
 	Name string
 
 	// Positional describes the function's positional parameters in order.
+	// If Sink is set, the parameter at index *Sink is the sink parameter
+	// and receives a *Arguments value containing surplus positional args
+	// and unmatched named args.
 	Positional []Param
 
-	// Variadic, if set, describes the variadic parameter that collects any
-	// surplus positional arguments.
-	Variadic *Param
+	// Sink, if set, marks Positional[*Sink] as a sink parameter. Pre-sink
+	// params consume from the front of call args, post-sink params from the
+	// back, and everything in between (plus unmatched named args) is packed
+	// into a *Arguments passed at that index.
+	Sink *int
 
 	// Named describes the allowed named parameters.
 	Named NamedParams
@@ -34,12 +39,6 @@ type Function struct {
 	// fully merged arguments (pre-bound + call-site) and returns the result or
 	// an error.
 	F func(call *FunctionCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
-
-	// Bind, if set, overrides the default argument validation and slot
-	// mapping. It receives the merged arguments (WithArgs + call args) and
-	// returns the validated arguments along with a positional slot mapping.
-	// When set, the default type checking and slot assignment are skipped.
-	Bind func(fn *Function, args *Arguments) (*Arguments, []int, error)
 }
 
 // NamedParams maps interned parameter names to their definitions.
@@ -94,11 +93,10 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 	return &Function{
 		Name:       n.Name,
 		Positional: n.Positional,
-		Variadic:   n.Variadic,
+		Sink:       n.Sink,
 		Named:      n.Named,
 		WithArgs:   merged,
 		F:          n.F,
-		Bind:       n.Bind,
 	}, nil
 }
 
@@ -106,55 +104,98 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 // returns the merged arguments along with a parameter slot mapping.
 //
 // mapping[paramIndex] is the arg index that fills that slot, or -1 if the slot
-// uses its default, or -2 if the slot is required but unfilled.
+// uses its default, or -2 if the slot is required but unfilled. The sink slot
+// (if any) is set to -3; Apply handles it separately.
 func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	merged := n.WithArgs.Merge(args)
-	if n.Bind != nil {
-		return n.Bind(n, merged)
+
+	sinkIdx := -1
+	if n.Sink != nil {
+		sinkIdx = *n.Sink
+	}
+
+	// Params split into pre-sink and post-sink groups (excluding the sink itself).
+	var preSink, postSink []Param
+	var preSinkSlots, postSinkSlots []int // original indices in Positional
+	for i, p := range n.Positional {
+		if i == sinkIdx {
+			continue
+		}
+		if sinkIdx >= 0 && i > sinkIdx {
+			postSink = append(postSink, p)
+			postSinkSlots = append(postSinkSlots, i)
+		} else {
+			preSink = append(preSink, p)
+			preSinkSlots = append(preSinkSlots, i)
+		}
 	}
 
 	m := len(merged.Positional)
-	if n.Variadic == nil && m > len(n.Positional) {
+	nonSinkParamCount := len(preSink) + len(postSink)
+
+	if sinkIdx < 0 && m > len(n.Positional) {
 		return nil, nil, ArgErrorPosf(len(n.Positional), "unexpected argument")
 	}
+	if sinkIdx >= 0 && m < nonSinkParamCount {
+		// Not enough args to fill required non-sink params.
+		// The detailed "missing argument" error is raised by Apply when mapping has -2 slots.
+	}
 
-	// mapping[paramIndex]: arg index that fills the slot, -1 for default, -2
-	// for unset.
 	mapping := slices.Repeat([]int{-2}, len(n.Positional))
+	if sinkIdx >= 0 {
+		mapping[sinkIdx] = -3 // sentinel: handled by Apply
+	}
 
-	// Type-check each arg against the non-variadic parameter slots it could
-	// reach. Walk left to right: the lowest matching slot for arg[i] anchors
-	// arg[i+1]'s search (slots are always assigned in order). Optional slots
-	// are only consumed when there are surplus args beyond what's needed for
-	// the remaining required slots.
+	// Post-sink params consume from the back of args.
+	postSinkArgStart := m - len(postSink)
+	if postSinkArgStart < 0 {
+		postSinkArgStart = m
+	}
+	for i, p := range postSink {
+		argIdx := postSinkArgStart + i
+		if argIdx >= m {
+			if p.Default != nil {
+				mapping[postSinkSlots[i]] = -1
+			}
+			continue
+		}
+		if !p.Type.Contains(merged.Positional[argIdx].Type()) {
+			return nil, nil, ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
+		}
+		mapping[postSinkSlots[i]] = argIdx
+	}
+
+	// Pre-sink params consume from the front, using the existing type-matching
+	// algorithm. Available args for pre-sink are [0, postSinkArgStart).
+	preSinkArgEnd := postSinkArgStart
+	if sinkIdx < 0 {
+		preSinkArgEnd = m
+	}
+	preSinkArgCount := min(preSinkArgEnd, len(preSink))
+
 	lo := 0
-	reqRemaining := 0 // required slots in [lo, len(Positional))
-	for _, p := range n.Positional {
+	reqRemaining := 0
+	for _, p := range preSink {
 		if p.Default == nil {
 			reqRemaining++
 		}
 	}
 
-	// Determine how many args are available for non-variadic slots.
-	nonVariadicArgs := min(m, len(n.Positional))
-
-	for i := range nonVariadicArgs {
+	for i := range preSinkArgCount {
 		arg := merged.Positional[i]
-		hi := len(n.Positional) - nonVariadicArgs + i
-		argsLeft := nonVariadicArgs - i // args left including this one
+		hi := len(preSink) - preSinkArgCount + i
+		argsLeft := preSinkArgCount - i
 		matched := false
 		for slot := lo; slot <= hi; slot++ {
-			// Skip optional slots when remaining args can only cover required
-			// slots.
-			if n.Positional[slot].Default != nil && argsLeft <= reqRemaining {
+			if preSink[slot].Default != nil && argsLeft <= reqRemaining {
 				continue
 			}
-			if n.Positional[slot].Type.Contains(arg.Type()) {
+			if preSink[slot].Type.Contains(arg.Type()) {
 				for j := lo; j < slot; j++ {
-					mapping[j] = -1
+					mapping[preSinkSlots[j]] = -1
 				}
-				mapping[slot] = i
-				if n.Positional[slot].Default == nil {
+				mapping[preSinkSlots[slot]] = i
+				if preSink[slot].Default == nil {
 					reqRemaining--
 				}
 				lo = slot + 1
@@ -163,27 +204,23 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			}
 		}
 		if !matched {
-			return nil, nil, ArgErrorPosf(i, "expected %s, found %s", n.Positional[lo].Type, arg.Type())
+			return nil, nil, ArgErrorPosf(i, "expected %s, found %s", preSink[lo].Type, arg.Type())
 		}
 	}
-	for i := lo; i < len(n.Positional); i++ {
-		if n.Positional[i].Default != nil {
-			mapping[i] = -1
-		}
-	}
-
-	// Handle variadic args: type-check each remaining arg.
-	if n.Variadic != nil {
-		for i := nonVariadicArgs; i < m; i++ {
-			if !n.Variadic.Type.Contains(merged.Positional[i].Type()) {
-				return nil, nil, ArgErrorPosf(i, "expected %s, found %s", n.Variadic.Type, merged.Positional[i].Type())
-			}
+	for i := lo; i < len(preSink); i++ {
+		if preSink[i].Default != nil {
+			mapping[preSinkSlots[i]] = -1
 		}
 	}
 
+	// Validate named args.
 	for name := range merged.Named {
 		if _, ok := n.Named[name]; !ok {
-			return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+			if sinkIdx < 0 {
+				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+			}
+			// When a sink exists, unknown named args go to the sink.
+			continue
 		}
 		if typ := merged.Named[name].Type(); !n.Named[name].Type.Contains(typ) {
 			return nil, nil, ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
@@ -212,14 +249,11 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 		return nil, err
 	}
 
-	// A nil mapping means args pass through directly (no slot assignment).
-	if mapping == nil {
-		return n.F(call, merged.Positional, NamedArgsWithDefaults{Args: merged.Named})
-	}
-
 	pos := make([]Value, len(mapping))
 	for i, argIdx := range mapping {
 		switch argIdx {
+		case -3:
+			// Sink slot — filled below.
 		case -2:
 			return nil, fmt.Errorf("missing argument: %s", n.Positional[i].Name)
 		case -1:
@@ -229,18 +263,46 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 		}
 	}
 
-	// Append variadic args as an *Array.
-	if n.Variadic != nil {
-		var elems []Value
-		variadicStart := min(len(merged.Positional), len(n.Positional))
-		if variadicStart < len(merged.Positional) {
-			elems = slices.Clone(merged.Positional[variadicStart:])
+	namedArgs := merged.Named
+
+	// Pack the sink: collect middle positional args + unmatched named args.
+	if n.Sink != nil {
+		sinkIdx := *n.Sink
+
+		// Determine which positional args were consumed by non-sink params.
+		consumed := make([]bool, len(merged.Positional))
+		for _, argIdx := range mapping {
+			if argIdx >= 0 {
+				consumed[argIdx] = true
+			}
 		}
-		pos = append(pos, &Array{Elems: elems})
+		var sinkPos []Value
+		for i, v := range merged.Positional {
+			if !consumed[i] {
+				sinkPos = append(sinkPos, v)
+			}
+		}
+
+		// Unmatched named args go to the sink.
+		var sinkNamed NamedArgs
+		matchedNamed := make(NamedArgs)
+		for k, v := range merged.Named {
+			if _, ok := n.Named[k]; ok {
+				matchedNamed[k] = v
+			} else {
+				if sinkNamed == nil {
+					sinkNamed = make(NamedArgs)
+				}
+				sinkNamed[k] = v
+			}
+		}
+		namedArgs = matchedNamed
+
+		pos[sinkIdx] = &Arguments{Positional: sinkPos, Named: sinkNamed}
 	}
 
 	return n.F(call, pos, NamedArgsWithDefaults{
-		Args:     merged.Named,
+		Args:     namedArgs,
 		Defaults: n.Named,
 	})
 }

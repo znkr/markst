@@ -148,7 +148,8 @@ var TypeFields = [...]map[unique.Handle[string]]value.Value{
 		names.Zip:         ArrayZip,
 	},
 	types.Dict: {
-		names.At: DictAt,
+		names.At:    DictAt,
+		names.Pairs: DictPairs,
 	},
 	types.Function: {
 		names.With: FunctionWith,
@@ -158,6 +159,8 @@ var TypeFields = [...]map[unique.Handle[string]]value.Value{
 		names.Filter: ArgumentsFilter,
 		names.Len:    ArgumentsLen,
 		names.Map:    ArgumentsMap,
+		names.Named:  ArgumentsNamed,
+		names.Pos:    ArgumentsPos,
 	},
 	types.Content: {},
 }

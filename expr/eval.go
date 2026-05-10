@@ -3,6 +3,7 @@ package expr
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"unique"
 
@@ -507,7 +508,7 @@ func (n *FuncCall) eval0(ec *evalCtx, setter *func(value.Value)) value.Value {
 	for _, arg := range n.args {
 		switch a := arg.(type) {
 		case *ExprArg:
-			if len(args.Positional) >= len(fn.Positional) && fn.Variadic == nil && fn.Bind == nil {
+			if len(args.Positional) >= len(fn.Positional) && fn.Sink == nil {
 				raise(&ValueError{
 					span: a.expr.Span(),
 					msg:  "unexpected argument",
@@ -520,7 +521,33 @@ func (n *FuncCall) eval0(ec *evalCtx, setter *func(value.Value)) value.Value {
 			}
 			args.Named[a.name] = a.expr.eval(ec)
 		case *SpreadArg:
-			panic("TODO: implement spread arguments")
+			val := a.expr.eval(ec)
+			switch v := val.(type) {
+			case *value.Array:
+				args.Positional = append(args.Positional, v.Elems...)
+			case *value.Dict:
+				if args.Named == nil {
+					args.Named = make(map[unique.Handle[string]]value.Value)
+				}
+				for k, v := range v.Elems.All() {
+					args.Named[unique.Make(string(k))] = v
+				}
+			case *value.Arguments:
+				args.Positional = append(args.Positional, v.Positional...)
+				if len(v.Named) > 0 {
+					if args.Named == nil {
+						args.Named = make(map[unique.Handle[string]]value.Value)
+					}
+					maps.Copy(args.Named, v.Named)
+				}
+			case value.None:
+				// spreading none produces no arguments
+			default:
+				raise(&ValueError{
+					span: a.expr.Span(),
+					msg:  fmt.Sprintf("cannot spread %s", val.Type()),
+				})
+			}
 		default:
 			panic("unrecognized function argument type")
 		}
@@ -616,7 +643,11 @@ func (n *Closure) eval(ec *evalCtx) value.Value {
 		f.Name = n.name.name.Value()
 	}
 
+	// positional tracks the name handles for each entry in f.Positional,
+	// including the sink slot (which stores its own name separately).
 	var positional []unique.Handle[string]
+	var sinkName unique.Handle[string]
+	var hasSink bool
 	for _, p := range n.params {
 		switch p := p.(type) {
 		case *PositionalClosureParam:
@@ -634,6 +665,20 @@ func (n *Closure) eval(ec *evalCtx) value.Value {
 				Type:    types.Any,
 				Default: p.Default().eval(ec),
 			}
+		case *SpreadClosureParam:
+			hasSink = true
+			sinkIdx := len(f.Positional)
+			f.Sink = &sinkIdx
+			name := "sink"
+			if p.Ident() != nil {
+				sinkName = p.Ident().Name()
+				name = sinkName.Value()
+			}
+			positional = append(positional, sinkName)
+			f.Positional = append(f.Positional, value.Param{
+				Name: name,
+				Type: types.SetOf(types.Arguments),
+			})
 		default:
 			panic(fmt.Sprintf("not implemented for %T", p))
 		}
@@ -662,6 +707,13 @@ func (n *Closure) eval(ec *evalCtx) value.Value {
 		}()
 
 		for i, arg := range args {
+			if hasSink && i == *f.Sink {
+				// Bind the sink parameter if it has a name.
+				if sinkName != (unique.Handle[string]{}) {
+					ec.bind(sinkName, arg)
+				}
+				continue
+			}
 			ec.bind(positional[i], arg)
 		}
 		for name := range f.Named {

@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"fmt"
+	"slices"
 	"unique"
 
 	"znkr.io/writst/types"
@@ -11,10 +12,11 @@ import (
 var (
 	Arguments = &value.Function{
 		Name: "arguments",
-		Bind: func(_ *value.Function, args *value.Arguments) (*value.Arguments, []int, error) {
-			return args, nil, nil
+		Positional: []value.Param{
+			{Name: "args", Type: types.SetOf(types.Arguments)},
 		},
-		F: argumentsImpl,
+		Sink: new(0),
+		F:    argumentsImpl,
 	}
 
 	ArgumentsLen = &value.Function{
@@ -32,6 +34,22 @@ var (
 			{Name: "key", Type: types.SetOf(types.Int, types.Str)},
 		},
 		F: argumentsAtImpl,
+	}
+
+	ArgumentsPos = &value.Function{
+		Name: "arguments.pos",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+		},
+		F: argumentsPosImpl,
+	}
+
+	ArgumentsNamed = &value.Function{
+		Name: "arguments.named",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Arguments)},
+		},
+		F: argumentsNamedImpl,
 	}
 
 	ArgumentsFilter = &value.Function{
@@ -54,7 +72,7 @@ var (
 )
 
 func argumentsImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
-	return &value.Arguments{Positional: args, Named: named.Args}, nil
+	return args[0].(*value.Arguments), nil
 }
 
 func argumentsLenImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -79,6 +97,20 @@ func argumentsAtImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	default:
 		panic("unexpected type: " + key.Type().String())
 	}
+}
+
+func argumentsPosImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	v := args[0].(*value.Arguments)
+	return &value.Array{Elems: slices.Clone(v.Positional)}, nil
+}
+
+func argumentsNamedImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	v := args[0].(*value.Arguments)
+	dict := new(value.Dict)
+	for k, val := range v.Named {
+		dict.Elems.Put(value.Str(k.Value()), val)
+	}
+	return dict, nil
 }
 
 func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {

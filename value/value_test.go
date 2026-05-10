@@ -20,13 +20,13 @@ func TestFunctionWith(t *testing.T) {
 		F: nopF,
 	}
 
-	customBindFunc := &Function{
-		Name:       "anything",
-		Positional: []Param{{Type: types.SetOf(types.Int)}},
-		Bind: func(_ *Function, args *Arguments) (*Arguments, []int, error) {
-			return args, nil, nil
+	sinkFunc := &Function{
+		Name: "anything",
+		Positional: []Param{
+			{Name: "args", Type: types.SetOf(types.Arguments)},
 		},
-		F: nopF,
+		Sink: new(0),
+		F:    nopF,
 	}
 
 	tests := []struct {
@@ -39,7 +39,7 @@ func TestFunctionWith(t *testing.T) {
 		{"two_valid_args", rangeFunc, &Arguments{Positional: []Value{Int(1), Int(2)}}, false},
 		{"bad_type_rejected", rangeFunc, &Arguments{Positional: []Value{Str("string")}}, true},
 		{"too_many_args", rangeFunc, &Arguments{Positional: []Value{Int(1), Int(2), Int(3)}}, true},
-		{"custom_bind_skips_type_check", customBindFunc, &Arguments{Positional: []Value{Str("ok")}}, false},
+		{"sink_accepts_any_args", sinkFunc, &Arguments{Positional: []Value{Str("ok")}}, false},
 	}
 
 	for _, tc := range tests {

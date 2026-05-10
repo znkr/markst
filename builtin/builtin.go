@@ -61,9 +61,31 @@ func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.Name
 		return value.Str(v.String()), nil
 	case value.Fraction:
 		return value.Str(v.String()), nil
+	case value.Str:
+		return value.Str(fmt.Sprintf("%q", string(v))), nil
 	case value.Decimal:
 		s := v.String()
 		return value.Str(fmt.Sprintf("decimal(\"%s\")", s)), nil
+	case *value.Array:
+		elems := make([]string, len(v.Elems))
+		for i, e := range v.Elems {
+			r, err := reprImpl(nil, []value.Value{e}, named)
+			if err != nil {
+				return nil, err
+			}
+			elems[i] = string(r.(value.Str))
+		}
+		return value.Str("(" + strings.Join(elems, ", ") + ")"), nil
+	case *value.Dict:
+		var parts []string
+		for k, val := range v.Elems.All() {
+			r, err := reprImpl(nil, []value.Value{val}, named)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, fmt.Sprintf("%q: %s", string(k), string(r.(value.Str))))
+		}
+		return value.Str("(" + strings.Join(parts, ", ") + ")"), nil
 	default:
 		panic(fmt.Sprintf("repr() not implemented for type %s", args[0].Type()))
 	}

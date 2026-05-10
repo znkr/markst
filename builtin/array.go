@@ -200,8 +200,9 @@ var (
 		Name: "array.zip",
 		Positional: []value.Param{
 			{Name: "self", Type: types.SetOf(types.Array)},
+			{Name: "others", Type: types.SetOf(types.Arguments)},
 		},
-		Variadic: &value.Param{Name: "others", Type: types.SetOf(types.Array)},
+		Sink: new(1),
 		Named: value.NamedParams{
 			names.Exact: value.Param{Name: "exact", Type: types.SetOf(types.Bool), Default: value.Bool(false)},
 		},
@@ -669,14 +670,23 @@ func arrayWindowsImpl(_ *value.FunctionCallContext, args []value.Value, named va
 
 func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	self := args[0].(*value.Array)
-	others := args[1].(*value.Array)
+	others := args[1].(*value.Arguments)
 	exact := named.Get(names.Exact).(value.Bool)
 
+	// Reject unexpected named arguments captured by the sink.
+	for name := range others.Named {
+		return nil, value.ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+	}
+
 	// Collect all arrays: self + others.
-	arrays := make([]*value.Array, 1+len(others.Elems))
+	arrays := make([]*value.Array, 1+len(others.Positional))
 	arrays[0] = self
-	for i, v := range others.Elems {
-		arrays[i+1] = v.(*value.Array)
+	for i, v := range others.Positional {
+		arr, ok := v.(*value.Array)
+		if !ok {
+			return nil, value.ArgErrorPosf(i+1, "expected array, found %s", v.Type())
+		}
+		arrays[i+1] = arr
 	}
 
 	// Find minimum length.
