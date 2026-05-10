@@ -85,6 +85,15 @@ func (a *analyzer) analyzeStr(n syntax.Node) *expr.ConstExpr {
 
 func (a *analyzer) analyzeIdent(n syntax.Node) *expr.Ident {
 	name := unique.Make(a.leaf(n, syntax.KindIdent))
+	a.checkIdent(name, n.Span())
+	return expr.NewIdent(n.Span(), name)
+}
+
+// analyzeBindingIdent creates an identifier node for a binding site (let
+// pattern, for variable, closure parameter) without checking whether the
+// name is already in scope.
+func (a *analyzer) analyzeBindingIdent(n syntax.Node) *expr.Ident {
+	name := unique.Make(a.leaf(n, syntax.KindIdent))
 	return expr.NewIdent(n.Span(), name)
 }
 
@@ -98,7 +107,15 @@ func (a *analyzer) analyzeCode(n syntax.Node) []expr.Expr {
 			a.error(child.(*syntax.Error))
 			continue
 		default:
-			exprs = append(exprs, a.analyzeExpr(child))
+			e := a.analyzeExpr(child)
+			if e == nil {
+				continue
+			}
+			exprs = append(exprs, e)
+			// Let bindings accumulate in scope for subsequent expressions.
+			if let, ok := e.(*expr.LetBinding); ok && let != nil {
+				a.bindPatterns(let.Pattern())
+			}
 		}
 	}
 	return exprs
@@ -107,6 +124,8 @@ func (a *analyzer) analyzeCode(n syntax.Node) []expr.Expr {
 func (a *analyzer) analyzeCodeBlock(n syntax.Node) *expr.CodeBlock {
 	ns := a.inner(n, syntax.KindCodeBlock)
 	defer ns.finish()
+	a.openScope()
+	defer a.closeScope()
 	var exprs []expr.Expr
 	for child := range ns.inside(syntax.KindLeftBrace, syntax.KindRightBrace) {
 		switch child.Kind() {
@@ -120,6 +139,16 @@ func (a *analyzer) analyzeCodeBlock(n syntax.Node) *expr.CodeBlock {
 		}
 	}
 	return expr.NewCodeBlock(n.Span(), exprs)
+}
+
+// analyzeSpreadExpr unwraps a KindSpread node (consuming KindDots) and
+// analyzes the inner expression.
+func (a *analyzer) analyzeSpreadExpr(child syntax.Node) expr.Expr {
+	ns := a.inner(child, syntax.KindSpread)
+	ns.take(syntax.KindDots)
+	x := a.analyzeExpr(ns.node())
+	ns.finish()
+	return x
 }
 
 func (a *analyzer) analyzeParenthesized(n syntax.Node) *expr.Parenthesized {
@@ -140,11 +169,7 @@ func (a *analyzer) analyzeArray(n syntax.Node) *expr.ArrayExpr {
 		switch kind := child.Kind(); kind {
 		case syntax.KindComma:
 		case syntax.KindSpread:
-			entry := a.inner(child, syntax.KindSpread)
-			entry.take(syntax.KindDots)
-			x := a.analyzeExpr(entry.node())
-			entry.finish()
-			items = append(items, expr.NewSpreadExpr(child.Span(), x))
+			items = append(items, expr.NewSpreadExpr(child.Span(), a.analyzeSpreadExpr(child)))
 		case syntax.KindNamed, syntax.KindKeyed:
 			a.error(syntax.NewError(child.Span(), "expected expression, found "+kind.Name()+" pair", child.Text()))
 		default:
@@ -158,6 +183,7 @@ func (a *analyzer) analyzeDict(n syntax.Node) *expr.DictExpr {
 	ns := a.inner(n, syntax.KindDict)
 	defer ns.finish()
 	var entries []expr.DictItemExpr
+	seen := make(map[string]bool)
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind() {
 		case syntax.KindComma, syntax.KindColon:
@@ -168,16 +194,32 @@ func (a *analyzer) analyzeDict(n syntax.Node) *expr.DictExpr {
 			entry.take(syntax.KindColon)
 			val := a.analyzeExpr(entry.node())
 			entry.finish()
+			if seen[key] {
+				a.error(syntax.NewError(child.Span(), "duplicate key: "+key, child.Text()))
+			}
+			seen[key] = true
 			entries = append(entries, expr.NewDictItemExpr(
 				expr.NewConstExpr(child.Span(), value.Str(key)),
 				val,
 			))
 		case syntax.KindKeyed:
 			entry := a.inner(child, syntax.KindKeyed)
+			// Check for duplicate string-literal keys; dynamic keys can only
+			// be checked at runtime.
+			var keyStr string
+			if entry.at(syntax.KindStr) {
+				keyStr = unquote(entry.items[entry.pos].(*syntax.Leaf).Text())
+			}
 			key := a.analyzeExpr(entry.node())
 			entry.take(syntax.KindColon)
 			value := a.analyzeExpr(entry.node())
 			entry.finish()
+			if keyStr != "" {
+				if seen[keyStr] {
+					a.error(syntax.NewError(child.Span(), "duplicate key: "+keyStr, child.Text()))
+				}
+				seen[keyStr] = true
+			}
 			entries = append(entries, expr.NewDictItemExpr(
 				key,
 				value,
@@ -222,7 +264,7 @@ func (a *analyzer) analyzeFieldAccess(n syntax.Node) *expr.FieldAccess {
 	defer ns.finish()
 	target := a.analyzeExpr(ns.node())
 	ns.take(syntax.KindDot)
-	field := a.analyzeIdent(ns.node())
+	field := a.analyzeBindingIdent(ns.node())
 	return expr.NewFieldAccess(n.Span(), target, field)
 }
 
@@ -239,23 +281,24 @@ func (a *analyzer) analyzeArgs(n syntax.Node) ([]expr.Arg, []*expr.ContentBlock)
 	defer ns.finish()
 
 	var args []expr.Arg
+	seen := make(map[string]bool)
 	if ns.at(syntax.KindLeftParen) {
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 			switch child.Kind() {
 			case syntax.KindComma:
 				continue
 			case syntax.KindSpread:
-				ns := a.inner(child, syntax.KindSpread)
-				defer ns.finish()
-				ns.take(syntax.KindDots)
-				x := a.analyzeExpr(ns.node())
-				args = append(args, expr.NewSpreadArg(x))
+				args = append(args, expr.NewSpreadArg(a.analyzeSpreadExpr(child)))
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
 				key := unique.Make(named.take(syntax.KindIdent))
 				named.take(syntax.KindColon)
 				value := a.analyzeExpr(named.node())
 				named.finish()
+				if seen[key.Value()] {
+					a.error(syntax.NewError(child.Span(), "duplicate argument: "+key.Value(), child.Text()))
+				}
+				seen[key.Value()] = true
 				args = append(args, expr.NewNamedArg(child.Span(), key, value))
 			default:
 				args = append(args, expr.NewExprArg(a.analyzeExpr(child)))
@@ -284,11 +327,11 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *expr.Closure {
 	case syntax.KindIdent:
 		if ns.at(syntax.KindParams) {
 			// Named function: name(params) = body
-			name = a.analyzeIdent(n)
+			name = a.analyzeBindingIdent(n)
 			params = a.analyzeClosureParams(ns.node())
 		} else {
 			// Single param: param => body
-			params = []expr.ClosureParam{expr.NewPositionalClosureParam(a.analyzeIdent(n))}
+			params = []expr.ClosureParam{expr.NewPositionalClosureParam(a.analyzeBindingIdent(n))}
 		}
 	case syntax.KindUnderscore:
 		// _ => body
@@ -309,27 +352,27 @@ func (a *analyzer) analyzeClosure(n syntax.Node) *expr.Closure {
 	if ns.done() {
 		a.expected(ns, "expression")
 	}
-	body := a.analyzeExpr(ns.node())
 
-	// Compute captured variables: collect the parameter names as the initial
-	// bound set, then find all free variables in the body.
-	bound := make(map[unique.Handle[string]]bool)
+	// Open a closure scope (boundary frame) for the closure's own bindings.
+	s := a.openClosureScope()
 	if name != nil {
-		bound[name.Name()] = true
+		a.bind(name.Name())
 	}
 	for _, p := range params {
 		switch p := p.(type) {
 		case *expr.PositionalClosureParam:
-			bound[p.Name().Name()] = true
+			a.bind(p.Name().Name())
 		case *expr.NamedClosureParam:
-			bound[p.Name().Name()] = true
+			a.bind(p.Name().Name())
 		case *expr.SpreadClosureParam:
-			bound[p.Ident().Name()] = true
+			a.bind(p.Ident().Name())
 		}
 	}
-	captures := expr.FreeVars(body, bound)
 
-	return expr.NewClosure(n.Span(), name, params, body, captures)
+	body := a.analyzeExpr(ns.node())
+	a.closeScope()
+
+	return expr.NewClosure(n.Span(), name, params, body, s.captures)
 }
 
 func (a *analyzer) analyzeClosureParams(n syntax.Node) []expr.ClosureParam {
@@ -352,7 +395,7 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []expr.ClosureParam {
 			case syntax.KindUnderscore:
 				params = append(params, expr.NewPositionalClosureParam(expr.NewIdent(child.Span(), underscore)))
 			default:
-				ident := a.analyzeIdent(child)
+				ident := a.analyzeBindingIdent(child)
 				addName(ident)
 				params = append(params, expr.NewPositionalClosureParam(ident))
 			}
@@ -365,12 +408,12 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []expr.ClosureParam {
 			case syntax.KindComma:
 				continue
 			case syntax.KindIdent:
-				ident := a.analyzeIdent(child)
+				ident := a.analyzeBindingIdent(child)
 				addName(ident)
 				params = append(params, expr.NewPositionalClosureParam(ident))
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
-				name := a.analyzeIdent(named.node())
+				name := a.analyzeBindingIdent(named.node())
 				addName(name)
 				named.take(syntax.KindColon)
 				defaultExpr := a.analyzeExpr(named.node())
@@ -384,7 +427,7 @@ func (a *analyzer) analyzeClosureParams(n syntax.Node) []expr.ClosureParam {
 				ns := a.inner(child, syntax.KindSpread)
 				defer ns.finish()
 				ns.take(syntax.KindDots)
-				ident := a.analyzeIdent(ns.node())
+				ident := a.analyzeBindingIdent(ns.node())
 				addName(ident)
 				params = append(params, expr.NewSpreadClosureParam(ident))
 			case syntax.KindUnderscore:
@@ -529,7 +572,10 @@ func (a *analyzer) analyzeForLoop(n syntax.Node) *expr.ForLoop {
 	pattern := a.unpackDestructuringPattern(patternNode)
 	ns.take(syntax.KindIn)
 	iterable := a.analyzeExpr(ns.node())
+	a.openScope()
+	a.bindPatterns(pattern)
 	body := a.analyzeBlock(ns.node())
+	a.closeScope()
 	return expr.NewForLoop(n.Span(), pattern, patternNode.Span(), iterable, body)
 }
 
@@ -586,7 +632,7 @@ func (a *analyzer) analyzeDestructAssignment(n syntax.Node) *expr.DestructAssign
 func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []expr.DestructPattern {
 	switch n.Kind() {
 	case syntax.KindIdent:
-		return []expr.DestructPattern{expr.NewDestructIdent(a.analyzeIdent(n))}
+		return []expr.DestructPattern{expr.NewDestructIdent(a.analyzeBindingIdent(n))}
 	case syntax.KindUnderscore:
 		return []expr.DestructPattern{expr.NewDestructIdent(expr.NewIdent(n.Span(), underscore))}
 	default:
@@ -596,6 +642,14 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []expr.DestructPatt
 	ns := a.inner(n, syntax.KindDestructuring)
 	var pattern []expr.DestructPattern
 	haveSink := false
+	seen := make(map[string]bool)
+	checkDup := func(ident *expr.Ident) {
+		name := ident.Name().Value()
+		if seen[name] {
+			a.error(syntax.NewError(ident.Span(), "duplicate binding: "+name, name))
+		}
+		seen[name] = true
+	}
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind() {
 		case syntax.KindComma:
@@ -603,13 +657,16 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []expr.DestructPatt
 		case syntax.KindUnderscore:
 			pattern = append(pattern, expr.NewDestructIdent(expr.NewIdent(child.Span(), underscore)))
 		case syntax.KindIdent:
-			pattern = append(pattern, expr.NewDestructIdent(a.analyzeIdent(child)))
+			ident := a.analyzeBindingIdent(child)
+			checkDup(ident)
+			pattern = append(pattern, expr.NewDestructIdent(ident))
 		case syntax.KindNamed:
 			named := a.inner(child, syntax.KindNamed)
 			name := unique.Make(named.take(syntax.KindIdent))
 			named.take(syntax.KindColon)
-			patternIdent := a.analyzeIdent(named.node())
+			patternIdent := a.analyzeBindingIdent(named.node())
 			named.finish()
+			checkDup(patternIdent)
 			pattern = append(pattern, expr.NewDestructNamed(name, patternIdent))
 		case syntax.KindSpread:
 			if haveSink {
@@ -619,7 +676,8 @@ func (a *analyzer) unpackDestructuringPattern(n syntax.Node) []expr.DestructPatt
 			ns := a.inner(child, syntax.KindSpread)
 			defer ns.finish()
 			ns.take(syntax.KindDots)
-			ident := a.analyzeIdent(ns.node())
+			ident := a.analyzeBindingIdent(ns.node())
+			checkDup(ident)
 			pattern = append(pattern, expr.NewDestructSink(ident))
 		case syntax.KindError:
 			a.error(child.(*syntax.Error))

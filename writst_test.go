@@ -40,7 +40,13 @@ func TestWritst(t *testing.T) {
 					}
 
 					root := parser.Parse(tc.Input)
-					exprs, err := analyzer.Analyze(root)
+					exprs, err := analyzer.Analyze(root,
+						analyzer.WithBindings(
+							unique.Make("test"),
+							unique.Make("dont-care"),
+							unique.Make("nope"),
+						),
+					)
 					if err != nil {
 						if diff := errcmp.Diff(root, analysisErrors(err)); diff != "" {
 							t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)

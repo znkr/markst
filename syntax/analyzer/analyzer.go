@@ -17,19 +17,39 @@
 package analyzer
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"unique"
 
+	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/value"
 )
 
+// Option configures the analyzer.
+type Option func(*analyzer)
+
+// WithBindings adds names to the analyzer's scope, making them available
+// as known variables during analysis.
+func WithBindings(names ...unique.Handle[string]) Option {
+	return func(a *analyzer) {
+		for _, name := range names {
+			a.bind(name)
+		}
+	}
+}
+
 // Analyze converts the syntax tree rooted at n into a slice of IR expressions.
 // If the tree contains any syntax errors, they are collected and returned as
 // a [syntax.ErrorList]; in that case the expression slice is nil.
-func Analyze(n syntax.RootNode) ([]expr.Expr, error) {
+func Analyze(n syntax.RootNode, opts ...Option) ([]expr.Expr, error) {
 	a := &analyzer{}
+	a.initScope()
+	for _, opt := range opts {
+		opt(a)
+	}
 	exprs := a.analyzeMarkup(n)
 	if len(a.errors) > 0 {
 		return nil, syntax.ErrorList(a.errors)
@@ -39,10 +59,134 @@ func Analyze(n syntax.RootNode) ([]expr.Expr, error) {
 
 type analyzer struct {
 	errors []*syntax.Error
+	scope  *scope
 }
 
 func (a *analyzer) error(n *syntax.Error) {
 	a.errors = append(a.errors, n)
+}
+
+// Scope ///////////////////////////////////////////////////////////////////////
+
+type scope struct {
+	parent   *scope
+	bindings map[unique.Handle[string]]bool
+	boundary bool                                  // true for closure scope frames
+	captures map[unique.Handle[string]]syntax.Span // populated during analysis of the closure body; value is the span of the first reference
+}
+
+func (a *analyzer) initScope() {
+	bindings := make(map[unique.Handle[string]]bool, len(builtin.Universe))
+	for name := range builtin.Universe {
+		bindings[name] = true
+	}
+	a.scope = &scope{bindings: bindings}
+}
+
+func (a *analyzer) openScope() *scope {
+	a.scope = &scope{parent: a.scope}
+	return a.scope
+}
+
+func (a *analyzer) openClosureScope() *scope {
+	a.scope = &scope{parent: a.scope, boundary: true}
+	return a.scope
+}
+
+func (a *analyzer) closeScope() {
+	a.scope = a.scope.parent
+}
+
+func (a *analyzer) bind(name unique.Handle[string]) {
+	if a.scope.bindings == nil {
+		a.scope.bindings = make(map[unique.Handle[string]]bool)
+	}
+	a.scope.bindings[name] = true
+}
+
+// lookup checks whether name is in scope. If the lookup crosses one or more
+// closure boundaries before finding the binding, the name is recorded as a
+// capture on every boundary frame crossed. The span is attached to the capture
+// for error reporting.
+//
+// Recording on every boundary (not just the innermost) is necessary because
+// each closure carries its own captured environment at runtime. Consider:
+//
+//	let x = 1
+//	let outer = () => {
+//	  let inner = () => x  // references x from two scopes out
+//	  inner()
+//	}
+//
+// When inner references x, the lookup crosses both inner's and outer's closure
+// boundaries. Inner must capture x so it can read it when invoked. Outer must
+// also capture x so that, when outer runs and constructs the inner closure, it
+// has x available to put into inner's environment. If outer didn't capture x,
+// it would have no way to forward x into inner once outer is invoked outside
+// the scope where x is bound.
+//
+// The walk is two-phase: boundary frames crossed are collected speculatively
+// and captures are committed only if the name is found. An unresolved name
+// must not leave capture entries behind on closures it happened to be nested
+// inside of.
+func (a *analyzer) lookup(name unique.Handle[string], span syntax.Span) bool {
+	var crossed []*scope // boundary frames crossed before finding the name
+	for s := a.scope; s != nil; s = s.parent {
+		if s.bindings[name] {
+			for _, b := range crossed {
+				a.addCapture(b, name, span)
+			}
+			return true
+		}
+		if s.boundary {
+			crossed = append(crossed, s)
+		}
+	}
+	return false
+}
+
+// addCapture records a capture on a boundary scope frame. Only the first
+// reference span is kept for any given name.
+func (a *analyzer) addCapture(s *scope, name unique.Handle[string], span syntax.Span) {
+	if _, ok := s.captures[name]; ok {
+		return
+	}
+	if s.captures == nil {
+		s.captures = make(map[unique.Handle[string]]syntax.Span)
+	}
+	s.captures[name] = span
+}
+
+// couldBeSubtractionRe matches identifiers like "x-1" that might be
+// subtraction with missing spaces.
+var couldBeSubtractionRe = regexp.MustCompile(`(-)(\d+)$`)
+
+func (a *analyzer) checkIdent(name unique.Handle[string], span syntax.Span) {
+	if a.lookup(name, span) {
+		return
+	}
+	var hints []string
+	if m := couldBeSubtractionRe.FindAllStringSubmatch(name.Value(), -1); m != nil {
+		sign := m[0][1]
+		num := m[0][2]
+		hints = append(hints, fmt.Sprintf("if you meant to use subtraction, try adding spaces around the minus sign: `%s %s %s`", name.Value()[:len(name.Value())-len(m[0][0])], sign, num))
+	}
+	a.error(syntax.NewError(span, fmt.Sprintf("unknown variable: %s", name.Value()), name.Value(), hints...))
+}
+
+func (a *analyzer) bindPatterns(patterns []expr.DestructPattern) {
+	for _, p := range patterns {
+		switch p := p.(type) {
+		case *expr.DestructIdent:
+			a.bind(p.Ident().Name())
+		case *expr.DestructNamed:
+			a.bind(p.Pattern().Name())
+		case *expr.DestructSink:
+			if p.Ident() != nil {
+				a.bind(p.Ident().Name())
+			}
+		}
+	}
 }
 
 func (a *analyzer) analyzeMarkup(n syntax.Node) []expr.Expr {
@@ -64,6 +208,10 @@ func (a *analyzer) analyzeMarkup(n syntax.Node) []expr.Expr {
 				continue
 			}
 			body = append(body, n0)
+			// Let bindings accumulate in scope for subsequent expressions.
+			if let, ok := n0.(*expr.LetBinding); ok && let != nil {
+				a.bindPatterns(let.Pattern())
+			}
 		}
 	}
 	return body

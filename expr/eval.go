@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"regexp"
 	"unique"
 
 	"znkr.io/writst/builtin"
@@ -244,22 +243,10 @@ func (n *Ident) eval(ec *evalCtx) value.Value {
 	return val
 }
 
-var couldBeSubtractionRe = regexp.MustCompile(`(-)(\d+)$`)
-
 func (n *Ident) evalL(ec *evalCtx) (value.Value, setter) {
 	val, set, ok := ec.lookup(n.name)
 	if !ok {
-		var hints []string
-		if m := couldBeSubtractionRe.FindAllStringSubmatch(n.name.Value(), -1); m != nil {
-			sign := m[0][1]
-			num := m[0][2]
-			hints = append(hints, fmt.Sprintf("if you meant to use subtraction, try adding spaces around the minus sign: `%s %s %s`", n.name.Value()[:len(n.name.Value())-len(m[0][0])], sign, num))
-		}
-		raise(&ValueError{
-			span:  n.Span(),
-			msg:   fmt.Sprintf("unknown variable: %s", n.name.Value()),
-			hints: hints,
-		})
+		panic(fmt.Sprintf("unknown variable %q not caught by analyzer", n.name.Value()))
 	}
 	return val, set
 }
@@ -708,16 +695,13 @@ func (n *Closure) eval(ec *evalCtx) value.Value {
 		}
 	}
 
-	captures := make(map[unique.Handle[string]]value.Value)
-	for _, cap := range n.captures {
-		if val, _, ok := ec.lookup(cap.Name); ok {
-			captures[cap.Name] = val
-		} else {
-			raise(&ValueError{
-				span: cap.Span,
-				msg:  fmt.Sprintf("unknown variable: %s", cap.Name.Value()),
-			})
+	captures := make(map[unique.Handle[string]]value.Value, len(n.captures))
+	for name := range n.captures {
+		val, _, ok := ec.lookup(name)
+		if !ok {
+			panic(fmt.Sprintf("capture %q not found; should have been caught by analyzer", name.Value()))
 		}
+		captures[name] = val
 	}
 	scope := &scope{
 		bindings: captures,

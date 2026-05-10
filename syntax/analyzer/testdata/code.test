@@ -3,15 +3,21 @@
 │ #"hello world"
 
 --- identifier ---
+#let foo
 #foo
+│ #let foo
 │ #foo
 
 --- field-access ---
+#let foo = (bar: "bar")
 #foo.bar
+│ #let foo = ("bar": "bar")
 │ #foo.bar
 
 --- nested-field-access ---
+#let foo = (bar: (baz: "baz"))
 #foo.bar.baz
+│ #let foo = ("bar": ("baz": "baz"))
 │ #foo.bar.baz
 
 --- code-block-empty ---
@@ -98,31 +104,49 @@
 │ #{ true or false }
 
 --- binary-in ---
+#let x = 1
+#let y = (1,)
 #{ x in y }
+│ #let x = 1
+│ #let y = (1,)
 │ #{ x in y }
 
 --- binary-not-in ---
+#let x = 1
+#let y = (1,)
 #{ x not in y }
+│ #let x = 1
+│ #let y = (1,)
 │ #{ x not in y }
 
 --- binary-assignment ---
+#let x
 #{ x = 1 }
+│ #let x
 │ #{ x = 1 }
 
 --- binary-add-assign ---
+#let x = 2
 #{ x += 2 }
+│ #let x = 2
 │ #{ x += 2 }
 
 --- binary-sub-assign ---
+#let x = 2
 #{ x -= 3 }
+│ #let x = 2
 │ #{ x -= 3 }
 
 --- binary-mul-assign ---
+#let x = 2
 #{ x *= 4 }
+│ #let x = 2
 │ #{ x *= 4 }
 
 --- binary-div-assign ---
+#let x = 2
 #{ x /= 5 }
+│ #let x = 2
 │ #{ x /= 5 }
 
 --- operator-precedence-mul-over-add ---
@@ -138,7 +162,11 @@
 │ #{ 1 - 2 - 3 }
 
 --- right-associativity-assignment ---
+#let x
+#let y
 #{ x = y = 1 }
+│ #let x
+│ #let y
 │ #{ x = y = 1 }
 
 --- empty-array ---
@@ -166,35 +194,53 @@
 │ #("key": "value")
 
 --- function-call-no-args ---
+#let foo
 #foo()
+│ #let foo
 │ #foo()
 
 --- function-call-with-args ---
+#let foo
 #{ foo(1, 2) }
+│ #let foo
 │ #{ foo(1, 2) }
 
 --- function-call-with-named-args ---
+#let foo
 #{ foo(a: 1, b: 2) }
+│ #let foo
 │ #{ foo(a: 1, b: 2) }
 
 --- function-call-with-spread ---
+#let foo
+#let args
 #{ foo(..args) }
+│ #let foo
+│ #let args
 │ #{ foo(..args) }
 
 --- function-call-with-content-block ---
+#let foo
 #foo[hello]
+│ #let foo
 │ #foo()[#text("hello")]
 
 --- function-call-with-multiple-content-blocks ---
+#let foo
 #foo[hello][world]
+│ #let foo
 │ #foo()[#text("hello")][#text("world")]
 
 --- function-call-with-args-and-content ---
+#let foo
 #foo(1)[hello]
+│ #let foo
 │ #foo(1)[#text("hello")]
 
 --- method-call ---
+#let foo
 #foo.bar()
+│ #let foo
 │ #foo.bar()
 
 --- simple-closure ---
@@ -230,7 +276,9 @@
 │ #let x = 1
 
 --- let-binding-pattern ---
+#let pair
 #{ let (a, b) = pair }
+│ #let pair
 │ #{ let (a, b) = pair }
 
 --- let-binding-without-assignment ---
@@ -242,47 +290,87 @@
 │ #{ let add(x, y) = x + y }
 
 --- set-rule ---
+#let text
 #{ set text(size: 12pt) }
+│ #let text
 │ #{ set text(size: 12pt) }
 
 --- set-rule-with-condition ---
+#let text
+#let red
+#let enabled
 #{ set text(red) if enabled }
+│ #let text
+│ #let red
+│ #let enabled
 │ #{ set text(red) if enabled }
 
 --- set-rule-with-field-access ---
+#let table
+#let blue
 #{ set table.cell(fill: blue) }
+│ #let table
+│ #let blue
 │ #{ set table.cell(fill: blue) }
 
 --- show-rule-without-selector ---
+#let emph
 #{ show: emph }
+│ #let emph
 │ #{ show: emph }
 
 --- show-rule-with-selector ---
+#let heading
+#let emph
 #{ show heading: it => emph(it.body) }
+│ #let heading
+│ #let emph
 │ #{ show heading: it => emph(it.body) }
 
 --- conditional-if-only ---
+#let x
+#let y
 #{ if x { y } }
+│ #let x
+│ #let y
 │ #{ if x { y } }
 
 --- conditional-if-else ---
+#let x
+#let y
+#let z
 #{ if x { y } else { z } }
+│ #let x
+│ #let y
+│ #let z
 │ #{ if x { y } else { z } }
 
 --- conditional-else-if ---
+#let a
+#let b
 #{ if a { 1 } else if b { 2 } else { 3 } }
+│ #let a
+│ #let b
 │ #{ if a { 1 } else if b { 2 } else { 3 } }
 
 --- while-loop ---
+#let x
+#let y
 #{ while x { y } }
+│ #let x
+│ #let y
 │ #{ while x { y } }
 
 --- for-loop ---
+#let items
 #{ for x in items { x } }
+│ #let items
 │ #{ for x in items { x } }
 
 --- for-loop-with-pattern ---
+#let dict
 #{ for (k, v) in dict { k } }
+│ #let dict
 │ #{ for (k, v) in dict { k } }
 
 --- break ---
@@ -306,23 +394,45 @@
 │ #{ include "other.typ" }
 
 --- context-expression ---
+#let text
 #{ context text.lang }
+│ #let text
 │ #{ context text.lang }
 
 --- destructuring-assignment ---
+#let expr
 #{ _ = expr }
+│ #let expr
 │ #{ _ = expr }
 
 --- tuple-destructuring ---
+#let x
+#let y
+#let point
 #{ (x, y) = point }
+│ #let x
+│ #let y
+│ #let point
 │ #{ (x, y) = point }
 
 --- spread-in-destructuring ---
+#let first
+#let rest
+#let arr
 #{ (first, ..rest) = arr }
+│ #let first
+│ #let rest
+│ #let arr
 │ #{ (first, ..rest) = arr }
 
 --- named-in-destructuring ---
+#let a
+#let b
+#let point
 #{ (x: a, y: b) = point }
+│ #let a
+│ #let b
+│ #let point
 │ #{ (x: a, y: b) = point }
 
 --- literals-none-auto-bool ---

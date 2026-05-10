@@ -108,9 +108,40 @@ v in iter {}
 #{ let f(..a, ..b) = 1 }
 
 --- duplicate-destructuring-sink ---
-// Error: 14-17 only one destructuring sink is allowed
-#{ let (..a, ..b) = x }
+#{
+  let x
+  // Error: 13-16 only one destructuring sink is allowed
+  let (..a, ..b) = x
+}
 
 --- plain-value-in-dict ---
 // Error: 17-18 expected named or keyed pair
 #{ (a: 1, b: 2, 3) }
+
+--- duplicate-dict-key-named ---
+// Error: 11-15 duplicate key: a
+#{ (a: 1, a: 2) }
+
+--- duplicate-dict-key-string ---
+// Error: 15-23 duplicate key: key
+#{ ("key": 1, "key": 2) }
+
+--- duplicate-dict-key-mixed ---
+// Error: 11-17 duplicate key: a
+#{ (a: 1, "a": 2) }
+
+--- duplicate-named-argument ---
+#let f = size => none
+// Error: 15-22 duplicate argument: size
+#{ f(size: 1, size: 2) }
+
+--- duplicate-binding ---
+#{
+  let x
+  // Error: 11-12 duplicate binding: a
+  let (a, a) = x
+}
+
+--- duplicate-param ---
+// Error: 13-14 duplicate parameter: x
+#{ let f(x, x) = 1 }

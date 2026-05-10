@@ -512,6 +512,8 @@
 #((k: "a", v: 2), (k: "b", v: 1)).sorted(it => it.v)
 
 --- issue-3014-mix-array-dictionary ---
+// TODO: these variables should probably be in the universe scope
+#let (box, red) = (nope, nope)
 // Error: 8-17 expected expression, found named pair
 #(box, fill: red)
 

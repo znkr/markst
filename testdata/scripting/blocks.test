@@ -133,6 +133,7 @@
   // Error: 22 expected block
   for v let z = 1 + 2
 
+  // Error: 3-4 unknown variable: z
   z
 }
 

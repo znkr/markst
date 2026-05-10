@@ -16,7 +16,6 @@ type Expr interface {
 	formatter.Formattable
 
 	eval(ec *evalCtx) value.Value
-	visitChildren(fn func(Expr) bool) bool
 	aExpr()
 }
 
@@ -393,31 +392,27 @@ func (n *FuncCall) Callee() Expr             { return n.callee }
 func (n *FuncCall) Args() []Arg              { return n.args }
 func (n *FuncCall) Content() []*ContentBlock { return n.blocks }
 
-// Capture records a variable captured by a closure, along with the span of
-// the first reference to that variable within the closure body.
-type Capture struct {
-	Name unique.Handle[string]
-	Span syntax.Span
-}
-
 // Closure is a function definition: (x, y) => x + y, or a named function
 // via let binding.
+//
+// captures maps each captured name to the span of its first reference within
+// the closure body (kept for error reporting).
 type Closure struct {
 	expr
 	name     *Ident
 	params   []ClosureParam
 	body     Expr
-	captures []Capture
+	captures map[unique.Handle[string]]syntax.Span
 }
 
-func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr, captures []Capture) *Closure {
+func NewClosure(span syntax.Span, name *Ident, params []ClosureParam, body Expr, captures map[unique.Handle[string]]syntax.Span) *Closure {
 	return &Closure{expr: expr{span: span}, name: name, params: params, body: body, captures: captures}
 }
 
-func (n *Closure) Name() *Ident           { return n.name }
-func (n *Closure) Params() []ClosureParam { return n.params }
-func (n *Closure) Body() Expr             { return n.body }
-func (n *Closure) Captures() []Capture    { return n.captures }
+func (n *Closure) Name() *Ident                                  { return n.name }
+func (n *Closure) Params() []ClosureParam                        { return n.params }
+func (n *Closure) Body() Expr                                    { return n.body }
+func (n *Closure) Captures() map[unique.Handle[string]]syntax.Span { return n.captures }
 
 // Bindings & Rules ////////////////////////////////////////////////////////////
 

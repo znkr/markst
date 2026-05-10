@@ -67,6 +67,8 @@ func (a *analyzer) analyzeRef(n syntax.Node) *expr.RefExpr {
 func (a *analyzer) analyzeContentBlock(n syntax.Node) *expr.ContentBlock {
 	ns := a.inner(n, syntax.KindContentBlock)
 	defer ns.finish()
+	a.openScope()
+	defer a.closeScope()
 	ns.take(syntax.KindLeftBracket)
 	n0 := ns.node()
 	ns.take(syntax.KindRightBracket)

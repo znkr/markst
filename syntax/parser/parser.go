@@ -421,6 +421,15 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 		start -= p.cur.trivia
 	}
 	atStart := p.cur.newline || flags&mfAtStart != 0
+	// ifAtStart calls parseFn when at the start of a line, otherwise
+	// consumes the current token as plain text.
+	ifAtStart := func(parseFn func()) {
+		if atStart {
+			parseFn()
+		} else {
+			p.consumeAs(syntax.KindText)
+		}
+	}
 	for !p.atSet(stops) {
 		switch p.cur.kind {
 		case syntax.KindLeftBracket:
@@ -439,29 +448,13 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 		case syntax.KindUnderscore:
 			p.parseEmph()
 		case syntax.KindHeadingMarker:
-			if atStart {
-				p.parseHeading()
-			} else {
-				p.consumeAs(syntax.KindText)
-			}
+			ifAtStart(p.parseHeading)
 		case syntax.KindListMarker:
-			if atStart {
-				p.parseListItem()
-			} else {
-				p.consumeAs(syntax.KindText)
-			}
+			ifAtStart(p.parseListItem)
 		case syntax.KindEnumMarker:
-			if atStart {
-				p.parseEnumItem()
-			} else {
-				p.consumeAs(syntax.KindText)
-			}
+			ifAtStart(p.parseEnumItem)
 		case syntax.KindTermMarker:
-			if atStart {
-				p.parseTermItem()
-			} else {
-				p.consumeAs(syntax.KindText)
-			}
+			ifAtStart(p.parseTermItem)
 		case syntax.KindHash:
 			p.parseEmbeddedCodeExpr()
 		case syntax.KindRefMarker:
@@ -722,10 +715,7 @@ func (p *parser) parseCodePrimary(atomic bool) {
 	case syntax.KindIdent:
 		p.consume()
 		if !atomic && p.at(syntax.KindArrow) {
-			p.wrap(start, syntax.KindParams)
-			p.assert(syntax.KindArrow)
-			p.parseCodeExpr()
-			p.wrap(start, syntax.KindClosure)
+			p.parseSingleParamClosure(start)
 		}
 
 	case syntax.KindUnderscore:
@@ -736,10 +726,7 @@ func (p *parser) parseCodePrimary(atomic bool) {
 
 		p.consume()
 		if p.at(syntax.KindArrow) {
-			p.wrap(start, syntax.KindParams)
-			p.assert(syntax.KindArrow)
-			p.parseCodeExpr()
-			p.wrap(start, syntax.KindClosure)
+			p.parseSingleParamClosure(start)
 		} else if p.consumeIf(syntax.KindEq) {
 			p.parseCodeExpr()
 			p.wrap(start, syntax.KindDestructAssignment)
@@ -814,6 +801,15 @@ func (p *parser) parseCodePrimary(atomic bool) {
 			p.expected("expression")
 		}
 	}
+}
+
+// parseSingleParamClosure wraps the already-consumed parameter as KindParams,
+// consumes the arrow, parses the body, and wraps everything as KindClosure.
+func (p *parser) parseSingleParamClosure(start int) {
+	p.wrap(start, syntax.KindParams)
+	p.assert(syntax.KindArrow)
+	p.parseCodeExpr()
+	p.wrap(start, syntax.KindClosure)
 }
 
 // parseExprWithParen parses an expression starting with a '('.
@@ -1110,8 +1106,7 @@ func (p *parser) parseArrayOrDictItem(state *groupState) {
 			pairKind = syntax.KindNamed
 		}
 
-		// TODO: the official implementation checks for duplicate keys here. This is probably
-		// better suited for a later semantic analysis pass.
+		// Duplicate key detection is handled in the analyzer.
 		p.wrap(start, pairKind)
 		state.notJustParens = true
 
@@ -1191,8 +1186,7 @@ func (p *parser) parseArg() {
 			if p.nodes[start].Kind() != syntax.KindIdent {
 				p.expectedAt(start, "identifier")
 			}
-			// TODO: the official implementation checks for duplicate names here. This is probably
-			// better suited for a later semantic analysis pass.
+			// Duplicate argument detection is handled in the analyzer.
 		}
 		p.parseCodeExpr()
 		p.wrap(start, syntax.KindNamed)

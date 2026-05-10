@@ -7,7 +7,14 @@ package syntax
 type Mode int
 
 const (
-	ModeMarkup Mode = iota // ModeMarkup is the default mode for text and markup constructs.
-	ModeMath               // ModeMath is active inside math equations ($ ... $).
-	ModeCode               // ModeCode is active inside code blocks and after #.
+	// ModeMarkup is the default mode for text and markup constructs.
+	// Whitespace in markup mode is limited to space (U+0020), tab (U+0009),
+	// and newlines (LF, CR).
+	ModeMarkup Mode = iota
+	// ModeMath is active inside math equations ($ ... $).
+	ModeMath
+	// ModeCode is active inside code blocks and after #.
+	// Whitespace in code mode includes all Unicode whitespace characters
+	// (as defined by unicode.IsSpace).
+	ModeCode
 )

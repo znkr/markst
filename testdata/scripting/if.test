@@ -121,6 +121,8 @@
 #if 1 + "2" {}
 
 --- if-incomplete ---
+#let (x, a) = (nope, nope) // Make sure the analyzer nows about this variable
+
 // Error: 4 expected expression
 #if
 

@@ -255,7 +255,9 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 		backticks++
 	}
 
-	// Special case for ``.
+	// Special case for `` (two backticks with no content). We construct the node
+	// directly because there is nothing between the delimiters for scanBlockyRaw
+	// or scanInlineRaw to process.
 	if backticks == 2 {
 		span := s.spanFrom(start)
 		return syntax.KindRaw, syntax.NewInner(syntax.KindRaw, []syntax.Node{
@@ -357,25 +359,18 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 	lines = append(lines, s.r.From(prevStart))
 	s.r.Seek(start)
 
-	// Determine dedent level.
+	// Determine dedent level. Whitespace-only lines (except the last) are
+	// ignored since they don't contribute to the common indentation.
 	dedent := math.MaxInt
 	for i, line := range lines {
 		if i == 0 {
 			continue
 		}
-		ldedent := 0
-		for _, r := range line {
-			if !unicode.IsSpace(r) {
-				goto NotAllWhitespace
-			}
-			ldedent++
-		}
-		if i < len(lines)-1 {
-			// Ignore all whitespace only lines except for the last one.
+		indent, allWhite := measureIndent(line)
+		if allWhite && i < len(lines)-1 {
 			continue
 		}
-	NotAllWhitespace:
-		dedent = min(dedent, ldedent)
+		dedent = min(dedent, indent)
 	}
 	if dedent == math.MaxInt {
 		dedent = 0
@@ -1041,4 +1036,16 @@ func isASCIIDigit(ch rune) bool {
 
 func isAlphanumeric(ch rune) bool {
 	return unicode.IsLetter(ch) || unicode.IsNumber(ch)
+}
+
+// measureIndent returns the number of leading whitespace runes in s
+// and whether the entire string is whitespace.
+func measureIndent(s string) (indent int, allWhite bool) {
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return indent, false
+		}
+		indent++
+	}
+	return indent, true
 }

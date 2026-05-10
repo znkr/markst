@@ -132,7 +132,7 @@
   let f(x) = x + 1
 
   // Error: 8-13 unexpected argument
-  f(1, "two", () => x)
+  f(1, "two", () => 2)
 }
 
 --- closure-capture-in-lvalue ---
@@ -221,11 +221,13 @@
 
 --- closure-let-pattern-bad-string ---
 // Error: 10-15 expected pattern, found string
+// Error: 22-25 unknown variable: key
 #let foo("key": b) = key
 
 --- closure-param-keyword ---
 // Error: 10-14 expected pattern, found keyword `none`
 // Hint: 10-14 keyword `none` is not allowed as an identifier; try `none_` instead
+// Error: 21-24 unknown variable: key
 #let foo(none: b) = key
 
 --- closure-param-named-underscore ---
