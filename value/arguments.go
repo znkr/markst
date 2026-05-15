@@ -3,8 +3,8 @@ package value
 import (
 	"maps"
 	"slices"
-	"unique"
 
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 )
 
@@ -15,7 +15,7 @@ type Arguments struct {
 }
 
 // NamedArgs maps argument names to their values at a call site.
-type NamedArgs map[unique.Handle[string]]Value
+type NamedArgs map[name.Name]Value
 
 func (n *Arguments) Merge(args *Arguments) *Arguments {
 	if args == nil {

@@ -2,7 +2,8 @@ package value
 
 import (
 	"fmt"
-	"unique"
+
+	"znkr.io/writst/name"
 )
 
 // FunctionCallError represents an error that occurred during a function call.
@@ -20,8 +21,8 @@ type ArgLoc interface {
 }
 
 type ArgLocPositional int
-type ArgLocNamed unique.Handle[string]
-type ArgLocNamedPair unique.Handle[string]
+type ArgLocNamed name.Name
+type ArgLocNamedPair name.Name
 
 func (ArgLocPositional) aArgLoc() {}
 func (ArgLocNamed) aArgLoc()      {}
@@ -38,7 +39,7 @@ func ArgErrorPosf(idx int, format string, args ...any) *FunctionCallError {
 
 // ArgErrorNamedf creates an [ArgError] pointing at the value of the named
 // argument with the given name.
-func ArgErrorNamedf(name unique.Handle[string], format string, args ...any) *FunctionCallError {
+func ArgErrorNamedf(name name.Name, format string, args ...any) *FunctionCallError {
 	return &FunctionCallError{
 		Msg:      fmt.Sprintf(format, args...),
 		Location: ArgLocNamed(name),
@@ -47,7 +48,7 @@ func ArgErrorNamedf(name unique.Handle[string], format string, args ...any) *Fun
 
 // ArgErrorNamedPairf creates an ArgError that points at the entire named pair
 // (key + value), used for unknown/unexpected named arguments.
-func ArgErrorNamedPairf(name unique.Handle[string], format string, args ...any) *FunctionCallError {
+func ArgErrorNamedPairf(name name.Name, format string, args ...any) *FunctionCallError {
 	return &FunctionCallError{
 		Msg:      fmt.Sprintf(format, args...),
 		Location: ArgLocNamedPair(name),

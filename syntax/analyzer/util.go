@@ -7,14 +7,14 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-	"unique"
 
+	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/value"
 )
 
 var (
-	underscore = unique.Make("_")
+	underscore = name.Make("_")
 
 	bools = map[string]value.Bool{
 		"true":  value.Bool(true),

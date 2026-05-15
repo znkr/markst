@@ -2,16 +2,16 @@ package builtin
 
 import (
 	"math"
-	"unique"
 
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/internal/names"
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
 
 var Calc = &value.Module{
-	Definitions: map[unique.Handle[string]]value.Value{
+	Definitions: map[name.Name]value.Value{
 		names.Inf:   value.Float(math.Inf(1)),
 		names.Nan:   value.Float(math.NaN()),
 		names.Even:  CalcEven,

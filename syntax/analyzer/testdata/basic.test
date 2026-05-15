@@ -1,88 +1,153 @@
 --- simple-text ---
 Hello world
-│ #text("Hello world")
+│ fn $top:
+│   b0:
+│     v0 = const text "Hello world"
+│     return v0
 
 --- multiple-paragraphs ---
 First paragraph
 
 Second paragraph
-│ #text("First paragraph")
-│ #parbreak()
-│ #text("Second paragraph")
+│ fn $top:
+│   b0:
+│     v0 = const text "First paragraph"
+│     v1 = const parbreak
+│     v2 = const text "Second paragraph"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- heading ---
 = Title
 Some content
-│ #heading(level: 1)[#text("Title")]
-│ #text("Some content")
+│ fn $top:
+│   b0:
+│     v0 = const text "Title"
+│     v1 = heading level=1 v0
+│     v2 = const text "Some content"
+│     v3 = content_result [v1, v2]
+│     return v3
 
 --- nested-headings ---
 = Top
 Content under top
 == Nested
 Content under nested
-│ #heading(level: 1)[#text("Top")]
-│ #text("Content under top")
-│ #heading(level: 2)[#text("Nested")]
-│ #text("Content under nested")
+│ fn $top:
+│   b0:
+│     v0 = const text "Top"
+│     v1 = heading level=1 v0
+│     v2 = const text "Content under top"
+│     v3 = const text "Nested"
+│     v4 = heading level=2 v3
+│     v5 = const text "Content under nested"
+│     v6 = content_result [v1, v2, v4, v5]
+│     return v6
 
 --- strong ---
 This is *bold* text
-│ #text("This is")
-│ #strong[#text("bold")]
-│ #text("text")
+│ fn $top:
+│   b0:
+│     v0 = const text "This is"
+│     v1 = const text "bold"
+│     v2 = strong v1
+│     v3 = const text "text"
+│     v4 = content_result [v0, v2, v3]
+│     return v4
 
 --- emphasis ---
 This is _emphasized_ text
-│ #text("This is")
-│ #emph[#text("emphasized")]
-│ #text("text")
+│ fn $top:
+│   b0:
+│     v0 = const text "This is"
+│     v1 = const text "emphasized"
+│     v2 = emph v1
+│     v3 = const text "text"
+│     v4 = content_result [v0, v2, v3]
+│     return v4
 
 --- link ---
 Check https://example.com out
-│ #text("Check")
-│ #link(dest: "https://example.com")[#text("https://example.com")]
-│ #text("out")
+│ fn $top:
+│   b0:
+│     v0 = const text "Check"
+│     v1 = const text "https://example.com"
+│     v2 = link "https://example.com" v1
+│     v3 = const text "out"
+│     v4 = content_result [v0, v2, v3]
+│     return v4
 
 --- list ---
 - First item
 - Second item
-│ #list.item[#text("First item")]
-│ #list.item[#text("Second item")]
+│ fn $top:
+│   b0:
+│     v0 = const text "First item"
+│     v1 = list_item v0
+│     v2 = const text "Second item"
+│     v3 = list_item v2
+│     v4 = content_result [v1, v3]
+│     return v4
 
 --- list-inside-regular-text ---
 regular text
 - First item
 - Second item
-│ #text("regular text")
-│ #list.item[#text("First item")]
-│ #list.item[#text("Second item")]
+│ fn $top:
+│   b0:
+│     v0 = const text "regular text"
+│     v1 = const text "First item"
+│     v2 = list_item v1
+│     v3 = const text "Second item"
+│     v4 = list_item v3
+│     v5 = content_result [v0, v2, v4]
+│     return v5
 
 --- enum ---
 1. First
 2. Second
-│ #enum.item(1)[#text("First")]
-│ #enum.item(2)[#text("Second")]
+│ fn $top:
+│   b0:
+│     v0 = const text "First"
+│     v1 = enum_item number=1 v0
+│     v2 = const text "Second"
+│     v3 = enum_item number=2 v2
+│     v4 = content_result [v1, v3]
+│     return v4
 
 --- mixed-enum-markers ---
 + first
 42. second
 + third
-│ #enum.item(-1)[#text("first")]
-│ #enum.item(42)[#text("second")]
-│ #enum.item(-1)[#text("third")]
+│ fn $top:
+│   b0:
+│     v0 = const text "first"
+│     v1 = enum_item v0
+│     v2 = const text "second"
+│     v3 = enum_item number=42 v2
+│     v4 = const text "third"
+│     v5 = enum_item v4
+│     v6 = content_result [v1, v3, v5]
+│     return v6
 
 --- nested-list ---
 - outer
   - inner one
   - inner two
 - another outer
-│ #list.item[
-│   #text("outer")
-│   #list.item[#text("inner one")]
-│   #list.item[#text("inner two")]
-│ ]
-│ #list.item[#text("another outer")]
+│ fn $top:
+│   b0:
+│     v0 = const text "outer"
+│     v1 = const text "inner one"
+│     v2 = list_item v1
+│     v3 = const text "inner two"
+│     v4 = list_item v3
+│     v5 = content_result [v0, v2, v4]
+│     v6 = list_item v5
+│     v7 = const text "another outer"
+│     v8 = list_item v7
+│     v9 = content_result [v6, v8]
+│     return v9
 
 --- deeply-nested-list ---
 - a
@@ -90,74 +155,112 @@ regular text
     - a.a.a
   - a.b
 - b
-│ #list.item[
-│   #text("a")
-│   #list.item[
-│     #text("a.a")
-│     #list.item[#text("a.a.a")]
-│   ]
-│   #list.item[#text("a.b")]
-│ ]
-│ #list.item[#text("b")]
+│ fn $top:
+│   b0:
+│     v0 = const text "a"
+│     v1 = const text "a.a"
+│     v2 = const text "a.a.a"
+│     v3 = list_item v2
+│     v4 = content_result [v1, v3]
+│     v5 = list_item v4
+│     v6 = const text "a.b"
+│     v7 = list_item v6
+│     v8 = content_result [v0, v5, v7]
+│     v9 = list_item v8
+│     v10 = const text "b"
+│     v11 = list_item v10
+│     v12 = content_result [v9, v11]
+│     return v12
 
 --- linebreak-in-heading ---
 == Title \ with \ break
-│ #heading(level: 2)[
-│   #text("Title")
-│   #linebreak()
-│   #text("with")
-│   #linebreak()
-│   #text("break")
-│ ]
+│ fn $top:
+│   b0:
+│     v0 = const text "Title"
+│     v1 = const linebreak
+│     v2 = const text "with"
+│     v3 = const linebreak
+│     v4 = const text "break"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     v6 = heading level=2 v5
+│     return v6
 
 --- same-level-headings ---
 = First
 = Second
-│ #heading(level: 1)[#text("First")]
-│ #heading(level: 1)[#text("Second")]
+│ fn $top:
+│   b0:
+│     v0 = const text "First"
+│     v1 = heading level=1 v0
+│     v2 = const text "Second"
+│     v3 = heading level=1 v2
+│     v4 = content_result [v1, v3]
+│     return v4
 
 --- term-list ---
 / Term: Definition
 / Another: With more text
-│ #terms.item[#text("Term")][#text("Definition")]
-│ #terms.item[#text("Another")][#text("With more text")]
+│ fn $top:
+│   b0:
+│     v0 = const text "Term"
+│     v1 = const text "Definition"
+│     v2 = term_item v0, v1
+│     v3 = const text "Another"
+│     v4 = const text "With more text"
+│     v5 = term_item v3, v4
+│     v6 = content_result [v2, v5]
+│     return v6
 
 --- term-list-multiline ---
 / Key: Value that spans
        multiple lines
-│ #terms.item[#text("Key")][
-│   #text("Value that spans")
-│   #text("multiple lines")
-│ ]
+│ fn $top:
+│   b0:
+│     v0 = const text "Key"
+│     v1 = const text "Value that spans"
+│     v2 = const text "multiple lines"
+│     v3 = content_result [v1, v2]
+│     v4 = term_item v0, v3
+│     return v4
 
 --- inline-raw ---
 This has `code` in it
-│ #text("This has")
-│ #raw("code")
-│ #text("in it")
+│ fn $top:
+│   b0:
+│     v0 = const text "This has"
+│     v1 = const raw_inline lines=1
+│     v2 = const text "in it"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- inline-raw-multiline ---
 Text with `code that
 spans lines` here
-│ #text("Text with")
-│ #raw("code that", "spans lines")
-│ #text("here")
+│ fn $top:
+│   b0:
+│     v0 = const text "Text with"
+│     v1 = const raw_inline lines=2
+│     v2 = const text "here"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- block-raw ---
 ```
 code block
 ```
-│ #raw(block: true, "code block")
+│ fn $top:
+│   b0:
+│     v0 = const raw_block lang="" lines=1
+│     return v0
 
 --- block-raw-with-lang ---
 ```rust
 fn main() {}
 ```
-│ #raw(
-│   block: true,
-│   lang: "rust",
-│   "fn main() {}",
-│ )
+│ fn $top:
+│   b0:
+│     v0 = const raw_block lang="rust" lines=1
+│     return v0
 
 --- block-raw-multiline ---
 ```go
@@ -165,67 +268,102 @@ package main
 
 func main() {}
 ```
-│ #raw(
-│   block: true,
-│   lang: "go",
-│   "package main",
-│   "",
-│   "func main() {}",
-│ )
+│ fn $top:
+│   b0:
+│     v0 = const raw_block lang="go" lines=3
+│     return v0
 
 --- escape-character ---
 Use \* for literal star
-│ #text("Use")
-│ #text("*")
-│ #text("for literal star")
+│ fn $top:
+│   b0:
+│     v0 = const text "Use"
+│     v1 = const text "*"
+│     v2 = const text "for literal star"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- unicode-escape ---
 Letter \u{41} is A
-│ #text("Letter")
-│ #text("A")
-│ #text("is A")
+│ fn $top:
+│   b0:
+│     v0 = const text "Letter"
+│     v1 = const text "A"
+│     v2 = const text "is A"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- smart-quote ---
 It's working
-│ #text("It")
-│ #text("'")
-│ #text("s working")
+│ fn $top:
+│   b0:
+│     v0 = const text "It"
+│     v1 = const text "'"
+│     v2 = const text "s working"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- shorthands ---
 Use ... for ellipsis and --- for dash
-│ #text("Use")
-│ #text("…")
-│ #text("for ellipsis and")
-│ #text("—")
-│ #text("for dash")
+│ fn $top:
+│   b0:
+│     v0 = const text "Use"
+│     v1 = const text "…"
+│     v2 = const text "for ellipsis and"
+│     v3 = const text "—"
+│     v4 = const text "for dash"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- reference ---
 See @intro for more
-│ #text("See")
-│ #ref(target: "intro")
-│ #text("for more")
+│ fn $top:
+│   b0:
+│     v0 = const text "See"
+│     v1 = ref @intro
+│     v2 = const text "for more"
+│     v3 = content_result [v0, v1, v2]
+│     return v3
 
 --- reference-with-supplement ---
 See @intro[the introduction] for details
-│ #text("See")
-│ #ref(target: "intro")[#text("the introduction")]
-│ #text("for details")
+│ fn $top:
+│   b0:
+│     v0 = const text "See"
+│     v1 = const text "the introduction"
+│     v2 = content_result [v1]
+│     v3 = ref @intro v2
+│     v4 = const text "for details"
+│     v5 = content_result [v0, v3, v4]
+│     return v5
 
 --- label-on-heading ---
 = Introduction <intro>
-│ #heading(level: 1)[#text("Introduction")]
-│ #label("intro")
+│ fn $top:
+│   b0:
+│     v0 = const text "Introduction"
+│     v1 = heading level=1 v0
+│     v2 = attach_label v1, @intro
+│     return v1
 
 --- label-on-paragraph ---
 Some text <my-label>
-│ #text("Some text")
-│ #label("my-label")
+│ fn $top:
+│   b0:
+│     v0 = const text "Some text"
+│     v1 = attach_label v0, @my-label
+│     return v0
 
 --- label-and-reference ---
 = Chapter One <ch1>
 See @ch1 for details
-│ #heading(level: 1)[#text("Chapter One")]
-│ #label("ch1")
-│ #text("See")
-│ #ref(target: "ch1")
-│ #text("for details")
+│ fn $top:
+│   b0:
+│     v0 = const text "Chapter One"
+│     v1 = heading level=1 v0
+│     v2 = attach_label v1, @ch1
+│     v3 = const text "See"
+│     v4 = ref @ch1
+│     v5 = const text "for details"
+│     v6 = content_result [v1, v3, v4, v5]
+│     return v6

@@ -3,9 +3,9 @@
 package value
 
 import "znkr.io/writst/internal/names"
-import "unique"
+import "znkr.io/writst/name"
 
-func (n *Emph) Field(name unique.Handle[string]) Value {
+func (n *Emph) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
 		return n.Body
@@ -19,7 +19,7 @@ func (n *Emph) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Emph) HasField(name unique.Handle[string]) bool {
+func (n *Emph) HasField(name name.Name) bool {
 	switch name {
 	case names.Body:
 		return true
@@ -32,9 +32,9 @@ func (n *Emph) HasField(name unique.Handle[string]) bool {
 
 func (n *Emph) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -45,7 +45,7 @@ func (n *Emph) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Enum) Field(name unique.Handle[string]) Value {
+func (n *Enum) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
 		vs := make([]Value, len(n.Children))
@@ -63,7 +63,7 @@ func (n *Enum) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Enum) HasField(name unique.Handle[string]) bool {
+func (n *Enum) HasField(name name.Name) bool {
 	switch name {
 	case names.Children:
 		return true
@@ -76,9 +76,9 @@ func (n *Enum) HasField(name unique.Handle[string]) bool {
 
 func (n *Enum) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -89,7 +89,7 @@ func (n *Enum) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *EnumItem) Field(name unique.Handle[string]) Value {
+func (n *EnumItem) Field(name name.Name) Value {
 	switch name {
 	case names.Number:
 		if n.Number < 0 {
@@ -108,7 +108,7 @@ func (n *EnumItem) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *EnumItem) HasField(name unique.Handle[string]) bool {
+func (n *EnumItem) HasField(name name.Name) bool {
 	switch name {
 	case names.Number:
 		return n.Number >= 0
@@ -124,11 +124,11 @@ func (n *EnumItem) HasField(name unique.Handle[string]) bool {
 func (n *EnumItem) Fields() *Dict {
 	fields := new(Dict)
 	if f := n.Field(names.Number); f != nil {
-		fields.Elems.Put(Str(names.Number.Value()), f)
+		fields.Elems.Put(Str(names.Number.String()), f)
 	}
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -139,7 +139,7 @@ func (n *EnumItem) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Heading) Field(name unique.Handle[string]) Value {
+func (n *Heading) Field(name name.Name) Value {
 	switch name {
 	case names.Depth:
 		return Int(n.Depth)
@@ -155,7 +155,7 @@ func (n *Heading) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Heading) HasField(name unique.Handle[string]) bool {
+func (n *Heading) HasField(name name.Name) bool {
 	switch name {
 	case names.Depth:
 		return true
@@ -170,10 +170,10 @@ func (n *Heading) HasField(name unique.Handle[string]) bool {
 
 func (n *Heading) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Depth.Value()), n.Field(names.Depth))
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Depth.String()), n.Field(names.Depth))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -184,11 +184,11 @@ func (n *Heading) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Linebreak) Field(name unique.Handle[string]) Value {
+func (n *Linebreak) Field(name name.Name) Value {
 	return nil
 }
 
-func (n *Linebreak) HasField(name unique.Handle[string]) bool {
+func (n *Linebreak) HasField(name name.Name) bool {
 	return false
 }
 
@@ -200,7 +200,7 @@ func (n *Linebreak) SetLabel(label *Label) *Label {
 	return nil
 }
 
-func (n *Link) Field(name unique.Handle[string]) Value {
+func (n *Link) Field(name name.Name) Value {
 	switch name {
 	case names.Dest:
 		return Str(n.Dest)
@@ -216,7 +216,7 @@ func (n *Link) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Link) HasField(name unique.Handle[string]) bool {
+func (n *Link) HasField(name name.Name) bool {
 	switch name {
 	case names.Dest:
 		return true
@@ -231,10 +231,10 @@ func (n *Link) HasField(name unique.Handle[string]) bool {
 
 func (n *Link) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Dest.Value()), n.Field(names.Dest))
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Dest.String()), n.Field(names.Dest))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -245,7 +245,7 @@ func (n *Link) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *List) Field(name unique.Handle[string]) Value {
+func (n *List) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
 		vs := make([]Value, len(n.Children))
@@ -263,7 +263,7 @@ func (n *List) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *List) HasField(name unique.Handle[string]) bool {
+func (n *List) HasField(name name.Name) bool {
 	switch name {
 	case names.Children:
 		return true
@@ -276,9 +276,9 @@ func (n *List) HasField(name unique.Handle[string]) bool {
 
 func (n *List) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -289,7 +289,7 @@ func (n *List) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *ListItem) Field(name unique.Handle[string]) Value {
+func (n *ListItem) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
 		return n.Body
@@ -303,7 +303,7 @@ func (n *ListItem) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *ListItem) HasField(name unique.Handle[string]) bool {
+func (n *ListItem) HasField(name name.Name) bool {
 	switch name {
 	case names.Body:
 		return true
@@ -316,9 +316,9 @@ func (n *ListItem) HasField(name unique.Handle[string]) bool {
 
 func (n *ListItem) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -329,11 +329,11 @@ func (n *ListItem) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Parbreak) Field(name unique.Handle[string]) Value {
+func (n *Parbreak) Field(name name.Name) Value {
 	return nil
 }
 
-func (n *Parbreak) HasField(name unique.Handle[string]) bool {
+func (n *Parbreak) HasField(name name.Name) bool {
 	return false
 }
 
@@ -345,7 +345,7 @@ func (n *Parbreak) SetLabel(label *Label) *Label {
 	return nil
 }
 
-func (n *Raw) Field(name unique.Handle[string]) Value {
+func (n *Raw) Field(name name.Name) Value {
 	switch name {
 	case names.Block:
 		return Bool(n.Block)
@@ -365,7 +365,7 @@ func (n *Raw) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Raw) HasField(name unique.Handle[string]) bool {
+func (n *Raw) HasField(name name.Name) bool {
 	switch name {
 	case names.Block:
 		return true
@@ -380,11 +380,11 @@ func (n *Raw) HasField(name unique.Handle[string]) bool {
 
 func (n *Raw) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Block.Value()), n.Field(names.Block))
+	fields.Elems.Put(Str(names.Block.String()), n.Field(names.Block))
 	if f := n.Field(names.Lang); f != nil {
-		fields.Elems.Put(Str(names.Lang.Value()), f)
+		fields.Elems.Put(Str(names.Lang.String()), f)
 	}
-	fields.Elems.Put(Str(names.Lines.Value()), n.Field(names.Lines))
+	fields.Elems.Put(Str(names.Lines.String()), n.Field(names.Lines))
 	return fields
 }
 
@@ -392,10 +392,10 @@ func (n *Raw) SetLabel(label *Label) *Label {
 	return nil
 }
 
-func (n *Ref) Field(name unique.Handle[string]) Value {
+func (n *Ref) Field(name name.Name) Value {
 	switch name {
 	case names.Target:
-		return Str(n.Target.Value())
+		return Str(n.Target.String())
 	case names.Supplement:
 		if n.Supplement == nil {
 			return nil
@@ -411,7 +411,7 @@ func (n *Ref) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Ref) HasField(name unique.Handle[string]) bool {
+func (n *Ref) HasField(name name.Name) bool {
 	switch name {
 	case names.Target:
 		return true
@@ -426,12 +426,12 @@ func (n *Ref) HasField(name unique.Handle[string]) bool {
 
 func (n *Ref) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Target.Value()), n.Field(names.Target))
+	fields.Elems.Put(Str(names.Target.String()), n.Field(names.Target))
 	if f := n.Field(names.Supplement); f != nil {
-		fields.Elems.Put(Str(names.Supplement.Value()), f)
+		fields.Elems.Put(Str(names.Supplement.String()), f)
 	}
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -442,7 +442,7 @@ func (n *Ref) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Sequence) Field(name unique.Handle[string]) Value {
+func (n *Sequence) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
 		vs := make([]Value, len(n.Children))
@@ -460,7 +460,7 @@ func (n *Sequence) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Sequence) HasField(name unique.Handle[string]) bool {
+func (n *Sequence) HasField(name name.Name) bool {
 	switch name {
 	case names.Children:
 		return true
@@ -473,9 +473,9 @@ func (n *Sequence) HasField(name unique.Handle[string]) bool {
 
 func (n *Sequence) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -486,7 +486,7 @@ func (n *Sequence) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Strong) Field(name unique.Handle[string]) Value {
+func (n *Strong) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
 		return n.Body
@@ -500,7 +500,7 @@ func (n *Strong) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Strong) HasField(name unique.Handle[string]) bool {
+func (n *Strong) HasField(name name.Name) bool {
 	switch name {
 	case names.Body:
 		return true
@@ -513,9 +513,9 @@ func (n *Strong) HasField(name unique.Handle[string]) bool {
 
 func (n *Strong) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Body.Value()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -526,7 +526,7 @@ func (n *Strong) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *TermItem) Field(name unique.Handle[string]) Value {
+func (n *TermItem) Field(name name.Name) Value {
 	switch name {
 	case names.Term:
 		return n.Term
@@ -542,7 +542,7 @@ func (n *TermItem) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *TermItem) HasField(name unique.Handle[string]) bool {
+func (n *TermItem) HasField(name name.Name) bool {
 	switch name {
 	case names.Term:
 		return true
@@ -557,10 +557,10 @@ func (n *TermItem) HasField(name unique.Handle[string]) bool {
 
 func (n *TermItem) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Term.Value()), n.Field(names.Term))
-	fields.Elems.Put(Str(names.Description.Value()), n.Field(names.Description))
+	fields.Elems.Put(Str(names.Term.String()), n.Field(names.Term))
+	fields.Elems.Put(Str(names.Description.String()), n.Field(names.Description))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -571,7 +571,7 @@ func (n *TermItem) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Terms) Field(name unique.Handle[string]) Value {
+func (n *Terms) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
 		vs := make([]Value, len(n.Children))
@@ -589,7 +589,7 @@ func (n *Terms) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Terms) HasField(name unique.Handle[string]) bool {
+func (n *Terms) HasField(name name.Name) bool {
 	switch name {
 	case names.Children:
 		return true
@@ -602,9 +602,9 @@ func (n *Terms) HasField(name unique.Handle[string]) bool {
 
 func (n *Terms) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Children.Value()), n.Field(names.Children))
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }
@@ -615,7 +615,7 @@ func (n *Terms) SetLabel(label *Label) *Label {
 	return old
 }
 
-func (n *Text) Field(name unique.Handle[string]) Value {
+func (n *Text) Field(name name.Name) Value {
 	switch name {
 	case names.Text:
 		return Str(n.Text)
@@ -629,7 +629,7 @@ func (n *Text) Field(name unique.Handle[string]) Value {
 	}
 }
 
-func (n *Text) HasField(name unique.Handle[string]) bool {
+func (n *Text) HasField(name name.Name) bool {
 	switch name {
 	case names.Text:
 		return true
@@ -642,9 +642,9 @@ func (n *Text) HasField(name unique.Handle[string]) bool {
 
 func (n *Text) Fields() *Dict {
 	fields := new(Dict)
-	fields.Elems.Put(Str(names.Text.Value()), n.Field(names.Text))
+	fields.Elems.Put(Str(names.Text.String()), n.Field(names.Text))
 	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.Value()), f)
+		fields.Elems.Put(Str(names.Label.String()), f)
 	}
 	return fields
 }

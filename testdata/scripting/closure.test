@@ -146,7 +146,7 @@
 #f()
 │ #raw("(\"b\": 10)\n")
 
---- closure-capture-mut-error (skip: TODO) ---
+--- closure-capture-mut-error ---
 #let x = ()
 #let f() = {
   // Error: 3-4 variables from outside the function are read-only and cannot be modified
@@ -154,7 +154,7 @@
 }
 #f()
 
---- closure-capture-mut-false-positive (skip: TODO) ---
+--- closure-capture-mut-false-positive (skip: symbol not implemented yet) ---
 // Test the closure capture error on a non-mutating field call.
 #let sx = symbol("p", ("push", sym.tilde))
 #let f() = {

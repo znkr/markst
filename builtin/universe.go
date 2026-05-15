@@ -1,16 +1,15 @@
 package builtin
 
 import (
-	"unique"
-
 	"znkr.io/writst/internal/names"
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
 
 // Universe is the top-level scope containing all built-in type constructors
 // and global functions (range, repr, type).
-var Universe = map[unique.Handle[string]]value.Value{
+var Universe = map[name.Name]value.Value{
 	names.Angle:     reflectedTypes[types.Angle],
 	names.Arguments: reflectedTypes[types.Arguments],
 	names.Array:     reflectedTypes[types.Array],
@@ -88,7 +87,7 @@ var reflectedTypes = [...]*value.Type{
 // access like x.len() is evaluated, the evaluator looks up the field name in
 // TypeFields[x.Type()] and returns the method function (pre-bound with x as the
 // receiver via [Function.With]).
-var TypeFields = [...]map[unique.Handle[string]]value.Value{
+var TypeFields = [...]map[name.Name]value.Value{
 	types.None:          {},
 	types.ReflectedType: {},
 	types.Auto:          {},

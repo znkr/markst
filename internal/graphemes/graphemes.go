@@ -1,13 +1,13 @@
-package expr
+package graphemes
 
 import (
 	"unicode"
 	"unicode/utf8"
 )
 
-// graphemes iterates over Unicode grapheme clusters in s.
+// Graphemes iterates over Unicode grapheme clusters in s.
 // This handles combining marks and ZWJ emoji sequences.
-func graphemes(s string) func(yield func(string) bool) {
+func Graphemes(s string) func(yield func(string) bool) {
 	return func(yield func(string) bool) {
 		for len(s) > 0 {
 			_, size := utf8.DecodeRuneInString(s)

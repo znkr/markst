@@ -1,8 +1,7 @@
 package value
 
 import (
-	"unique"
-
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 )
 
@@ -16,8 +15,8 @@ type Content interface {
 
 	SetLabel(*Label) *Label
 
-	Field(unique.Handle[string]) Value
-	HasField(unique.Handle[string]) bool
+	Field(name.Name) Value
+	HasField(name.Name) bool
 	Fields() *Dict
 
 	aContent()
@@ -68,7 +67,7 @@ type Link struct {
 }
 
 type Ref struct {
-	Target     unique.Handle[string] `writst:"required"`
+	Target     name.Name `writst:"required"`
 	Supplement Content
 	Label      *Label
 }

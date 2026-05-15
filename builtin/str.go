@@ -72,7 +72,7 @@ func strImpl(_ *value.FunctionCallContext, args []value.Value, named value.Named
 		}
 		return value.Str(r), nil
 	case *value.Label:
-		return value.Str(v.Name.Value()), nil
+		return value.Str(v.Name.String()), nil
 	case *value.Type:
 		return value.Str(v.Reflected.String()), nil
 	default:

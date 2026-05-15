@@ -1,14 +1,13 @@
 package value
 
 import (
-	"unique"
-
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 )
 
 type Module struct {
 	Name        string
-	Definitions map[unique.Handle[string]]Value
+	Definitions map[name.Name]Value
 }
 
 func (*Module) aValue()          {}

@@ -3,8 +3,8 @@ package value
 import (
 	"fmt"
 	"slices"
-	"unique"
 
+	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/types"
 )
@@ -42,7 +42,7 @@ type Function struct {
 }
 
 // NamedParams maps interned parameter names to their definitions.
-type NamedParams map[unique.Handle[string]]Param
+type NamedParams map[name.Name]Param
 
 // Param describes a function parameter: its name, accepted types, and
 // optional default value (nil means required).
@@ -60,14 +60,14 @@ type NamedArgsWithDefaults struct {
 }
 
 // IsSet reports whether the named argument was explicitly provided at the call site.
-func (n *NamedArgsWithDefaults) IsSet(name unique.Handle[string]) bool {
+func (n *NamedArgsWithDefaults) IsSet(name name.Name) bool {
 	_, ok := n.Args[name]
 	return ok
 }
 
 // Get returns the value of a named argument, falling back to its default
 // value if not explicitly provided, or [None] if there is no default.
-func (n *NamedArgsWithDefaults) Get(name unique.Handle[string]) Value {
+func (n *NamedArgsWithDefaults) Get(name name.Name) Value {
 	v := n.Args[name]
 	if v == nil {
 		var ok bool
@@ -221,7 +221,7 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	for name := range merged.Named {
 		if _, ok := n.Named[name]; !ok {
 			if sinkIdx < 0 {
-				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name)
 			}
 			// When a sink exists, unknown named args go to the sink.
 			continue

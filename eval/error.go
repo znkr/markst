@@ -1,4 +1,4 @@
-package expr
+package eval
 
 import (
 	"znkr.io/writst/syntax"

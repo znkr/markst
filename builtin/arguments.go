@@ -3,8 +3,8 @@ package builtin
 import (
 	"fmt"
 	"slices"
-	"unique"
 
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
@@ -89,7 +89,7 @@ func argumentsAtImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		}
 		return v.Positional[key], nil
 	case value.Str:
-		val, ok := v.Named[unique.Make(string(key))]
+		val, ok := v.Named[name.Make(string(key))]
 		if !ok {
 			return nil, value.ArgErrorPosf(1, "arguments do not contain key %q and no default value was specified", key)
 		}
@@ -108,7 +108,7 @@ func argumentsNamedImpl(_ *value.FunctionCallContext, args []value.Value, named 
 	v := args[0].(*value.Arguments)
 	dict := new(value.Dict)
 	for k, val := range v.Named {
-		dict.Elems.Put(value.Str(k.Value()), val)
+		dict.Elems.Put(value.Str(k.String()), val)
 	}
 	return dict, nil
 }

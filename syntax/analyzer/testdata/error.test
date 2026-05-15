@@ -145,3 +145,22 @@ v in iter {}
 --- duplicate-param ---
 // Error: 13-14 duplicate parameter: x
 #{ let f(x, x) = 1 }
+
+--- break-in-closure-inside-loop ---
+// A break inside a closure must not target a loop in the enclosing function.
+#{
+  for x in (1, 2, 3) {
+    // Error: 21-26 break outside of loop
+    let f = () => { break }
+    f()
+  }
+}
+
+--- continue-in-closure-inside-loop ---
+#{
+  for x in (1, 2, 3) {
+    // Error: 21-29 continue outside of loop
+    let f = () => { continue }
+    f()
+  }
+}

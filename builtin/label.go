@@ -1,8 +1,7 @@
 package builtin
 
 import (
-	"unique"
-
+	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
@@ -23,7 +22,7 @@ func labelImpl(_ *value.FunctionCallContext, args []value.Value, named value.Nam
 		if v == "" {
 			return nil, value.ArgErrorPosf(0, "label name must not be empty")
 		}
-		return &value.Label{Name: unique.Make(string(v))}, nil
+		return &value.Label{Name: name.Make(string(v))}, nil
 	default:
 		panic("unexpected type: " + v.Type().String())
 	}

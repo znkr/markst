@@ -229,7 +229,7 @@
 
 // Functions compare by identity.
 #test(test == test, true)
-// TODO closure: #test((() => {}) == (() => {}), false)
+#test((() => {}) == (() => {}), false)
 
 // Content compares field by field.
 #let t = [a]
@@ -488,7 +488,7 @@ Apply arguments to an argument sink.
 #(x -= 5)       #test(x, 5)
 #(x += 1)       #test(x, 6)
 #(x *= x)       #test(x, 36)
-//TODO: #(x /= 2.0)     #test(x, 18.0)
+#(x /= 2.0)     #test(x, 18.0)
 #(x = "some")   #test(x, "some")
 #(x += "thing") #test(x, "something")
 │ #parbreak()

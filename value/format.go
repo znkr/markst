@@ -5,10 +5,10 @@ import (
 	"slices"
 	"strings"
 	"unicode"
-	"unique"
 
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/internal/formatter"
+	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 )
 
@@ -197,13 +197,13 @@ func (n *Arguments) Format(f *formatter.Formatter) {
 		}
 		v.Format(f)
 	}
-	keys := slices.SortedFunc(maps.Keys(n.Named), func(a, b unique.Handle[string]) int { return strings.Compare(a.Value(), b.Value()) })
+	keys := slices.SortedFunc(maps.Keys(n.Named), func(a, b name.Name) int { return strings.Compare(a.String(), b.String()) })
 	for i, name := range keys {
 		value := n.Named[name]
 		if len(n.Positional) > 0 || i > 0 {
 			f.Str(", ")
 		}
-		f.Str(name.Value())
+		f.Str(name.String())
 		f.Str(": ")
 		value.Format(f)
 	}
@@ -286,7 +286,7 @@ func (n *Link) Format(f *formatter.Formatter) {
 }
 
 func (n *Ref) Format(f *formatter.Formatter) {
-	args := []formatter.Arg{formatter.NamedArg("target", n.Target.Value())}
+	args := []formatter.Arg{formatter.NamedArg("target", n.Target.String())}
 	var blocks []formatter.Formattable
 	if n.Supplement != nil {
 		blocks = append(blocks, contentBlock{n.Supplement})
@@ -333,7 +333,7 @@ func (n *TermItem) Format(f *formatter.Formatter) {
 // Label ///////////////////////////////////////////////////////////////////////
 
 func (n *Label) Format(f *formatter.Formatter) {
-	f.FuncCall("label", []formatter.Arg{formatter.PositionalArg(n.Name.Value())})
+	f.FuncCall("label", []formatter.Arg{formatter.PositionalArg(n.Name.String())})
 }
 
 // Module //////////////////////////////////////////////////////////////////////

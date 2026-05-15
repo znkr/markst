@@ -2,495 +2,356 @@ package expr
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
-// FormatExprs returns a string representation of IR expressions, used as
-// expected output in analyzer test golden files.
-func FormatExprs(exprs []Expr) string {
-	f := formatter.New(syntax.ModeMarkup)
-	for _, c := range exprs {
-		c.Format(f)
-		f.Str("\n")
+// FormatModule returns a textual SSA dump of mod. The format is informally
+// modelled on LLVM IR / Cranelift CLIF: each [Function] becomes a labelled
+// block, with one [BasicBlock] per `bN:` section. Instructions print as
+// `vN = <opcode> <operands…>`; phi nodes appear at the top of their block.
+//
+// This is the format consumed by analyzer golden tests under the new IR. It
+// is not pretty-printed writst source — see the migration plan for why.
+func FormatModule(mod *Module) string {
+	var sb strings.Builder
+	formatFunction(&sb, "$top", mod.Top)
+	for i, fn := range mod.Functions {
+		sb.WriteString("\n")
+		formatFunction(&sb, fmt.Sprintf("$fn_%d", i), fn)
 	}
-	return f.String()
+	return sb.String()
 }
 
-// op writes a binary operator with surrounding spaces
-func formatOp(f *formatter.Formatter, o syntax.BinaryOp) {
-	f.Str(" ")
-	f.Str(o.String())
-	f.Str(" ")
+// FormatFunction returns the SSA dump of a single function with the given
+// label (e.g. "$top", "$fn_0").
+func FormatFunction(label string, fn *Function) string {
+	var sb strings.Builder
+	formatFunction(&sb, label, fn)
+	return sb.String()
 }
 
-// expr formats an expression in code mode
-func formatExpr(f *formatter.Formatter, e Expr) {
-	prev := f.Mode()
-	f.SetMode(syntax.ModeCode)
-	e.Format(f)
-	f.SetMode(prev)
-}
-
-// exprs formats expressions with a separator
-func formatExprs(f *formatter.Formatter, sep string, es []Expr) {
-	for i, e := range es {
-		if i > 0 {
-			f.Str(sep)
-		}
-		formatExpr(f, e)
+func formatFunction(sb *strings.Builder, label string, fn *Function) {
+	sb.WriteString("fn ")
+	sb.WriteString(label)
+	if fn.Name != "" {
+		fmt.Fprintf(sb, " name=%q", fn.Name)
 	}
-}
-
-// destructPattern formats a slice of destruct patterns
-func formatDestructPattern(f *formatter.Formatter, patterns []DestructPattern) {
-	if len(patterns) == 1 {
-		patterns[0].Format(f)
-		return
-	}
-	f.Str("(")
-	for i, p := range patterns {
-		if i > 0 {
-			f.Str(", ")
-		}
-		p.Format(f)
-	}
-	f.Str(")")
-}
-
-// args formats arguments with a separator
-func formatArguments(f *formatter.Formatter, sep string, es []Arg) {
-	for i, e := range es {
-		if i > 0 {
-			f.Str(sep)
-		}
-		switch e := e.(type) {
-		case *SpreadArg:
-			f.Str("..")
-			formatExpr(f, e.expr)
-		case *ExprArg:
-			formatExpr(f, e.expr)
-		case *NamedArg:
-			f.Str(e.name.Value())
-			f.Str(": ")
-			formatExpr(f, e.expr)
-		default:
-			panic(fmt.Sprintf("unknown arg type: %T", e))
+	// Build reverse lookups so each capture / param entry shows the Ref
+	// the body references.
+	captureRefs := make([]Ref, len(fn.Captures))
+	paramRefs := make([]Ref, len(fn.Params))
+	selfRef := NoRef
+	for i, d := range fn.Defs {
+		switch d := d.(type) {
+		case *DefCapture:
+			captureRefs[d.Idx] = Ref(i)
+		case *DefParam:
+			paramRefs[d.Idx] = Ref(i)
+		case *DefSelf:
+			selfRef = Ref(i)
 		}
 	}
-}
-
-// params formats parameters with a separator
-func formatParams(f *formatter.Formatter, sep string, ps []ClosureParam) {
-	for i, p := range ps {
-		if i > 0 {
-			f.Str(sep)
-		}
-		switch p := p.(type) {
-		case *PositionalClosureParam:
-			formatExpr(f, p.name)
-		case *NamedClosureParam:
-			f.Str(p.name.name.Value())
-			if p.def != nil {
-				f.Str(": ")
-				formatExpr(f, p.def)
-			}
-		case *SpreadClosureParam:
-			f.Str("..")
-			formatExpr(f, p.ident)
-		default:
-			panic(fmt.Sprintf("unknown param type: %T", p))
-		}
-	}
-}
-
-type exprBlock []Expr
-
-func (b exprBlock) Format(f *formatter.Formatter) {
-	formatCodeBlock(f, b)
-}
-
-// formatCodeBlock formats an []Expr block wrapped in [...].
-func formatCodeBlock(f *formatter.Formatter, exprs []Expr) {
-	if len(exprs) == 0 {
-		return
-	}
-	prev := f.Mode()
-	f.SetMode(syntax.ModeMarkup)
-	f.Str("[")
-	if len(exprs) == 1 {
-		exprs[0].Format(f)
-		f.Str("]")
-		f.SetMode(prev)
-		return
-	}
-	f.IncreaseIndent()
-	for _, item := range exprs {
-		f.Linebreak()
-		item.Format(f)
-	}
-	f.DecreaseIndent()
-	f.Linebreak()
-	f.Str("]")
-	f.SetMode(prev)
-}
-
-// Content Expressions /////////////////////////////////////////////////////////////////////////////
-
-func (n *HeadingExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("heading", []formatter.Arg{formatter.NamedArg("level", n.level)}, exprBlock(n.body))
-}
-
-func (n *StrongExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("strong", nil, exprBlock(n.body))
-}
-
-func (n *EmphExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("emph", nil, exprBlock(n.body))
-}
-
-func (n *LinkExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("link", []formatter.Arg{formatter.NamedArg("dest", n.dest)}, exprBlock(n.body))
-}
-
-func (n *RefExpr) Format(f *formatter.Formatter) {
-	args := []formatter.Arg{formatter.NamedArg("target", n.target.Value())}
-	var blocks []formatter.Formattable
-	if n.supplement != nil && len(n.supplement.exprs) > 0 {
-		blocks = append(blocks, exprBlock(n.supplement.Body()))
-	}
-	f.FuncCall("ref", args, blocks...)
-}
-
-func (n *ListItemExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("list.item", nil, exprBlock(n.body))
-}
-
-func (n *EnumItemExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("enum.item", []formatter.Arg{formatter.PositionalArg(n.number)}, exprBlock(n.body))
-}
-
-func (n *TermItemExpr) Format(f *formatter.Formatter) {
-	f.FuncCall("terms.item", nil, exprBlock(n.term), exprBlock(n.description))
-}
-
-// Code Expressions ////////////////////////////////////////////////////////////////////////////////
-
-func (n *ConstExpr) Format(f *formatter.Formatter) {
-	n.value.Format(f)
-}
-
-func (n *Ident) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str(n.name.Value())
-}
-
-func (n *CodeBlock) Format(f *formatter.Formatter) {
-	f.Prefix()
-	if len(n.exprs) == 0 {
-		f.Str("{ }")
-		return
-	}
-	f.Inline(func(f *formatter.Formatter) {
-		f.Str("{ ")
-		formatExprs(f, "; ", n.exprs)
-		f.Str(" }")
-	})
-}
-
-func (n *ContentBlock) Format(f *formatter.Formatter) {
-	f.Prefix()
-	if len(n.exprs) == 0 {
-		f.Str("[]")
-		return
-	}
-	prev := f.Mode()
-	f.SetMode(syntax.ModeMarkup)
-	if len(n.exprs) == 1 {
-		f.Str("[")
-		for i, item := range n.exprs {
+	if len(fn.Captures) > 0 {
+		sb.WriteString(" captures=[")
+		for i, c := range fn.Captures {
 			if i > 0 {
-				f.Str(" ")
+				sb.WriteString(", ")
 			}
-			item.Format(f)
+			fmt.Fprintf(sb, "%s=%s", formatRef(captureRefs[i]), c.String())
 		}
-		f.Str("]")
-	} else {
-		f.Str("[")
-		f.IncreaseIndent()
-		for _, item := range n.exprs {
-			f.Linebreak()
-			item.Format(f)
+		sb.WriteString("]")
+	}
+	if selfRef != NoRef {
+		fmt.Fprintf(sb, " self=%s", formatRef(selfRef))
+	}
+	if len(fn.Params) > 0 {
+		sb.WriteString(" params=[")
+		for i, p := range fn.Params {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			switch p.Kind {
+			case ParamSink:
+				fmt.Fprintf(sb, "%s=..%s", formatRef(paramRefs[i]), p.Name.String())
+			case ParamNamed:
+				fmt.Fprintf(sb, "%s=%s", formatRef(paramRefs[i]), p.Name.String())
+				if p.Default != NoRef {
+					fmt.Fprintf(sb, ":%s", formatRef(p.Default))
+				}
+			default:
+				fmt.Fprintf(sb, "%s=%s", formatRef(paramRefs[i]), p.Name.String())
+			}
 		}
-		f.DecreaseIndent()
-		f.Linebreak()
-		f.Str("]")
+		sb.WriteString("]")
 	}
-	f.SetMode(prev)
+	sb.WriteString(":\n")
+	for _, block := range fn.Blocks {
+		formatBlock(sb, block)
+	}
 }
 
-func (n *Parenthesized) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("(")
-	formatExpr(f, n.body)
-	f.Str(")")
-}
-
-// Collections /////////////////////////////////////////////////////////////////////////////////////
-
-func (n *ArrayExpr) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("(")
-	if len(n.elements) == 0 {
-		f.Str(")")
-		return
-	}
-	formatExprs(f, ", ", n.elements)
-	if len(n.elements) == 1 {
-		// trailing comma for single-element arrays
-		f.Str(",")
-	}
-	f.Str(")")
-}
-
-func (n *SpreadExpr) Format(f *formatter.Formatter) {
-	f.Str("..")
-	formatExpr(f, n.inner)
-}
-
-func (n *DictExpr) Format(f *formatter.Formatter) {
-	f.Prefix()
-	if len(n.entries) == 0 {
-		f.Str("(:)")
-		return
-	}
-	f.Str("(")
-	for i, ent := range n.entries {
-		if i > 0 {
-			f.Str(", ")
+func formatBlock(sb *strings.Builder, block *BasicBlock) {
+	sb.WriteString("  ")
+	sb.WriteString(formatBlockID(block.ID))
+	sb.WriteString(":\n")
+	for _, phi := range block.Phis {
+		sb.WriteString("    ")
+		sb.WriteString(formatRef(phi.result))
+		sb.WriteString(" = phi [")
+		for i, op := range phi.operands {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(formatBlockID(op.Pred))
+			sb.WriteString(" ")
+			sb.WriteString(formatRef(op.Value))
 		}
-		formatExpr(f, ent.key)
-		f.Str(": ")
-		formatExpr(f, ent.value)
+		sb.WriteString("]\n")
 	}
-	f.Str(")")
-}
-
-// Operators ///////////////////////////////////////////////////////////////////////////////////////
-
-func (n *Unary) Format(f *formatter.Formatter) {
-	f.Prefix()
-	op := n.op.String()
-	f.Str(op)
-	// Add space after keyword operators like "not"
-	if op == "not" {
-		f.Str(" ")
+	for _, inst := range block.Instrs {
+		sb.WriteString("    ")
+		formatInst(sb, inst)
+		sb.WriteString("\n")
 	}
-	formatExpr(f, n.operand)
-}
-
-func (n *Binary) Format(f *formatter.Formatter) {
-	f.Prefix()
-	formatExpr(f, n.left)
-	formatOp(f, n.op)
-	formatExpr(f, n.right)
-}
-
-func (n *FieldAccess) Format(f *formatter.Formatter) {
-	f.Prefix()
-	formatExpr(f, n.target)
-	f.Str(".")
-	formatExpr(f, n.field)
-}
-
-// Functions ///////////////////////////////////////////////////////////////////////////////////////
-
-func (n *FuncCall) Format(f *formatter.Formatter) {
-	f.Prefix()
-	formatExpr(f, n.callee)
-	f.Str("(")
-	formatArguments(f, ", ", n.args)
-	f.Str(")")
-	for _, block := range n.blocks {
-		formatCodeBlock(f, block.exprs)
+	if block.Term != nil {
+		sb.WriteString("    ")
+		formatTerm(sb, block.Term)
+		sb.WriteString("\n")
 	}
 }
 
-func (n *Closure) Format(f *formatter.Formatter) {
-	f.Prefix()
-	if n.name != nil {
-		// Named function: name(params) = body
-		f.Str(n.name.name.Value())
-		f.Str("(")
-		formatParams(f, ", ", n.params)
-		f.Str(") = ")
-		formatClosureBody(f, n.body)
-		return
+func formatInst(sb *strings.Builder, inst Instruction) {
+	if r := inst.Result(); r != NoRef {
+		sb.WriteString(formatRef(r))
+		sb.WriteString(" = ")
 	}
-	// Anonymous closure
-	if len(n.params) == 1 {
-		// Check if param is a spread - if so, needs parens
-		if _, isSpread := n.params[0].(*SpreadClosureParam); !isSpread {
-			formatParams(f, ", ", n.params)
-			f.Str(" => ")
-			formatClosureBody(f, n.body)
-			return
+	switch i := inst.(type) {
+	case *Const:
+		sb.WriteString("const ")
+		sb.WriteString(formatConst(i.Value))
+	case *Unary:
+		fmt.Fprintf(sb, "%s %s", i.Op.String(), formatRef(i.X))
+	case *Binary:
+		fmt.Fprintf(sb, "%s %s %s", formatRef(i.L), i.Op.String(), formatRef(i.R))
+	case *MakeArray:
+		sb.WriteString("make_array [")
+		for j, item := range i.Items {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			if item.Spread {
+				sb.WriteString("..")
+			}
+			sb.WriteString(formatRef(item.Value))
 		}
-	}
-	f.Str("(")
-	formatParams(f, ", ", n.params)
-	f.Str(") => ")
-	formatClosureBody(f, n.body)
-}
-
-// closureBody formats a closure body, unwrapping single-expression code blocks.
-func formatClosureBody(f *formatter.Formatter, body Expr) {
-	if cb, ok := body.(*CodeBlock); ok && len(cb.exprs) == 1 {
-		formatExpr(f, cb.exprs[0])
-	} else {
-		formatExpr(f, body)
-	}
-}
-
-// Bindings & Rules ////////////////////////////////////////////////////////////////////////////////
-
-func (n *LetBinding) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("let")
-	if n.value != nil {
-		// Check if value is a named closure (let function)
-		if closure, ok := n.value.(*Closure); ok && closure.name != nil {
-			formatExpr(f, n.value)
-			return
+		sb.WriteString("]")
+	case *MakeDict:
+		sb.WriteString("make_dict (")
+		for j, e := range i.Entries {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			switch {
+			case e.Spread:
+				sb.WriteString("..")
+				sb.WriteString(formatRef(e.Value))
+			default:
+				sb.WriteString(formatRef(e.Key))
+				sb.WriteString(": ")
+				sb.WriteString(formatRef(e.Value))
+			}
 		}
-		formatDestructPattern(f, n.pattern)
-		f.Str(" = ")
-		formatExpr(f, n.value)
-		return
-	}
-	formatDestructPattern(f, n.pattern)
-}
-
-func (n *SetRule) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("set")
-	formatExpr(f, n.target)
-	f.Str("(")
-	formatArguments(f, ", ", n.args)
-	f.Str(")")
-	if n.condition != nil {
-		f.Str(" if ")
-		formatExpr(f, n.condition)
-	}
-}
-
-func (n *ShowRule) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("show")
-	if n.selector != nil {
-		f.Str(" ")
-		formatExpr(f, n.selector)
-	}
-	f.Str(": ")
-	formatExpr(f, n.transform)
-}
-
-// Control Flow ////////////////////////////////////////////////////////////////////////////////////
-
-func (n *Conditional) Format(f *formatter.Formatter) {
-	f.Prefix()
-	for i, cond := range n.conditions {
-		if i == 0 {
-			f.Keyword("if")
+		sb.WriteString(")")
+	case *FieldRead:
+		fmt.Fprintf(sb, "field_read %s.%s", formatRef(i.Target), i.Field.String())
+	case *Call:
+		sb.WriteString("call ")
+		sb.WriteString(formatRef(i.Callee))
+		sb.WriteString("(")
+		for j, a := range i.Args {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			switch a.Kind {
+			case ArgSpread:
+				sb.WriteString("..")
+				sb.WriteString(formatRef(a.Value))
+			case ArgNamed:
+				sb.WriteString(a.Name.String())
+				sb.WriteString(": ")
+				sb.WriteString(formatRef(a.Value))
+			default:
+				sb.WriteString(formatRef(a.Value))
+			}
+		}
+		sb.WriteString(")")
+		for _, blk := range i.Blocks {
+			sb.WriteString("[")
+			sb.WriteString(formatRef(blk))
+			sb.WriteString("]")
+		}
+		if i.AllowSetter {
+			sb.WriteString(" lvalue")
+		}
+	case *Extract:
+		fmt.Fprintf(sb, "extract %s[%d]", formatRef(i.Source), i.Index)
+	case *LengthCheck:
+		fmt.Fprintf(sb, "length_check %s, want=%d", formatRef(i.Source), i.Want)
+		if i.HasSink {
+			sb.WriteString(", has_sink")
+		}
+	case *IterOpen:
+		fmt.Fprintf(sb, "iter_open %s", formatRef(i.Iterable))
+	case *IterHasNext:
+		fmt.Fprintf(sb, "iter_has_next %s", formatRef(i.Iter))
+	case *IterAdvance:
+		fmt.Fprintf(sb, "iter_advance %s", formatRef(i.Iter))
+	case *MakeClosure:
+		fmt.Fprintf(sb, "make_closure $fn_%d", i.Func)
+		if len(i.Captures) > 0 {
+			sb.WriteString(" captures=[")
+			for j, c := range i.Captures {
+				if j > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(formatRef(c))
+			}
+			sb.WriteString("]")
+		}
+	case *ContentResult:
+		sb.WriteString("content_result [")
+		for j, r := range i.Items {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(formatRef(r))
+		}
+		sb.WriteString("]")
+	case *AttachLabel:
+		fmt.Fprintf(sb, "attach_label %s, @%s", formatRef(i.Content), i.Label.String())
+	case *CodeJoin:
+		sb.WriteString("code_join [")
+		for j, r := range i.Items {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(formatRef(r))
+		}
+		sb.WriteString("]")
+	case *LoopAccBegin:
+		sb.WriteString("loop_acc_begin")
+	case *LoopAccAdd:
+		fmt.Fprintf(sb, "loop_acc_add %s, %s", formatRef(i.Acc), formatRef(i.Item))
+	case *LoopAccResult:
+		fmt.Fprintf(sb, "loop_acc_result %s", formatRef(i.Acc))
+	case *Heading:
+		fmt.Fprintf(sb, "heading level=%d %s", i.Level, formatRef(i.Body))
+	case *Strong:
+		fmt.Fprintf(sb, "strong %s", formatRef(i.Body))
+	case *Emph:
+		fmt.Fprintf(sb, "emph %s", formatRef(i.Body))
+	case *Link:
+		fmt.Fprintf(sb, "link %q %s", i.Dest, formatRef(i.Body))
+	case *RefMarkup:
+		fmt.Fprintf(sb, "ref @%s", i.Target.String())
+		if i.Supplement != NoRef {
+			fmt.Fprintf(sb, " %s", formatRef(i.Supplement))
+		}
+	case *ListItem:
+		fmt.Fprintf(sb, "list_item %s", formatRef(i.Body))
+	case *EnumItem:
+		if i.Number < 0 {
+			fmt.Fprintf(sb, "enum_item %s", formatRef(i.Body))
 		} else {
-			f.Str("else ")
-			f.Keyword("if")
+			fmt.Fprintf(sb, "enum_item number=%d %s", i.Number, formatRef(i.Body))
 		}
-		formatExpr(f, cond)
-		f.Str(" ")
-		formatExpr(f, n.blocks[i])
-		if i < len(n.conditions)-1 || n.def != nil {
-			f.Str(" ")
+	case *TermItem:
+		fmt.Fprintf(sb, "term_item %s, %s", formatRef(i.Term), formatRef(i.Description))
+	case *SetRule:
+		fmt.Fprintf(sb, "set_rule %s", formatRef(i.Target))
+	case *ShowRule:
+		fmt.Fprintf(sb, "show_rule")
+		if i.Selector != NoRef {
+			fmt.Fprintf(sb, " %s", formatRef(i.Selector))
 		}
-	}
-	if n.def != nil {
-		f.Str("else ")
-		formatExpr(f, n.def)
-	}
-}
-
-func (n *WhileLoop) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("while")
-	formatExpr(f, n.condition)
-	f.Str(" ")
-	formatExpr(f, n.body)
-}
-
-func (n *ForLoop) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("for")
-	formatDestructPattern(f, n.pattern)
-	f.Str(" in ")
-	formatExpr(f, n.iterable)
-	f.Str(" ")
-	formatExpr(f, n.body)
-}
-
-func (n *LoopBreak) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("break")
-}
-
-func (n *LoopContinue) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("continue")
-}
-
-func (n *FuncReturn) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("return")
-	if n.value != nil {
-		f.Str(" ")
-		formatExpr(f, n.value)
+		fmt.Fprintf(sb, ": %s", formatRef(i.Transform))
+	case *Contextual:
+		fmt.Fprintf(sb, "contextual %s", formatRef(i.Body))
+	case *ModuleInclude:
+		fmt.Fprintf(sb, "module_include %s", formatRef(i.Source))
+	default:
+		fmt.Fprintf(sb, "%T", inst)
 	}
 }
 
-// Other ///////////////////////////////////////////////////////////////////////////////////////////
-
-func (n *Contextual) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("context")
-	formatExpr(f, n.body)
-}
-
-func (n *ModuleInclude) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Keyword("include")
-	formatExpr(f, n.source)
-}
-
-func (n *DestructAssignment) Format(f *formatter.Formatter) {
-	f.Prefix()
-	formatDestructPattern(f, n.pattern)
-	f.Str(" = ")
-	formatExpr(f, n.value)
-}
-
-func (n *DestructIdent) Format(f *formatter.Formatter) {
-	f.Str(n.ident.name.Value())
-}
-
-func (n *DestructNamed) Format(f *formatter.Formatter) {
-	f.Str(n.name.Value())
-	f.Str(": ")
-	f.Str(n.pattern.name.Value())
-}
-
-func (n *DestructSink) Format(f *formatter.Formatter) {
-	f.Str("..")
-	if n.ident != nil {
-		f.Str(n.ident.name.Value())
+func formatTerm(sb *strings.Builder, t Terminator) {
+	switch t := t.(type) {
+	case *Jump:
+		sb.WriteString("jump ")
+		sb.WriteString(formatBlockID(t.Target))
+	case *Branch:
+		sb.WriteString("branch ")
+		sb.WriteString(formatRef(t.Cond))
+		sb.WriteString(", ")
+		sb.WriteString(formatBlockID(t.Then))
+		sb.WriteString(", ")
+		sb.WriteString(formatBlockID(t.Else))
+	case *Return:
+		sb.WriteString("return")
+		if t.Value != NoRef {
+			sb.WriteString(" ")
+			sb.WriteString(formatRef(t.Value))
+		}
+	case *Unreachable:
+		sb.WriteString("unreachable")
+	default:
+		fmt.Fprintf(sb, "%T", t)
 	}
+}
+
+func formatRef(r Ref) string {
+	if r == NoRef {
+		return "<noref>"
+	}
+	return "v" + strconv.Itoa(int(r))
+}
+
+func formatBlockID(id BlockID) string {
+	return "b" + strconv.Itoa(int(id))
+}
+
+// formatConst prints a constant value in a stable form for golden tests.
+func formatConst(v any) string {
+	switch v := v.(type) {
+	case nil:
+		return "<nil>"
+	case *value.Text:
+		return fmt.Sprintf("text %q", v.Text)
+	case *value.Linebreak:
+		return "linebreak"
+	case *value.Parbreak:
+		return "parbreak"
+	case *value.Label:
+		return fmt.Sprintf("label %q", v.Name.String())
+	case *value.Raw:
+		if v.Block {
+			return fmt.Sprintf("raw_block lang=%q lines=%d", v.Lang, len(v.Lines))
+		}
+		return fmt.Sprintf("raw_inline lines=%d", len(v.Lines))
+	case *value.Function:
+		if v.Name != "" {
+			return "<function " + v.Name + ">"
+		}
+		return "<function>"
+	case *value.Type:
+		return "<type " + v.Reflected.String() + ">"
+	case *value.Module:
+		return "<module " + v.Name + ">"
+	case fmt.Stringer:
+		return v.String()
+	}
+	return fmt.Sprintf("%v", v)
 }

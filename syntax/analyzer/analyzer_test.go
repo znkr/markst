@@ -34,7 +34,7 @@ func TestAnalyze(t *testing.T) {
 					}
 
 					node := parser.Parse(tc.Input)
-					exprs, err := analyzer.Analyze(node)
+					mod, err := analyzer.Analyze(node)
 					if diff := errcmp.Diff(node, toCmpErrors(err)); diff != "" {
 						t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
 					}
@@ -42,7 +42,7 @@ func TestAnalyze(t *testing.T) {
 						return
 					}
 
-					got := expr.FormatExprs(exprs)
+					got := expr.FormatModule(mod)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
 					}

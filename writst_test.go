@@ -4,12 +4,12 @@ import (
 	"flag"
 	"path/filepath"
 	"testing"
-	"unique"
 
 	"znkr.io/diff/textdiff"
-	"znkr.io/writst/expr"
+	"znkr.io/writst/eval"
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
+	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
@@ -26,11 +26,11 @@ func TestWritst(t *testing.T) {
 	}
 
 	for _, file := range files {
-		name, err := filepath.Rel("testdata", file)
+		testname, err := filepath.Rel("testdata", file)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Run(name, func(t *testing.T) {
+		t.Run(testname, func(t *testing.T) {
 			t.Parallel()
 			tests := testfile.Read(t, file)
 			for i, tc := range tests {
@@ -40,22 +40,8 @@ func TestWritst(t *testing.T) {
 					}
 
 					root := parser.Parse(tc.Input)
-					exprs, err := analyzer.Analyze(root,
-						analyzer.WithBindings(
-							unique.Make("test"),
-							unique.Make("dont-care"),
-							unique.Make("nope"),
-						),
-					)
-					if err != nil {
-						if diff := errcmp.Diff(root, analysisErrors(err)); diff != "" {
-							t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
-						}
-						return
-					}
-
-					bindings := map[unique.Handle[string]]value.Value{
-						unique.Make("test"): &value.Function{
+					bindings := map[name.Name]value.Value{
+						name.Make("test"): &value.Function{
 							Name:       "test",
 							Positional: []value.Param{{Type: types.Any}, {Type: types.Any}},
 							F: func(fcc *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -67,10 +53,18 @@ func TestWritst(t *testing.T) {
 								return value.None{}, nil
 							},
 						},
-						unique.Make("dont-care"): nil,
+						name.Make("dont-care"): value.None{}, // TODO: Replace with a node representing an error
+						name.Make("nope"):      value.None{}, // TODO: Replace with a node representing an error
+					}
+					mod, err := analyzer.Analyze(root, analyzer.WithBindings(bindings))
+					if err != nil {
+						if diff := errcmp.Diff(root, analysisErrors(err)); diff != "" {
+							t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
+						}
+						return
 					}
 
-					contents, warnings, err := expr.Eval(exprs, expr.WithBindings(bindings))
+					contents, warnings, err := eval.Eval(mod)
 					if diff := errcmp.Diff(root, evalErrors(warnings, err)); diff != "" {
 						t.Errorf("Eval() error mismatch (-want +got):\n%s", diff)
 					}
@@ -80,7 +74,7 @@ func TestWritst(t *testing.T) {
 
 					got := value.FormatContent(contents)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
-						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
+						t.Errorf("Eval() mismatch (-want +got):\n%s", diff)
 					}
 
 					if *update {
@@ -112,7 +106,7 @@ func analysisErrors(err error) []errcmp.Error {
 
 }
 
-func evalErrors(warnings []expr.Error, err error) []errcmp.Error {
+func evalErrors(warnings []eval.Error, err error) []errcmp.Error {
 	var ret []errcmp.Error
 	for _, w := range warnings {
 		ret = append(ret, errcmp.Error{
@@ -124,7 +118,7 @@ func evalErrors(warnings []expr.Error, err error) []errcmp.Error {
 	}
 	switch e := err.(type) {
 	case nil:
-	case expr.ErrorList:
+	case eval.ErrorList:
 		for _, e := range e {
 			ret = append(ret, errcmp.Error{
 				Span:    e.Span(),
@@ -133,7 +127,7 @@ func evalErrors(warnings []expr.Error, err error) []errcmp.Error {
 				Hints:   e.Hints(),
 			})
 		}
-	case expr.Error:
+	case eval.Error:
 		ret = append(ret, errcmp.Error{
 			Span:    e.Span(),
 			Type:    "Error",

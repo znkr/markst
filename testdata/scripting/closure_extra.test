@@ -1,0 +1,50 @@
+// Additional closure tests beyond the Typst suite.
+
+--- closure-transitive-capture ---
+// Capture across more than one closure boundary.
+#{
+  let n = 10
+  let outer() = {
+    let inner() = n
+    inner
+  }
+  test(outer()(), 10)
+}
+
+--- closure-transitive-capture-three-deep ---
+// Capture across three closure boundaries.
+#{
+  let n = 7
+  let a() = {
+    let b() = {
+      let c() = n
+      c
+    }
+    b
+  }
+  test(a()()(), 7)
+}
+
+--- closure-recursion-let-shorthand ---
+// Direct recursion via `let f(n) = ...` resolves f through DefSelf.
+#{
+  let fact(n) = if n == 0 { 1 } else { n * fact(n - 1) }
+  test(fact(5), 120)
+}
+
+--- closure-recursion-let-eq ---
+// Direct recursion via `let f = (n) => ...` form.
+#{
+  let fact = (n) => if n == 0 { 1 } else { n * fact(n - 1) }
+  test(fact(6), 720)
+}
+
+--- closure-recursion-via-nested-closure ---
+// Inner anonymous closure references its enclosing let-bound name.
+#{
+  let f(n) = {
+    let helper = () => f(n - 1)
+    if n == 0 { "done" } else { helper() }
+  }
+  test(f(3), "done")
+}

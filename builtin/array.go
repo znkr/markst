@@ -675,7 +675,7 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 
 	// Reject unexpected named arguments captured by the sink.
 	for name := range others.Named {
-		return nil, value.ArgErrorNamedPairf(name, "unexpected argument: %s", name.Value())
+		return nil, value.ArgErrorNamedPairf(name, "unexpected argument: %s", name.String())
 	}
 
 	// Collect all arrays: self + others.
