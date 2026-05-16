@@ -1,31 +1,14 @@
 package eval
 
 import (
-	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
-// Error is the interface for evaluation errors. Each error carries a source
-// [syntax.Span] for location reporting, a message, and optional hints.
-type Error interface {
-	Span() syntax.Span
-	Error() string
-	Hints() []string
-
-	aError()
-}
-
-// ValueError is an error produced during value evaluation, such as a type
-// mismatch or out-of-range value.
-type ValueError struct {
-	span  syntax.Span
-	msg   string
-	hints []string
-}
-
-func (err *ValueError) Span() syntax.Span { return err.span }
-func (err *ValueError) Error() string     { return err.msg }
-func (err *ValueError) Hints() []string   { return err.hints }
-func (err *ValueError) aError()           {}
+// Error is the evaluator's diagnostic type. It is a type alias for
+// [*value.Error] so the same runtime value that flows through the SSA value
+// table is also what callers see in the returned error list — no wrapping
+// or duplicate types.
+type Error = *value.Error
 
 // ErrorList is a collection of evaluation errors that implements the error
 // interface. Its Error method returns the first error's message.
@@ -38,24 +21,4 @@ func (err ErrorList) Unwrap() []error {
 		r = append(r, e)
 	}
 	return r
-}
-
-// IndexError //////////////////////////////////////////////////////////////////
-
-type indexError struct {
-	err error
-	idx int
-}
-
-func (e *indexError) Error() string { return e.err.Error() }
-func (e *indexError) Unwrap() error { return e.err }
-
-// panics //////////////////////////////////////////////////////////////////////
-
-type errWrapper struct {
-	err []Error
-}
-
-func raise(err ...Error) {
-	panic(&errWrapper{err})
 }

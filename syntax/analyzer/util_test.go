@@ -1,6 +1,8 @@
 package analyzer
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestUnquote(t *testing.T) {
 	tests := []struct {

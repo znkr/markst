@@ -778,6 +778,15 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		if err != nil {
 			return 0, err
 		}
+		// If a key/by function errored, propagate the existing diagnostic
+		// silently by treating those elements as equal rather than emitting
+		// a "cannot compare error" cascade.
+		if _, ok := value.IsError(a0); ok {
+			return 0, nil
+		}
+		if _, ok := value.IsError(b0); ok {
+			return 0, nil
+		}
 		cmp, err := value.Compare(a0, b0)
 		if err != nil {
 			return 0, &value.FunctionCallError{

@@ -151,3 +151,20 @@ A#if false {} else thing
 #if a []else [b]
 #if a [] else [b]
 #if a {} else [b]
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #text("{}")
+│ #parbreak()
+│ #text("x")
+│ #text("{}")
+│ #parbreak()
+│ #text("something")
+│ #parbreak()
+│ #text("A")
+│ #text("thing")
+│ #parbreak()
+│ #text("b")
+│ #text("b")
+│ #text("b")

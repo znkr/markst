@@ -47,11 +47,11 @@
 // # Errors
 //
 // Lexical and parse errors are already represented as [syntax.Error] nodes
-// embedded in the syntax tree; the analyzer surfaces them alongside any
+// embedded in the syntax tree; the analyzer threads them, alongside any
 // semantic errors it discovers (unknown variables, illegal writes to
-// captured variables, duplicate parameters, and so on) as a single
-// [syntax.ErrorList]. If any error is reported, the returned module is
-// nil — the IR is only produced for trees that lower cleanly end to end.
+// captured variables, duplicate parameters, and so on), into the IR as
+// [expr.Error] instructions. The evaluator surfaces them at eval time, so
+// the rest of the document keeps rendering around the failure.
 package analyzer
 
 import (
@@ -71,10 +71,8 @@ type Option func(*analyzer)
 // WithBindings makes name→value pairs available to the program as if they
 // were members of the built-in universe. References resolve at analyze time
 // and lower to inline [expr.Const] instructions, so values must be known
-// before [Analyze] runs. Pass `nil` as the value for a name that should be
-// declared (so it doesn't trigger an "unknown variable" error) but never
-// actually evaluated — this matches the legacy "declare-only" behavior
-// used by some test fixtures.
+// before [Analyze] runs. Values must be non-nil; pass [value.Error] for
+// "declared but evaluation must fail" placeholders.
 func WithBindings(bindings map[name.Name]value.Value) Option {
 	return func(a *analyzer) {
 		for name, v := range bindings {
@@ -85,10 +83,11 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 
 // Analyze converts the syntax tree rooted at n into an SSA [expr.Module].
 // Errors discovered during lowering (along with embedded scanner/parser
-// errors from the syntax tree) are returned as a [syntax.ErrorList]; on
-// error the returned module is nil.
-func Analyze(n syntax.RootNode, opts ...Option) (*expr.Module, error) {
-	a := &analyzer{}
+// errors from the syntax tree) are emitted into the module as [expr.Error]
+// instructions and surfaced by [eval.Eval] at run time. The returned module
+// is always non-nil.
+func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
+	a := &analyzer{source: n.Source}
 	bindings := make(map[name.Name]binding, len(builtin.Universe))
 	for name, val := range builtin.Universe {
 		bindings[name] = binding{value: val}
@@ -109,15 +108,11 @@ func Analyze(n syntax.RootNode, opts ...Option) (*expr.Module, error) {
 
 	result := a.lowerMarkup(n)
 	a.b.Return(syntax.Span{}, result)
-
-	if len(a.errors) > 0 {
-		return nil, syntax.ErrorList(a.errors)
-	}
-	return a.mod, nil
+	return a.mod
 }
 
 type analyzer struct {
-	errors []*syntax.Error
+	source syntax.Source
 	scope  *scope
 	b      *expr.Builder
 	mod    *expr.Module
@@ -206,8 +201,20 @@ type loop struct {
 	exit   expr.BlockID // break target
 }
 
-func (a *analyzer) error(n *syntax.Error) {
-	a.errors = append(a.errors, n)
+// emitError emits an [expr.Error] instruction at the current insertion
+// point and returns its Ref. The Ref carries a [*value.Error] at eval time;
+// callers that produce a value at their site should return the Ref so any
+// enclosing construct sees an error operand and short-circuits via
+// [eval.propagatesFromOperands]. Callers in statement position discard the
+// Ref — the instruction stays in the block and still records the error.
+func (a *analyzer) emitError(span syntax.Span, msg string, hints ...string) expr.Ref {
+	return a.b.Error(span, msg, expr.NoRef, hints...)
+}
+
+// emitSyntaxError adopts a parser/scanner [*syntax.Error] node from the CST
+// into the IR.
+func (a *analyzer) emitSyntaxError(e *syntax.Error) expr.Ref {
+	return a.b.Error(e.Span(), e.Error(), expr.NoRef, e.Hints()...)
 }
 
 // Scope ///////////////////////////////////////////////////////////////////////
@@ -249,17 +256,21 @@ func (a *analyzer) closeScope() {
 // subtraction with missing spaces.
 var couldBeSubtractionRe = regexp.MustCompile(`(-)(\d+)$`)
 
-func (a *analyzer) checkIdent(name name.Name, span syntax.Span) {
-	if _, ok := a.lookup(name); ok {
-		return
+// checkIdent reports an "unknown variable" error when n is not in scope.
+// Returns [expr.NoRef] when n is bound; otherwise returns the Ref of the
+// emitted [expr.Error] so callers in expression position can use it as the
+// value of the failing identifier.
+func (a *analyzer) checkIdent(n name.Name, span syntax.Span) expr.Ref {
+	if _, ok := a.lookup(n); ok {
+		return expr.NoRef
 	}
 	var hints []string
-	if m := couldBeSubtractionRe.FindAllStringSubmatch(name.String(), -1); m != nil {
+	if m := couldBeSubtractionRe.FindAllStringSubmatch(n.String(), -1); m != nil {
 		sign := m[0][1]
 		num := m[0][2]
-		hints = append(hints, fmt.Sprintf("if you meant to use subtraction, try adding spaces around the minus sign: `%s %s %s`", name.String()[:len(name.String())-len(m[0][0])], sign, num))
+		hints = append(hints, fmt.Sprintf("if you meant to use subtraction, try adding spaces around the minus sign: `%s %s %s`", n.String()[:len(n.String())-len(m[0][0])], sign, num))
 	}
-	a.error(syntax.NewError(span, fmt.Sprintf("unknown variable: %s", name.String()), name.String(), hints...))
+	return a.emitError(span, fmt.Sprintf("unknown variable: %s", n.String()), hints...)
 }
 
 // SSA variable allocation /////////////////////////////////////////////////////

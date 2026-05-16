@@ -330,16 +330,25 @@ type ContentResult struct {
 
 func (c *ContentResult) Operands() []Ref { return c.Items }
 
-// RaiseError unconditionally raises a value error at eval time with the
-// stored message. Used to surface deferred analyzer errors (e.g.
-// "cannot mutate a temporary value") that should fire only if preceding
-// instructions don't error first.
-type RaiseError struct {
+// Error raises a value error at eval time with the stored message. Used to
+// surface deferred analyzer errors (e.g. "cannot mutate a temporary value").
+//
+// If From is set, the instruction propagates from that Ref's value when it
+// is already a [*value.Error]: the propagating error is yielded as the
+// instruction's result and Msg is suppressed. This keeps the diagnostic
+// from cascading when an upstream computation already failed.
+//
+// From is intentionally NOT returned from [Error.Operands]: generic
+// operand-propagation must not short-circuit this instruction (the case body
+// in evalInst implements the cascade-suppression rule explicitly).
+type Error struct {
 	instr
-	Msg string
+	Msg   string
+	Hints []string
+	From  Ref // optional; NoRef when this Error is unconditional
 }
 
-func (r *RaiseError) Operands() []Ref { return nil }
+func (r *Error) Operands() []Ref { return nil }
 
 // AttachLabel binds a label name to the content produced by Content. It
 // also registers the label in the evaluator's label set so subsequent

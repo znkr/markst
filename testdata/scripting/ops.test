@@ -293,6 +293,7 @@
 --- ops-not-trailing ---
 // Error: 7-10 expected keyword `in` to follow `not` for `not in` operator
 #("a" not)
+│ #text("a")
 
 --- func-with ---
 // Test `with` method.
@@ -364,6 +365,7 @@ Apply arguments to an argument sink.
 
 // Error: 8-9 unclosed delimiter
 #test({(1 + 1}, 2)
+│ #parbreak()
 
 --- ops-associativity-left ---
 // Math operators are left-associative.
@@ -442,6 +444,7 @@ Apply arguments to an argument sink.
 --- ops-binary-arithmetic-error-message ---
 // Special messages for +, -, * and /.
 // Error: 3-10 cannot add integer and string
+// Error: 12-19 cannot subtract integer from ratio
 #(1 + "2", 40% - 1)
 
 --- add-assign-int-and-str ---

@@ -34,14 +34,13 @@ func (a *analyzer) lowerMarkup(n syntax.Node) expr.Ref {
 // child against the most recent preceding content item.
 func (a *analyzer) lowerMarkupItems(n syntax.Node) []expr.Ref {
 	ns := a.inner(n, syntax.KindMarkup)
-	defer ns.finish()
 	var items []expr.Ref
 	for child := range ns.all() {
 		switch child.Kind() {
 		case syntax.KindSemicolon, syntax.KindHash, syntax.KindSpace:
 			continue
 		case syntax.KindError:
-			a.error(child.(*syntax.Error))
+			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
 		case syntax.KindLabel:
 			if len(items) == 0 {
 				// Detached label: drop it. (Matches legacy "no preceding
@@ -171,8 +170,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindModuleInclude:
 		return a.lowerModuleInclude(n)
 	case syntax.KindError:
-		a.unexpected(n)
-		return expr.NoRef
+		return a.emitSyntaxError(n.(*syntax.Error))
 	default:
 		panic("ssa lowering not yet implemented for: " + n.Kind().String())
 	}
@@ -253,7 +251,9 @@ func (a *analyzer) lowerStr(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerIdent(n syntax.Node) expr.Ref {
 	source := name.Make(a.leaf(n, syntax.KindIdent))
-	a.checkIdent(source, n.Span())
+	if errRef := a.checkIdent(source, n.Span()); errRef != expr.NoRef {
+		return errRef
+	}
 	return a.resolveName(source, n.Span())
 }
 
@@ -316,15 +316,16 @@ func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
 
 func (a *analyzer) lowerUnary(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindUnary)
-	defer ns.finish()
 	op := syntax.UnaryOpFromKind(ns.node().Kind())
 	x := a.lowerExpr(ns.node())
+	if x == expr.NoRef {
+		return expr.NoRef
+	}
 	return a.b.Unary(n.Span(), op, x)
 }
 
 func (a *analyzer) lowerBinary(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindBinary)
-	defer ns.finish()
 	leftNode := ns.node()
 	var op syntax.BinaryOp
 	if ns.at(syntax.KindNot) {
@@ -343,6 +344,16 @@ func (a *analyzer) lowerBinary(n syntax.Node) expr.Ref {
 	}
 	left := a.lowerExpr(leftNode)
 	right := a.lowerExpr(rightNode)
+	// Partial-expression recovery: if one operand is missing because the
+	// parser substituted an [*syntax.Error] (already recorded), fall back
+	// to the other operand so the surrounding context still sees a value.
+	// Matches tests that treat `{1+}` as evaluating to `1`.
+	if left == expr.NoRef {
+		return right
+	}
+	if right == expr.NoRef {
+		return left
+	}
 	return a.b.Binary(n.Span(), op, left, right)
 }
 
@@ -440,8 +451,7 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 			// Either unknown or only known as a builtin. Use checkIdent's
 			// existing message for unknowns; for builtins we need a more
 			// specific error since checkIdent would pass them.
-			a.checkIdent(source, leftNode.Span())
-			return expr.NoRef
+			return a.checkIdent(source, leftNode.Span())
 		}
 		var newVal expr.Ref
 		if op == syntax.Assign {
@@ -463,7 +473,6 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 	case syntax.KindParenthesized:
 		// Unwrap and recurse.
 		ns := a.inner(leftNode, syntax.KindParenthesized)
-		defer ns.finish()
 		var inner syntax.Node
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 			inner = child
@@ -474,12 +483,10 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		if baseNode, ok := lvalueBase(leftNode); ok {
 			source := name.Make(baseNode.Text())
 			if a.isCapturedVar(source) {
-				a.error(syntax.NewError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified", baseNode.Text()))
-				return expr.NoRef
+				return a.emitError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified")
 			}
 		}
 		fns := a.inner(leftNode, syntax.KindFieldAccess)
-		defer fns.finish()
 		target := a.lowerExpr(fns.node())
 		fns.take(syntax.KindDot)
 		fieldName := name.Make(a.leaf(fns.node(), syntax.KindIdent))
@@ -497,12 +504,10 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		if baseNode, ok := lvalueBase(leftNode); ok {
 			source := name.Make(baseNode.Text())
 			if a.isCapturedVar(source) {
-				a.error(syntax.NewError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified", baseNode.Text()))
-				return expr.NoRef
+				return a.emitError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified")
 			}
 		}
 		fns := a.inner(leftNode, syntax.KindFuncCall)
-		defer fns.finish()
 		callee := a.lowerExpr(fns.node())
 		args, blocks := a.lowerArgs(fns.node())
 		newVal := a.lowerExpr(rightNode)
@@ -517,13 +522,13 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		// Genuinely-temporary lvalues (e.g. `(1+2) = 3`). Lower the LHS so
 		// any runtime errors fire first (matching legacy where the eval
 		// error of the LHS supersedes "cannot mutate"); then emit a deferred
-		// RaiseError so we still surface the diagnostic when the LHS
-		// succeeds.
-		_ = a.lowerExpr(leftNode)
-		a.b.RaiseError(leftNode.Span(), "cannot mutate a temporary value")
+		// Error wired to the LHS so the diagnostic only fires when the LHS
+		// itself didn't already error.
+		from := a.lowerExpr(leftNode)
+		a.b.Error(leftNode.Span(), "cannot mutate a temporary value", from)
 		return expr.NoRef
 	default:
-		a.b.RaiseError(leftNode.Span(), "cannot mutate a temporary value")
+		a.b.Error(leftNode.Span(), "cannot mutate a temporary value", expr.NoRef)
 		return expr.NoRef
 	}
 }
@@ -532,7 +537,6 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 
 func (a *analyzer) lowerParenthesized(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindParenthesized)
-	defer ns.finish()
 	ref := expr.NoRef
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		ref = a.lowerExpr(child)
@@ -544,7 +548,6 @@ func (a *analyzer) lowerParenthesized(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerArray(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindArray)
-	defer ns.finish()
 	var items []expr.ArrayItem
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch kind := child.Kind(); kind {
@@ -553,9 +556,13 @@ func (a *analyzer) lowerArray(n syntax.Node) expr.Ref {
 		case syntax.KindSpread:
 			items = append(items, expr.ArrayItem{Value: a.lowerSpread(child), Spread: true, Span: child.Span()})
 		case syntax.KindNamed, syntax.KindKeyed:
-			a.error(syntax.NewError(child.Span(), "expected expression, found "+kind.Name()+" pair", child.Text()))
+			a.emitError(child.Span(), "expected expression, found "+kind.Name()+" pair")
 		default:
-			items = append(items, expr.ArrayItem{Value: a.lowerExpr(child), Span: child.Span()})
+			ref := a.lowerExpr(child)
+			if ref == expr.NoRef {
+				continue
+			}
+			items = append(items, expr.ArrayItem{Value: ref, Span: child.Span()})
 		}
 	}
 	return a.b.MakeArray(n.Span(), items)
@@ -565,13 +572,12 @@ func (a *analyzer) lowerSpread(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindSpread)
 	ns.take(syntax.KindDots)
 	x := a.lowerExpr(ns.node())
-	ns.finish()
+
 	return x
 }
 
 func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindDict)
-	defer ns.finish()
 	var entries []expr.DictEntry
 	seen := make(map[string]bool)
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
@@ -580,15 +586,21 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 			continue
 		case syntax.KindNamed:
 			entry := a.inner(child, syntax.KindNamed)
-			key := entry.take(syntax.KindIdent)
+			key, ok := entry.take(syntax.KindIdent)
+			if !ok {
+				continue
+			}
 			entry.take(syntax.KindColon)
 			if seen[key] {
-				a.error(syntax.NewError(child.Span(), "duplicate key: "+key, child.Text()))
+				a.emitError(child.Span(), "duplicate key: "+key)
 			}
 			seen[key] = true
 			keyRef := a.b.Const(child.Span(), value.Str(key))
 			val := a.lowerExpr(entry.node())
-			entry.finish()
+
+			if val == expr.NoRef {
+				continue
+			}
 			entries = append(entries, expr.DictEntry{Key: keyRef, Value: val})
 		case syntax.KindKeyed:
 			entry := a.inner(child, syntax.KindKeyed)
@@ -601,10 +613,13 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 			keyRef := a.lowerExpr(entry.node())
 			entry.take(syntax.KindColon)
 			val := a.lowerExpr(entry.node())
-			entry.finish()
+
+			if keyRef == expr.NoRef || val == expr.NoRef {
+				continue
+			}
 			if keyStr != "" {
 				if seen[keyStr] {
-					a.error(syntax.NewError(child.Span(), "duplicate key: "+keyStr, child.Text()))
+					a.emitError(child.Span(), "duplicate key: "+keyStr)
 				}
 				seen[keyStr] = true
 			}
@@ -612,9 +627,9 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 		case syntax.KindSpread:
 			entries = append(entries, expr.DictEntry{Key: expr.NoRef, Value: a.lowerSpread(child), Spread: true})
 		case syntax.KindError:
-			a.error(child.(*syntax.Error))
+			a.emitSyntaxError(child.(*syntax.Error))
 		default:
-			a.error(syntax.NewError(child.Span(), "expected named or keyed pair", child.Text()))
+			a.emitError(child.Span(), "expected named or keyed pair")
 		}
 	}
 	return a.b.MakeDict(n.Span(), entries)
@@ -651,7 +666,6 @@ func peekLeafText(ns *nodes) (string, bool) {
 
 func (a *analyzer) lowerFieldAccess(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindFieldAccess)
-	defer ns.finish()
 	target := a.lowerExpr(ns.node())
 	ns.node() // consume `.`
 	fieldNode := ns.node()
@@ -663,7 +677,6 @@ func (a *analyzer) lowerFieldAccess(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerFuncCall(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindFuncCall)
-	defer ns.finish()
 	callee := a.lowerExpr(ns.node())
 	args, blocks := a.lowerArgs(ns.node())
 	return a.b.Call(n.Span(), callee, args, blocks, false)
@@ -671,7 +684,6 @@ func (a *analyzer) lowerFuncCall(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 	ns := a.inner(n, syntax.KindArgs)
-	defer ns.finish()
 
 	var args []expr.CallArg
 	seen := make(map[string]bool)
@@ -684,13 +696,17 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 				args = append(args, expr.CallArg{Kind: expr.ArgSpread, Value: a.lowerSpread(child), Span: child.Span()})
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
-				key := name.Make(named.take(syntax.KindIdent))
+				keyText, ok := named.take(syntax.KindIdent)
+				if !ok {
+					continue
+				}
+				key := name.Make(keyText)
 				named.take(syntax.KindColon)
 				valNode := named.node()
 				val := a.lowerExpr(valNode)
-				named.finish()
+
 				if seen[key.String()] {
-					a.error(syntax.NewError(child.Span(), "duplicate argument: "+key.String(), child.Text()))
+					a.emitError(child.Span(), "duplicate argument: "+key.String())
 				}
 				seen[key.String()] = true
 				args = append(args, expr.CallArg{Kind: expr.ArgNamed, Name: key, Value: val, Span: valNode.Span(), PairSpan: child.Span()})
@@ -716,7 +732,6 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 
 func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindLetBinding)
-	defer ns.finish()
 	ns.take(syntax.KindLet)
 	if ns.at(syntax.KindClosure) {
 		closureNode := ns.node()
@@ -729,9 +744,9 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 			inner, _ := closureNode.(*syntax.Inner)
 			if inner != nil && len(inner.Children()) > 0 {
 				first := inner.Children()[0]
-				a.error(syntax.NewError(first.Span(), "expected identifier or parameters", first.Text()))
+				a.emitError(first.Span(), "expected identifier or parameters")
 			} else {
-				a.error(syntax.NewError(closureNode.Span(), "expected identifier or parameters", closureNode.Text()))
+				a.emitError(closureNode.Span(), "expected identifier or parameters")
 			}
 			return expr.NoRef
 		}
@@ -741,6 +756,16 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		return expr.NoRef
 	}
 	patternNode := ns.node()
+	// Bail if the parser substituted an error for the pattern. The error
+	// is already on the list; continuing would emit a destructure-against-
+	// None instruction that produces a misleading "cannot destructure" at
+	// runtime.
+	if patternNode.Kind() == syntax.KindError {
+		a.emitSyntaxError(patternNode.(*syntax.Error))
+		// Don't try to lower the RHS — it may reference the pattern's bindings,
+		// but with no pattern there's nothing meaningful to do with the value.
+		return expr.NoRef
+	}
 	// `let f = (..) => body` form: pass f as the recursion name so the body
 	// can refer to itself via a DefSelf binding.
 	if patternNode.Kind() == syntax.KindIdent && ns.at(syntax.KindEq) && peekAfterEq(ns) == syntax.KindClosure {
@@ -757,7 +782,7 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		ns.node() // consume eq
 		rhs = a.lowerExpr(ns.node())
 	} else if ns.at(syntax.KindError) {
-		a.error(ns.node().(*syntax.Error))
+		a.emitSyntaxError(ns.node().(*syntax.Error))
 		return expr.NoRef
 	} else {
 		// `let x` without initializer binds to none.
@@ -788,7 +813,6 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 	}
 
 	ns := a.inner(n, syntax.KindDestructuring)
-	defer ns.finish()
 	type binding struct {
 		variable expr.Var
 		span     syntax.Span
@@ -799,6 +823,7 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 	idx := 0
 	holes := 0
 	hasComplex := false
+	hasErrors := false
 	seenNames := make(map[name.Name]bool)
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind() {
@@ -806,14 +831,15 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 			continue
 		case syntax.KindError:
 			hasComplex = true
-			a.error(child.(*syntax.Error))
+			hasErrors = true
+			a.emitSyntaxError(child.(*syntax.Error))
 		case syntax.KindUnderscore:
 			holes++
 			idx++
 		case syntax.KindIdent:
 			source := name.Make(a.leaf(child, syntax.KindIdent))
 			if seenNames[source] {
-				a.error(syntax.NewError(child.Span(), "duplicate binding: "+source.String(), source.String()))
+				a.emitError(child.Span(), "duplicate binding: "+source.String())
 			}
 			seenNames[source] = true
 
@@ -823,7 +849,7 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 		case syntax.KindSpread:
 			hasComplex = true
 			if hasSink {
-				a.error(syntax.NewError(child.Span(), "only one destructuring sink is allowed", child.Text()))
+				a.emitError(child.Span(), "only one destructuring sink is allowed")
 			}
 			hasSink = true
 			spread := a.inner(child, syntax.KindSpread)
@@ -835,26 +861,31 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 					// Sink pattern accepted at analyze time; runtime is a
 					// future TODO. Don't emit an analyze-time error.
 				case syntax.KindError:
-					a.error(inner.(*syntax.Error))
+					hasErrors = true
+					a.emitSyntaxError(inner.(*syntax.Error))
 				default:
-					a.error(syntax.NewError(inner.Span(), "expected pattern, found "+inner.Kind().Name(), inner.Text()))
+					hasErrors = true
+					a.emitError(inner.Span(), "expected pattern, found "+inner.Kind().Name())
 				}
 			}
-			spread.finish()
+
 		case syntax.KindNamed:
 			hasComplex = true
 			named := a.inner(child, syntax.KindNamed)
 			named.node() // name
 			named.take(syntax.KindColon)
 			patNode := named.node()
-			named.finish()
+
 			switch patNode.Kind() {
 			case syntax.KindIdent, syntax.KindUnderscore:
-				a.error(syntax.NewError(child.Span(), "ssa lowering of named destructuring patterns not yet implemented", child.Text()))
+				hasErrors = true
+				a.emitError(child.Span(), "ssa lowering of named destructuring patterns not yet implemented")
 			case syntax.KindError:
-				a.error(patNode.(*syntax.Error))
+				hasErrors = true
+				a.emitSyntaxError(patNode.(*syntax.Error))
 			default:
-				a.error(syntax.NewError(patNode.Span(), "expected pattern, found "+patNode.Kind().Name(), patNode.Text()))
+				hasErrors = true
+				a.emitError(patNode.Span(), "expected pattern, found "+patNode.Kind().Name())
 			}
 		}
 	}
@@ -862,6 +893,12 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 	// grouping and bind a to the whole RHS — matches legacy semantics.
 	if !hasComplex && holes == 0 && len(bindings) == 1 && idx == 1 {
 		a.b.WriteVar(bindings[0].variable, a.b.CurrentBlock(), rhs)
+		return
+	}
+	// Pattern already contains errors; skip the runtime LengthCheck/Extract
+	// emissions to avoid cascading "cannot destructure" diagnostics on top
+	// of the underlying problem.
+	if hasErrors {
 		return
 	}
 	a.b.LengthCheck(n.Span(), rhs, idx, hasSink)
@@ -878,7 +915,6 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 // and joins their values using the code-mode joiner.
 func (a *analyzer) lowerCodeBlock(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindCodeBlock)
-	defer ns.finish()
 	a.openScope()
 	defer a.closeScope()
 	var items []expr.Ref
@@ -888,7 +924,8 @@ func (a *analyzer) lowerCodeBlock(n syntax.Node) expr.Ref {
 		case syntax.KindCode:
 			items, spans = a.lowerCodeInto(child, items, spans)
 		case syntax.KindError:
-			a.error(child.(*syntax.Error))
+			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
+			spans = append(spans, child.Span())
 		default:
 			ref := a.lowerExpr(child)
 			if ref != expr.NoRef {
@@ -909,13 +946,13 @@ func (a *analyzer) lowerCodeBlock(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerCodeInto(n syntax.Node, items []expr.Ref, spans []syntax.Span) ([]expr.Ref, []syntax.Span) {
 	ns := a.inner(n, syntax.KindCode)
-	defer ns.finish()
 	for child := range ns.all() {
 		switch child.Kind() {
 		case syntax.KindSemicolon:
 			continue
 		case syntax.KindError:
-			a.error(child.(*syntax.Error))
+			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
+			spans = append(spans, child.Span())
 		default:
 			ref := a.lowerExpr(child)
 			if ref != expr.NoRef {
@@ -930,44 +967,105 @@ func (a *analyzer) lowerCodeInto(n syntax.Node, items []expr.Ref, spans []syntax
 // Conditionals ///////////////////////////////////////////////////////////////
 
 // lowerConditional lowers `if cond { ... } else if cond { ... } else { ... }`
-// into a chain of basic blocks. Each arm writes a synthetic result variable;
-// the join block reads it back, which inserts a phi automatically via the
-// Builder's Braun construction.
+// into a chain of basic blocks. Each arm writes a synthetic result
+// variable; the join block reads it back, which inserts a phi automatically
+// via the Builder's Braun construction.
+//
+// Whenever a sub-lowering (cond, body, or else-body) hands back [expr.NoRef]
+// — typically because the parser substituted an [*syntax.Error] for that
+// position — we route the current block through `jumpToJoin` instead of
+// emitting an instruction that would dangle. The conditional's value is
+// then None along the failing path; the recorded parser error already
+// describes the underlying problem.
 func (a *analyzer) lowerConditional(n syntax.Node) expr.Ref {
+	// Surface embedded parser errors at the parent block before opening
+	// any inner blocks. Walks the whole subtree since the parser nests
+	// errors under Conditional children (e.g. "expected block" inside the
+	// then-arm).
+	a.collectChildErrors(n, true)
+
 	join := a.b.NewBlock()
 	result := a.b.NewVar(name.Make("$cond"))
+
+	jumpToJoin := func(span syntax.Span) {
+		none := a.b.Const(span, value.None{})
+		a.b.WriteVar(result, a.b.CurrentBlock(), none)
+		a.b.Jump(span, join)
+	}
 
 	var lower func(n syntax.Node)
 	lower = func(n syntax.Node) {
 		ns := a.inner(n, syntax.KindConditional)
-		defer ns.finish()
 		ns.take(syntax.KindIf)
+		if ns.done() {
+			// Parser failed before the condition was reached (e.g. bare
+			// `#if`). The "expected expression" error is already emitted by
+			// walkErrors above.
+			jumpToJoin(n.Span())
+			return
+		}
 		condNode := ns.node()
+		if condNode.Kind() == syntax.KindError {
+			// Condition is a parser error; the diagnostic is already at the
+			// parent block, no need to branch on a placeholder value.
+			jumpToJoin(n.Span())
+			return
+		}
 		cond := a.lowerExpr(condNode)
+		if cond == expr.NoRef {
+			jumpToJoin(n.Span())
+			return
+		}
 		thenBlk := a.b.NewBlock()
 		elseBlk := a.b.NewBlock()
 		a.b.Branch(condNode.Span(), cond, thenBlk, elseBlk)
 
 		a.b.SetBlock(thenBlk)
 		a.b.SealBlock(thenBlk)
-		thenResult := a.lowerBlock(ns.node())
+		if ns.done() {
+			// No body parsed; the parser's "expected block" diagnostic was
+			// already emitted at the parent block.
+			jumpToJoin(n.Span())
+			a.b.SetBlock(elseBlk)
+			a.b.SealBlock(elseBlk)
+			jumpToJoin(n.Span())
+			return
+		}
+		bodyNode := ns.node()
+		if bodyNode.Kind() == syntax.KindError {
+			// Error already emitted at the parent block by walkErrors.
+			jumpToJoin(n.Span())
+			a.b.SetBlock(elseBlk)
+			a.b.SealBlock(elseBlk)
+			jumpToJoin(n.Span())
+			return
+		}
+		thenResult := a.lowerBlock(bodyNode)
 		a.b.WriteVar(result, a.b.CurrentBlock(), thenResult)
 		a.b.Jump(n.Span(), join)
 
 		a.b.SetBlock(elseBlk)
 		a.b.SealBlock(elseBlk)
 		if !ns.at(syntax.KindElse) {
-			none := a.b.Const(n.Span(), value.None{})
-			a.b.WriteVar(result, a.b.CurrentBlock(), none)
-			a.b.Jump(n.Span(), join)
+			jumpToJoin(n.Span())
 			return
 		}
 		ns.node() // consume else
+		if ns.done() {
+			jumpToJoin(n.Span())
+			return
+		}
 		if ns.at(syntax.KindConditional) {
 			lower(ns.node())
 			return
 		}
-		elseResult := a.lowerBlock(ns.node())
+		elseBodyNode := ns.node()
+		if elseBodyNode.Kind() == syntax.KindError {
+			// Error already emitted at the parent block by walkErrors.
+			jumpToJoin(n.Span())
+			return
+		}
+		elseResult := a.lowerBlock(elseBodyNode)
 		a.b.WriteVar(result, a.b.CurrentBlock(), elseResult)
 		a.b.Jump(n.Span(), join)
 	}
@@ -999,8 +1097,13 @@ func (a *analyzer) lowerBlock(n syntax.Node) expr.Ref {
 // (via [expr.Builder.LoopAccResult]) at the exit block to give the loop
 // expression a value.
 func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
+	// Detect error nodes early to avoid creating blocks that would be left
+	// unterminated. Matches the pattern in lowerForLoop.
+	if a.collectChildErrors(n, false) {
+		return expr.NoRef
+	}
+
 	ns := a.inner(n, syntax.KindWhileLoop)
-	defer ns.finish()
 	ns.take(syntax.KindWhile)
 	condNode := ns.node()
 	bodyNode := ns.node()
@@ -1041,19 +1144,11 @@ func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
 // lowerForLoop lowers `for pattern in iterable { body }` with accumulator
 // semantics matching [lowerWhileLoop].
 func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
-	hasErrors := false
-	for _, child := range n.(*syntax.Inner).Children() {
-		if err, ok := child.(*syntax.Error); ok {
-			a.error(err)
-			hasErrors = true
-		}
-	}
-	if hasErrors {
+	if a.collectChildErrors(n, false) {
 		return expr.NoRef
 	}
 
 	ns := a.inner(n, syntax.KindForLoop)
-	defer ns.finish()
 	ns.take(syntax.KindFor)
 	patternNode := ns.node()
 	ns.take(syntax.KindIn)
@@ -1106,8 +1201,7 @@ func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 func (a *analyzer) lowerLoopBreak(n syntax.Node) expr.Ref {
 	l, ok := a.currentLoop()
 	if !ok {
-		a.error(syntax.NewError(n.Span(), "break outside of loop", n.Text()))
-		return expr.NoRef
+		return a.emitError(n.Span(), "break outside of loop")
 	}
 	a.b.Jump(n.Span(), l.exit)
 	// Switch to a fresh unreachable block so subsequent emission has somewhere
@@ -1122,8 +1216,7 @@ func (a *analyzer) lowerLoopBreak(n syntax.Node) expr.Ref {
 func (a *analyzer) lowerLoopContinue(n syntax.Node) expr.Ref {
 	l, ok := a.currentLoop()
 	if !ok {
-		a.error(syntax.NewError(n.Span(), "continue outside of loop", n.Text()))
-		return expr.NoRef
+		return a.emitError(n.Span(), "continue outside of loop")
 	}
 	a.b.Jump(n.Span(), l.header)
 	dead := a.b.NewBlock()
@@ -1136,7 +1229,6 @@ func (a *analyzer) lowerLoopContinue(n syntax.Node) expr.Ref {
 // resulting block is dead; subsequent emission goes into a fresh block.
 func (a *analyzer) lowerFuncReturn(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindFuncReturn)
-	defer ns.finish()
 	ns.take(syntax.KindReturn)
 	val := expr.NoRef
 	if !ns.done() {
@@ -1165,8 +1257,15 @@ func (a *analyzer) lowerClosure(n syntax.Node) expr.Ref {
 // reference, so direct recursion needs no capture, and is used as the
 // function's display name.
 func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref {
+	// Emit any structural parser errors (e.g. missing `=`, missing body)
+	// at the OUTER block first. Errors deep inside the closure's body live
+	// in the closure's IR frame and only fire when the closure is called;
+	// structural errors at the closure's top level describe the definition
+	// itself and should fire eagerly. Unlike loops/conditionals we don't
+	// bail on structural errors — the closure body may still be valid IR.
+	a.collectChildErrors(n, false)
+
 	ns := a.inner(n, syntax.KindClosure)
-	defer ns.finish()
 
 	// Parse closure header — peek at the first node to determine form.
 	closureName := recName
@@ -1318,7 +1417,7 @@ func (a *analyzer) collectClosureParamSpecs(n syntax.Node) []closureParamSpec {
 			return
 		}
 		if seen[n] {
-			a.error(syntax.NewError(span, "duplicate parameter: "+n.String(), n.String()))
+			a.emitError(span, "duplicate parameter: "+n.String())
 		}
 		seen[n] = true
 	}
@@ -1330,7 +1429,7 @@ func (a *analyzer) collectClosureParamSpecs(n syntax.Node) []closureParamSpec {
 		}
 		if s.kind == expr.ParamSink {
 			if sawSink {
-				a.error(syntax.NewError(s.span, "only one arguments sink is allowed", ""))
+				a.emitError(s.span, "only one arguments sink is allowed")
 			}
 			sawSink = true
 		}
@@ -1346,7 +1445,6 @@ func (a *analyzer) collectClosureParamSpecs(n syntax.Node) []closureParamSpec {
 		return out
 	}
 	ns := a.inner(n, syntax.KindParams)
-	defer ns.finish()
 	if !ns.at(syntax.KindLeftParen) {
 		for child := range ns.all() {
 			a.collectClosureParamChild(child, add)
@@ -1371,10 +1469,20 @@ func (a *analyzer) collectClosureParamChild(child syntax.Node, add func(closureP
 	case syntax.KindNamed:
 		named := a.inner(child, syntax.KindNamed)
 		nameNode := named.node()
+		if nameNode.Kind() != syntax.KindIdent {
+			// Parser substituted an error (or keyword) for the param
+			// name — record it and skip the whole named param. Don't
+			// lower the default either: doing so resolves the
+			// would-be-value as an outer-scope name and produces a
+			// misleading cascading "unknown variable" diagnostic.
+			a.unexpected(nameNode)
+
+			return
+		}
 		source := name.Make(a.leaf(nameNode, syntax.KindIdent))
 		named.take(syntax.KindColon)
 		defaultNode := named.node()
-		named.finish()
+
 		add(closureParamSpec{name: source, kind: expr.ParamNamed, defaultNode: defaultNode, span: child.Span(), nameSpan: nameNode.Span()})
 	case syntax.KindSpread:
 		spread := a.inner(child, syntax.KindSpread)
@@ -1386,12 +1494,12 @@ func (a *analyzer) collectClosureParamChild(child syntax.Node, add func(closureP
 			sinkName = name.Make(a.leaf(identNode, syntax.KindIdent))
 			sinkSpan = identNode.Span()
 		}
-		spread.finish()
+
 		add(closureParamSpec{name: sinkName, kind: expr.ParamSink, span: child.Span(), nameSpan: sinkSpan})
 	case syntax.KindError:
-		a.error(child.(*syntax.Error))
+		a.emitSyntaxError(child.(*syntax.Error))
 	default:
-		a.error(syntax.NewError(child.Span(), "unexpected parameter: "+child.Kind().Name(), child.Text()))
+		a.emitError(child.Span(), "unexpected parameter: "+child.Kind().Name())
 	}
 }
 
@@ -1424,15 +1532,16 @@ func closureSourceName(n syntax.Node) (name.Name, bool) {
 
 func (a *analyzer) lowerHeading(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindHeading)
-	defer ns.finish()
-	level := len(ns.take(syntax.KindHeadingMarker))
+	marker, ok := ns.take(syntax.KindHeadingMarker)
+	if !ok {
+		return expr.NoRef
+	}
 	body := a.lowerMarkup(ns.node())
-	return a.b.Heading(n.Span(), level, body)
+	return a.b.Heading(n.Span(), len(marker), body)
 }
 
 func (a *analyzer) lowerStrong(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindStrong)
-	defer ns.finish()
 	ns.take(syntax.KindStar)
 	body := a.lowerMarkup(ns.node())
 	ns.take(syntax.KindStar)
@@ -1441,7 +1550,6 @@ func (a *analyzer) lowerStrong(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerEmph(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindEmph)
-	defer ns.finish()
 	ns.take(syntax.KindUnderscore)
 	body := a.lowerMarkup(ns.node())
 	ns.take(syntax.KindUnderscore)
@@ -1450,8 +1558,10 @@ func (a *analyzer) lowerEmph(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerRef(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindRef)
-	defer ns.finish()
-	marker := ns.take(syntax.KindRefMarker)
+	marker, ok := ns.take(syntax.KindRefMarker)
+	if !ok {
+		return expr.NoRef
+	}
 	target := name.Make(marker[1:])
 	supplement := expr.NoRef
 	if !ns.done() {
@@ -1462,7 +1572,6 @@ func (a *analyzer) lowerRef(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerListItem(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindListItem)
-	defer ns.finish()
 	ns.take(syntax.KindListMarker)
 	body := a.lowerMarkup(ns.node())
 	return a.b.ListItem(n.Span(), body)
@@ -1470,9 +1579,11 @@ func (a *analyzer) lowerListItem(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerEnumItem(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindEnumItem)
-	defer ns.finish()
 	number := -1
-	marker := ns.take(syntax.KindEnumMarker)
+	marker, ok := ns.take(syntax.KindEnumMarker)
+	if !ok {
+		return expr.NoRef
+	}
 	if marker != "+" {
 		v, err := strconv.ParseInt(strings.TrimSuffix(marker, "."), 10, 64)
 		if err != nil {
@@ -1486,7 +1597,6 @@ func (a *analyzer) lowerEnumItem(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerTermItem(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindTermItem)
-	defer ns.finish()
 	ns.take(syntax.KindTermMarker)
 	term := a.lowerMarkup(ns.node())
 	ns.take(syntax.KindColon)
@@ -1496,7 +1606,6 @@ func (a *analyzer) lowerTermItem(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerContentBlock(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindContentBlock)
-	defer ns.finish()
 	a.openScope()
 	defer a.closeScope()
 	ns.take(syntax.KindLeftBracket)
@@ -1519,11 +1628,13 @@ func (a *analyzer) lowerMarkupAsContent(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindRaw)
-	defer ns.finish()
-	marker := ns.take(syntax.KindRawDelim)
+	marker, ok := ns.take(syntax.KindRawDelim)
+	if !ok {
+		return expr.NoRef
+	}
 	var lang string
 	if ns.at(syntax.KindRawLang) {
-		lang = ns.take(syntax.KindRawLang)
+		lang, _ = ns.take(syntax.KindRawLang)
 	}
 	var lines []string
 	for child := range ns.all() {
@@ -1549,7 +1660,6 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindSetRule)
-	defer ns.finish()
 	ns.take(syntax.KindSet)
 	target := a.lowerExpr(ns.node())
 	args, _ := a.lowerArgs(ns.node())
@@ -1563,7 +1673,6 @@ func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerShowRule(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindShowRule)
-	defer ns.finish()
 	ns.take(syntax.KindShow)
 	selector := expr.NoRef
 	if !ns.at(syntax.KindColon) {
@@ -1576,7 +1685,6 @@ func (a *analyzer) lowerShowRule(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerContextual(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindContextual)
-	defer ns.finish()
 	ns.take(syntax.KindContext)
 	body := a.lowerExpr(ns.node())
 	return a.b.Contextual(n.Span(), body)
@@ -1589,7 +1697,6 @@ func (a *analyzer) lowerContextual(n syntax.Node) expr.Ref {
 // existing binding via the same lookup path as plain `x = rhs`.
 func (a *analyzer) lowerDestructAssignment(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindDestructAssignment)
-	defer ns.finish()
 	patternNode := ns.node()
 	ns.take(syntax.KindEq)
 	rhs := a.lowerExpr(ns.node())
@@ -1616,7 +1723,6 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 	}
 
 	ns := a.inner(n, syntax.KindDestructuring)
-	defer ns.finish()
 	type binding struct {
 		ssaVar expr.Var
 		span   syntax.Span
@@ -1630,7 +1736,7 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 		case syntax.KindComma:
 			continue
 		case syntax.KindError:
-			a.error(child.(*syntax.Error))
+			a.emitSyntaxError(child.(*syntax.Error))
 		case syntax.KindUnderscore:
 			holes++
 			idx++
@@ -1662,7 +1768,6 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 
 func (a *analyzer) lowerModuleInclude(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindModuleInclude)
-	defer ns.finish()
 	ns.take(syntax.KindInclude)
 	source := a.lowerExpr(ns.node())
 	return a.b.ModuleInclude(n.Span(), source)

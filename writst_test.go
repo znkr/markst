@@ -10,7 +10,6 @@ import (
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 	"znkr.io/writst/types"
@@ -39,7 +38,6 @@ func TestWritst(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
-					root := parser.Parse(tc.Input)
 					bindings := map[name.Name]value.Value{
 						name.Make("test"): &value.Function{
 							Name:       "test",
@@ -53,22 +51,22 @@ func TestWritst(t *testing.T) {
 								return value.None{}, nil
 							},
 						},
-						name.Make("dont-care"): value.None{}, // TODO: Replace with a node representing an error
-						name.Make("nope"):      value.None{}, // TODO: Replace with a node representing an error
-					}
-					mod, err := analyzer.Analyze(root, analyzer.WithBindings(bindings))
-					if err != nil {
-						if diff := errcmp.Diff(root, analysisErrors(err)); diff != "" {
-							t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
-						}
-						return
+						name.Make("dont-care"): &value.Error{
+							Msg: "evaluated placeholder dont-care: this is an error",
+						},
+						name.Make("nope"): &value.Error{
+							Msg: "evaluated placeholder nope: this is an error",
+						},
 					}
 
-					contents, warnings, err := eval.Eval(mod)
-					if diff := errcmp.Diff(root, evalErrors(warnings, err)); diff != "" {
-						t.Errorf("Eval() error mismatch (-want +got):\n%s", diff)
+					root := parser.Parse(tc.Input)
+					mod := analyzer.Analyze(root, analyzer.WithBindings(bindings))
+					contents, warnings, errors := eval.Eval(mod)
+
+					if diff := errcmp.Diff(root, evalErrors(warnings, errors)); diff != "" {
+						t.Errorf("error mismatch (-want +got):\n%s", diff)
 					}
-					if err != nil {
+					if errors != nil {
 						return
 					}
 
@@ -89,53 +87,23 @@ func TestWritst(t *testing.T) {
 	}
 }
 
-func analysisErrors(err error) []errcmp.Error {
-	if err == nil {
-		return nil
-	}
-	var ret []errcmp.Error
-	for _, e := range err.(syntax.ErrorList) {
-		ret = append(ret, errcmp.Error{
-			Span:    e.Span(),
-			Type:    "Error",
-			Message: e.Error(),
-			Hints:   e.Hints(),
-		})
-	}
-	return ret
-
-}
-
-func evalErrors(warnings []eval.Error, err error) []errcmp.Error {
+func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
 	var ret []errcmp.Error
 	for _, w := range warnings {
 		ret = append(ret, errcmp.Error{
-			Span:    w.Span(),
+			Span:    w.Span,
 			Type:    "Warning",
 			Message: w.Error(),
-			Hints:   w.Hints(),
+			Hints:   w.Hints,
 		})
 	}
-	switch e := err.(type) {
-	case nil:
-	case eval.ErrorList:
-		for _, e := range e {
-			ret = append(ret, errcmp.Error{
-				Span:    e.Span(),
-				Type:    "Error",
-				Message: e.Error(),
-				Hints:   e.Hints(),
-			})
-		}
-	case eval.Error:
+	for _, e := range errors {
 		ret = append(ret, errcmp.Error{
-			Span:    e.Span(),
+			Span:    e.Span,
 			Type:    "Error",
 			Message: e.Error(),
-			Hints:   e.Hints(),
+			Hints:   e.Hints,
 		})
-	default:
-		panic("unexpected error: " + e.Error())
 	}
 	return ret
 }

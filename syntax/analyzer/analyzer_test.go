@@ -3,16 +3,17 @@ package analyzer_test
 import (
 	"flag"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"znkr.io/diff/textdiff"
 
 	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/syntax"
+	"znkr.io/writst/name"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
+	"znkr.io/writst/value"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -33,15 +34,8 @@ func TestAnalyze(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
-					node := parser.Parse(tc.Input)
-					mod, err := analyzer.Analyze(node)
-					if diff := errcmp.Diff(node, toCmpErrors(err)); diff != "" {
-						t.Fatalf("Analyze() error mismatch (-want +got):\n%s", diff)
-					}
-					if err != nil {
-						return
-					}
-
+					root := parser.Parse(tc.Input)
+					mod := analyzer.Analyze(root)
 					got := expr.FormatModule(mod)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
 						t.Errorf("Analyze() mismatch (-want +got):\n%s", diff)
@@ -59,18 +53,44 @@ func TestAnalyze(t *testing.T) {
 	}
 }
 
-func toCmpErrors(err error) []errcmp.Error {
-	if err == nil {
-		return nil
+func TestAnalyzeWithBindings(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		bindings map[name.Name]value.Value
+		// wantSubstr is a substring that must appear in the formatted IR; it
+		// is the simplest assertion that proves a bound name resolved to its
+		// supplied value rather than the default "unknown variable" error.
+		wantSubstr string
+		// wantNoSubstr asserts that no analyzer error was emitted for the
+		// bound name (regression guard against future "declare-only" leaks).
+		wantNoSubstr string
+	}{
+		{
+			name:         "supplied value resolves as constant",
+			src:          "#{ injected }",
+			bindings:     map[name.Name]value.Value{name.Make("injected"): value.Str("hello")},
+			wantSubstr:   `const hello`,
+			wantNoSubstr: "unknown variable",
+		},
+		{
+			name:       "unbound name still errors",
+			src:        "#{ notbound }",
+			bindings:   map[name.Name]value.Value{name.Make("other"): value.Str("x")},
+			wantSubstr: "unknown variable: notbound",
+		},
 	}
-	var ret []errcmp.Error
-	for _, e := range err.(syntax.ErrorList) {
-		ret = append(ret, errcmp.Error{
-			Span:    e.Span(),
-			Type:    "Error",
-			Message: e.Error(),
-			Hints:   e.Hints(),
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := parser.Parse(tc.src)
+			mod := analyzer.Analyze(root, analyzer.WithBindings(tc.bindings))
+			got := expr.FormatModule(mod)
+			if tc.wantSubstr != "" && !strings.Contains(got, tc.wantSubstr) {
+				t.Errorf("expected IR to contain %q, got:\n%s", tc.wantSubstr, got)
+			}
+			if tc.wantNoSubstr != "" && strings.Contains(got, tc.wantNoSubstr) {
+				t.Errorf("expected IR not to contain %q, got:\n%s", tc.wantNoSubstr, got)
+			}
 		})
 	}
-	return ret
 }

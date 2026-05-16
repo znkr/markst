@@ -31,44 +31,95 @@ var (
 	}
 )
 
-type unexpected struct {
-	n        syntax.Node
-	expected syntax.Kind
-}
-
-func (a *analyzer) expect(kind syntax.Kind, n syntax.Node) {
-	if n.Kind() != kind {
-		panic(unexpected{n, kind})
+// internal panics with a string describing the offending node. Reserve for
+// parser/analyzer drift (running off a node list, encountering a kind no
+// case expects); user-visible syntax errors thread through the IR via
+// [analyzer.emitSyntaxError] / [analyzer.emitError].
+func (a *analyzer) internal(n syntax.Node, format string, args ...any) {
+	var sb strings.Builder
+	sb.WriteString("analyzer internal error: ")
+	fmt.Fprintf(&sb, format, args...)
+	span := syntax.Span{}
+	if n != nil {
+		span = n.Span()
+		fmt.Fprintf(&sb, "\n  at node: kind=%s span=[%d,%d) text=%q",
+			n.Kind().String(), a.source.Position(span.Start), a.source.Position(span.End), truncate(n.Text(), 60))
 	}
+	panic(sb.String())
 }
 
+// expect reports whether n has the given kind. Mismatch with a
+// [*syntax.Error] emits the parser error into the IR and returns false so
+// callers bail; any other mismatch is drift and escalates to [internal].
+func (a *analyzer) expect(kind syntax.Kind, n syntax.Node) bool {
+	if n.Kind() == kind {
+		return true
+	}
+	if err, ok := n.(*syntax.Error); ok {
+		a.emitSyntaxError(err)
+		return false
+	}
+	a.internal(n, "expected %s, but got %s", kind.String(), n.Kind().String())
+	return false // unreachable
+}
+
+// expected emits a synthetic "expected X" error at the cursor's position
+// (the end of the most recently consumed node). Used when the cursor runs
+// out of nodes early; callers should return NoRef after.
 func (a *analyzer) expected(ns *nodes, expected string) {
 	span := syntax.Span{
 		Start: ns.items[ns.pos-1].Span().End,
 		End:   ns.items[ns.pos-1].Span().End,
 	}
-	panic(unexpected{
-		n: syntax.NewError(span, fmt.Sprintf("expected %s", expected), ""),
-	})
+	a.emitError(span, fmt.Sprintf("expected %s", expected))
 }
 
+// unexpected emits n as a parser error if it is a [*syntax.Error];
+// otherwise escalates to [internal] (parser/analyzer drift). Used at
+// "I got something I can't lower" decision points.
 func (a *analyzer) unexpected(n syntax.Node) {
-	panic(unexpected{n: n})
+	if err, ok := n.(*syntax.Error); ok {
+		a.emitSyntaxError(err)
+		return
+	}
+	a.internal(n, "unexpected node: kind=%s", n.Kind().String())
 }
 
-func (a *analyzer) handleRecover(p0 any) bool {
-	if p0 == nil {
-		return false
-	}
-	p, ok := p0.(unexpected)
-	if !ok {
-		panic(p0)
-	}
-	if err, ok := p.n.(*syntax.Error); ok {
-		a.error(err)
+// collectChildErrors emits every [*syntax.Error] in n's subtree (when
+// recursive is true) or its immediate children (when false) into the
+// current IR block and reports whether any were found. Control-flow
+// lowering (if/while/for/closure) uses it to surface parser errors at
+// the outer block BEFORE opening inner blocks — otherwise structural
+// errors get buried in unreachable IR or duplicated by per-position
+// fallback paths.
+func (a *analyzer) collectChildErrors(n syntax.Node, recursive bool) bool {
+	if err, ok := n.(*syntax.Error); ok {
+		a.emitSyntaxError(err)
 		return true
 	}
-	panic(fmt.Sprintf("expected %s, but got %s", p.expected.String(), p.n.Kind().String()))
+	inner, ok := n.(*syntax.Inner)
+	if !ok {
+		return false
+	}
+	found := false
+	for _, c := range inner.Children() {
+		if err, ok := c.(*syntax.Error); ok {
+			a.emitSyntaxError(err)
+			found = true
+			continue
+		}
+		if recursive && a.collectChildErrors(c, true) {
+			found = true
+		}
+	}
+	return found
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 // nodes is a cursor over a slice of syntax nodes, filtering out trivia.
@@ -78,10 +129,15 @@ type nodes struct {
 	pos   int
 }
 
-// inner returns a cursor for the children of n, after validating its kind.
-// Trivia (spaces, comments) are filtered out.
+// inner returns a cursor for the children of n. When n's kind doesn't
+// match — either because the parser substituted a [*syntax.Error] or
+// because the caller is being defensive about a malformed sub-tree — the
+// returned cursor is empty so iteration is a no-op and callers can fall
+// through to their cleanup with NoRef.
 func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) *nodes {
-	a.expect(kind, n)
+	if !a.expect(kind, n) {
+		return &nodes{a: a, items: nil}
+	}
 	if m, ok := n.(syntax.RootNode); ok {
 		n = m.Inner
 	}
@@ -99,21 +155,26 @@ func (ns *nodes) advance() {
 	}
 }
 
-// take validates the current node has the expected kind, returns its literal, and advances.
-func (ns *nodes) take(kind syntax.Kind) string {
+// take validates the current node has the expected kind, returns its
+// literal, and advances. Returns ok=false when the cursor is exhausted
+// or on a parser-error mismatch; drift (a non-error node of the wrong
+// kind) escalates to [internal].
+func (ns *nodes) take(kind syntax.Kind) (string, bool) {
 	if ns.pos >= len(ns.items) {
-		panic("unexpected end of nodes, expected " + kind.String())
+		return "", false
 	}
 	n := ns.items[ns.pos]
-	ns.a.expect(kind, n)
+	if !ns.a.expect(kind, n) {
+		return "", false
+	}
 	ns.advance()
-	return n.(*syntax.Leaf).Text()
+	return n.(*syntax.Leaf).Text(), true
 }
 
 // node returns the current node and advances.
 func (ns *nodes) node() syntax.Node {
 	if ns.pos >= len(ns.items) {
-		panic("unexpected end of nodes")
+		ns.a.internal(nil, "unexpected end of nodes")
 	}
 	n := ns.items[ns.pos]
 	ns.advance()
@@ -143,13 +204,14 @@ func (ns *nodes) all() iter.Seq[syntax.Node] {
 	}
 }
 
-// inside returns a sequence of nodes inside the given open and close delimiters.
+// inside returns a sequence of nodes inside the given open and close
+// delimiters. If the parser emitted an [*syntax.Error] in place of the
+// open delimiter (typically because the closing one was missing), the
+// error is emitted into the IR and iteration proceeds on the remaining
+// children so the rest of the construct still gets lowered.
 func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
 	if ns.at(syntax.KindError) {
-		// Most likely the error is about an unclosed delimiter. Handle it
-		// gracefully by reporting the error here and analyzing the nodes
-		// inside below.
-		ns.a.error(ns.node().(*syntax.Error))
+		ns.a.emitSyntaxError(ns.node().(*syntax.Error))
 	} else {
 		ns.take(open)
 	}
@@ -166,19 +228,21 @@ func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
 	}
 }
 
-func (ns *nodes) finish() {
-	if ns.a.handleRecover(recover()) {
-		return
-	}
-	if !ns.done() {
-		panic("expected no more nodes, but found more")
-	}
-}
-
-// leaf validates a single node has the expected kind and returns its literal.
+// leaf returns the text of n. When n's kind matches, the literal text
+// is returned. A [*syntax.Error] in n's place is emitted into the IR and
+// "" is returned so the caller can degrade gracefully (typically by
+// emitting an invalid name that resolves to a downstream diagnostic).
+// Any other kind mismatch is drift and escalates to [internal].
 func (a *analyzer) leaf(n syntax.Node, kind syntax.Kind) string {
-	a.expect(kind, n)
-	return n.(*syntax.Leaf).Text()
+	if n.Kind() == kind {
+		return n.(*syntax.Leaf).Text()
+	}
+	if err, ok := n.(*syntax.Error); ok {
+		a.emitSyntaxError(err)
+		return ""
+	}
+	a.internal(n, "leaf: expected %s, got %s", kind.String(), n.Kind().String())
+	return ""
 }
 
 func unquote(s string) string {

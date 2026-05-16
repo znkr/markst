@@ -31,29 +31,35 @@
 // Error: 4-6 unexpected end of block comment
 // Hint: 4-6 consider escaping the `*` with a backslash or opening the block comment with `/*`
 #(1*/2)
+│ #raw("(1, 2)\n")
 
 --- array-bad-number-suffix ---
 // Error: 6-8 invalid number suffix: u
 #(1, 1u 2)
+│ #raw("(1, 2)\n")
 
 --- array-leading-comma ---
 // Error: 3-4 unexpected comma
 #(,1)
+│ #raw("1")
 
 --- array-incomplete-pair ---
 // Missing expression makes named pair incomplete, making this an empty array.
 // Error: 5 expected expression
 #(a:)
+│ #raw("(:)\n")
 
 --- array-named-pair ---
 // Named pair after this is already identified as an array.
 // Error: 6-10 expected expression, found named pair
 #(1, b: 2)
+│ #raw("(1,)\n")
 
 --- array-keyed-pair ---
 // Keyed pair after this is already identified as an array.
 // Error: 6-14 expected expression, found keyed pair
 #(1, "key": 2)
+│ #raw("(1,)\n")
 
 --- array-bad-conversion-from-string ---
 // Error: 8-15 expected bytes or array, found string
@@ -516,6 +522,7 @@
 #let (box, red) = (nope, nope)
 // Error: 8-17 expected expression, found named pair
 #(box, fill: red)
+│ #raw("(<error: evaluated placeholder nope: this is an error>,)\n")
 
 --- issue-3154-array-first-empty ---
 #{
@@ -575,10 +582,12 @@
 --- array-unopened ---
 // Error: 2-3 unclosed delimiter
 #{)}
+│ #text(")}")
 
 --- array-unclosed ---
 // Error: 3-4 unclosed delimiter
 #{(}
+│ #raw("()\n")
 
 --- array-reduce ---
 // Test the `reduce` method.

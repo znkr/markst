@@ -1,9 +1,11 @@
 package eval
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
@@ -19,31 +21,29 @@ import (
 // [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
 // are returned separately. Free names in the module have already been
 // resolved to constants by the analyzer, so Eval needs no scope of its own.
-func Eval(mod *expr.Module) (c value.Content, warn []Error, err error) {
+func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	s := &session{mod: mod}
 
-	defer func() {
-		if r := recover(); r != nil {
-			if w, ok := r.(*errWrapper); ok {
-				err = ErrorList(w.err)
-				warn = s.warnings
-				c = nil
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
 	v := runFunction(s, functionCall{fn: mod.Top})
+	// If the top-level value is itself an Error, the failure was already
+	// recorded on the session; drop it and emit empty content.
+	if _, ok := value.IsError(v); ok {
+		v = &value.Sequence{}
+	}
 	cc, cerr := value.ToContent(v)
-	if cerr != nil {
-		raise(&ValueError{span: syntax.Span{}, msg: cerr.Error()})
+	// Only surface a content-coercion failure if no other errors were
+	// recorded during eval. When other errors exist, the "non-content
+	// value" diagnostic is almost always a cascading consequence and
+	// would just add noise.
+	if cerr != nil && len(s.errors) == 0 {
+		s.recordError(&value.Error{Msg: cerr.Error()})
 	}
 	if cc == nil {
 		cc = &value.Sequence{}
 	}
 	c = cc
 	warn = s.warnings
+	err = s.errors
 	return
 }
 
@@ -52,16 +52,100 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err error) {
 // warning list. Each [frame] holds a back-pointer to its session so eval
 // helpers don't have to thread it as a separate parameter.
 type session struct {
-	mod      *expr.Module
-	labels   map[name.Name]struct{}
+	mod    *expr.Module
+	labels map[name.Name]struct{}
+
+	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
+
+	// errors collects every diagnostic produced during evaluation. Every
+	// failure surfaces here via [session.recordError]; instructions that
+	// fail also write a [*value.Error] to their SSA result slot so
+	// downstream operations can propagate it through the value table.
+	//
+	// Sorted by (Span.Start ascending, Span.End descending). Insertions
+	// almost always land at the end (errors arrive in roughly source
+	// order), so the slice-shift cost amortizes; binary search keeps the
+	// containment lookup off the hot path.
+	errors []Error
 }
 
-func (s *session) warn(w Error) {
-	if len(s.warnings) > 0 && s.warnings[len(s.warnings)-1].Span() == w.Span() {
+// recordError inserts e into s.errors in sorted order unless an existing error
+// with the same message already covers it (i.e. the existing span contains
+// e's span). This collapses two kinds of redundancy:
+//
+//   - Exact duplicates: a comparator or predicate firing repeatedly on a
+//     poisoned value produces the same (span, msg) over and over.
+//   - Narrower restatements: destructure lowering emits a LengthCheck (span
+//     over the whole pattern) and per-Extract instructions (narrower spans
+//     inside the pattern). When the value isn't destructurable, all fire
+//     with the same message; only the outer one is kept.
+//
+// Implementation: errors is sorted by (Span.Start asc, Span.End desc). Binary
+// search locates the insertion point in O(log n); the cover check then
+// scans earlier entries (Start <= e.Span.Start) backward. Any error that
+// covers e must appear before the insertion point in this ordering, so the
+// scan only needs to walk that prefix. In practice it terminates within a
+// handful of steps — at most the source nesting depth.
+func (s *session) recordError(e Error) {
+	if len(s.errors) == 0 {
+		s.errors = append(s.errors, e)
+		return
+	}
+	idx, _ := slices.BinarySearchFunc(s.errors, e, errCmp)
+	// Scan backward from idx to find an entry that covers e. Two cases:
+	//   - Same-span entries: leftmost-insertion semantics puts identical-key
+	//     entries *at* idx (and beyond), so the existing duplicate sits at
+	//     idx itself when idx < len.
+	//   - Broader-span entries: earlier in the slice (Start <= e.Span.Start
+	//     by sort order); End >= e.Span.End determines coverage.
+	// min(idx, len-1) starts at the duplicate cluster for case 1, or the
+	// last entry for case 2 (append at end).
+	for i := min(idx, len(s.errors)-1); i >= 0; i-- {
+		ex := s.errors[i]
+		if ex.Span.Start <= e.Span.Start && ex.Span.End >= e.Span.End && ex.Msg == e.Msg {
+			return
+		}
+	}
+	s.errors = slices.Insert(s.errors, idx, e)
+}
+
+// recordWarning appends w to the session's warning list, deduplicating
+// consecutive warnings at the same span. Warnings are non-fatal: they are
+// returned to the caller alongside the document content rather than
+// aborting evaluation.
+func (s *session) recordWarning(w Error) {
+	if len(s.warnings) > 0 && s.warnings[len(s.warnings)-1].Span == w.Span {
 		return
 	}
 	s.warnings = append(s.warnings, w)
+}
+
+// errCmp orders errors by Span.Start ascending, then by Span.End
+// descending so broader spans come before narrower ones at the same Start.
+// Returns the three-way comparison expected by [slices.BinarySearchFunc].
+func errCmp(a, b Error) int {
+	if c := cmp.Compare(a.Span.Start, b.Span.Start); c != 0 {
+		return c
+	}
+	return cmp.Compare(b.Span.End, a.Span.End)
+}
+
+// propagatesFromOperands reports whether [evalInst]'s pre-dispatch
+// propagation should short-circuit this instruction when any operand is a
+// [*value.Error]. Most value-producing instructions opt in; aggregation
+// constructs ([ContentResult], [CodeJoin], [LoopAccAdd], [MakeArray],
+// [MakeDict]) opt out because their semantics are to *hold* the operands,
+// errors and all, rather than collapse to a single error. Without this
+// opt-out, `(err, x)` would evaluate to err instead of an array
+// containing err — defeating "continue past errors" for collections.
+func propagatesFromOperands(inst expr.Instruction) bool {
+	switch inst.(type) {
+	case *expr.ContentResult, *expr.CodeJoin, *expr.LoopAccAdd,
+		*expr.MakeArray, *expr.MakeDict:
+		return false
+	}
+	return true
 }
 
 // frame is the per-call SSA evaluation state.
@@ -89,6 +173,46 @@ func (fr *frame) get(ref expr.Ref) value.Value {
 	return fr.vals[ref]
 }
 
+// error constructs a [*value.Error] for msg at span, records it on the
+// session, and returns it. Instruction handlers assign the returned error
+// to their result slot (so downstream operations propagate it) and stop
+// processing the current instruction. Replaces the previous panic-based
+// raise mechanism.
+func (fr *frame) error(span syntax.Span, msg string, hints ...string) *value.Error {
+	ve := &value.Error{Span: span, Msg: msg, Hints: hints}
+	fr.s.recordError(ve)
+	return ve
+}
+
+// errorf is a formatting wrapper around [frame.error].
+func (fr *frame) errorf(span syntax.Span, format string, args ...any) *value.Error {
+	return fr.error(span, fmt.Sprintf(format, args...))
+}
+
+// warn records a non-fatal diagnostic on the session. Unlike [frame.error],
+// it does not write a [*value.Error] to the value table, so evaluation of
+// the surrounding expression continues normally.
+func (fr *frame) warn(span syntax.Span, msg string, hints ...string) {
+	ve := &value.Error{Span: span, Msg: msg, Hints: hints}
+	fr.s.recordWarning(ve)
+}
+
+// attachLabel binds lbl to c, registering it in the session's label set
+// and warning at warnSpan if c was already labelled. Used by both
+// [expr.AttachLabel] (explicit `<label>` markup) and [evalContentResult]
+// (labels that appear as siblings to content in a markup body).
+func (fr *frame) attachLabel(c value.Content, lbl *value.Label, warnSpan syntax.Span) {
+	if old := c.SetLabel(lbl); old != nil {
+		fr.warn(warnSpan, "content labelled multiple times",
+			"only the last label is used, the rest are ignored")
+		delete(fr.s.labels, old.Name)
+	}
+	if fr.s.labels == nil {
+		fr.s.labels = make(map[name.Name]struct{})
+	}
+	fr.s.labels[lbl.Name] = struct{}{}
+}
+
 // functionCall bundles the arguments for [runFunction] into a single struct
 // to make call sites self-documenting.
 type functionCall struct {
@@ -100,7 +224,7 @@ type functionCall struct {
 	// captures carries the values supplied at MakeClosure time.
 	captures []value.Value
 	// self is the [value.Function] for the currently-executing closure, used to
-	// materialise [expr.DefSelf] references. Nil for top-level functions.
+	// materialize [expr.DefSelf] references. Nil for top-level functions.
 	self value.Value
 }
 
@@ -150,9 +274,28 @@ func runFunction(s *session, call functionCall) value.Value {
 			bb = t.Target
 		case *expr.Branch:
 			cond := fr.get(t.Cond)
+			// If the condition is itself an error value, the upstream
+			// computation already recorded it. Pick the Else arm so
+			// evaluation can continue *and* loops terminate (while/for
+			// lower with the exit block as Else, so this drops out of the
+			// loop instead of re-evaluating the failing condition every
+			// iteration). The surrounding expression's result will reflect
+			// the Else arm; routing Error through the join phi properly
+			// requires a follow-up analyzer change.
+			if _, ok := value.IsError(cond); ok {
+				fr.pred = bb
+				bb = t.Else
+				break
+			}
 			cb, ok := cond.(value.Bool)
 			if !ok {
-				raise(&ValueError{span: t.Span(), msg: fmt.Sprintf("expected boolean, found %s", cond.Type())})
+				// Non-bool condition: record the failure and fall through
+				// to the Else arm. This terminates loops (their exit edge
+				// is Else) and skips the Then arm of conditionals.
+				fr.errorf(t.Span(), "expected boolean, found %s", cond.Type())
+				fr.pred = bb
+				bb = t.Else
+				break
 			}
 			fr.pred = bb
 			if bool(cb) {
@@ -175,15 +318,34 @@ func runFunction(s *session, call functionCall) value.Value {
 
 // evalInst dispatches on instruction kind and writes the result into the
 // frame's value table.
+//
+// Error propagation: if any operand is a [*value.Error], opted-in
+// instructions short-circuit and write the same error to the result slot
+// without re-recording it on the session. Each handler that can fail uses
+// [frame.fail] to record + return a [*value.Error] that gets assigned to
+// the result; downstream instructions then propagate it via the same
+// mechanism. ContentResult, CodeJoin, and LoopAccAdd opt out of operand
+// propagation so they can produce a partial result instead.
 func evalInst(fr *frame, inst expr.Instruction) {
 	r := inst.Result()
+
+	if propagatesFromOperands(inst) && r != expr.NoRef {
+		for _, op := range inst.Operands() {
+			if e, ok := value.IsError(fr.get(op)); ok {
+				fr.vals[r] = e
+				return
+			}
+		}
+	}
+
 	switch i := inst.(type) {
 	case *expr.Const:
 		fr.vals[r] = i.Value
 	case *expr.Unary:
 		v, err := value.UnaryOp(i.Op, fr.get(i.X))
 		if err != nil {
-			raise(&ValueError{span: i.Span(), msg: err.Error()})
+			fr.vals[r] = fr.error(i.Span(), err.Error())
+			return
 		}
 		fr.vals[r] = v
 	case *expr.Binary:
@@ -201,7 +363,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		right := fr.get(i.R)
 		v, err := value.BinaryOp(i.Op, left, right)
 		if err != nil {
-			raise(&ValueError{span: i.Span(), msg: err.Error()})
+			fr.vals[r] = fr.error(i.Span(), err.Error())
+			return
 		}
 		fr.vals[r] = v
 	case *expr.MakeArray:
@@ -214,7 +377,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 					elems = append(elems, s.Elems...)
 				case value.None:
 				default:
-					raise(&ValueError{span: it.Span, msg: fmt.Sprintf("cannot spread %s into array", v.Type())})
+					fr.vals[r] = fr.errorf(it.Span, "cannot spread %s into array", v.Type())
+					return
 				}
 			} else {
 				elems = append(elems, v)
@@ -232,56 +396,64 @@ func evalInst(fr *frame, inst expr.Instruction) {
 					}
 				case value.None:
 				default:
-					raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("cannot spread %s into dictionary", s.Type())})
+					fr.vals[r] = fr.error(i.Span(), fmt.Sprintf("cannot spread %s into dictionary", s.Type()))
+					return
 				}
 				continue
 			}
 			keyStr, ok := fr.get(e.Key).(value.Str)
 			if !ok {
-				raise(&ValueError{span: i.Span(), msg: "dictionary key must be a string"})
+				fr.vals[r] = fr.error(i.Span(), "dictionary key must be a string")
+				return
 			}
 			dict.Elems.Put(keyStr, fr.get(e.Value))
 		}
 		fr.vals[r] = dict
 	case *expr.FieldRead:
-		fr.vals[r] = evalFieldRead(fr.get(i.Target), i.Field, i.Span(), i.FieldSpan)
+		fr.vals[r] = fr.evalFieldRead(fr.get(i.Target), i.Field, i.Span(), i.FieldSpan)
 	case *expr.Call:
-		fr.vals[r] = evalCall(fr, i)
+		fr.vals[r] = fr.evalCall(i)
 	case *expr.CallSet:
-		evalCallSet(fr, i)
-		fr.vals[r] = value.None{}
+		fr.vals[r] = fr.evalCallSet(i)
 	case *expr.FieldWrite:
-		evalFieldWrite(fr, i)
-		fr.vals[r] = value.None{}
+		fr.vals[r] = fr.evalFieldWrite(i)
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
 	case *expr.Extract:
 		src := fr.get(i.Source)
 		arr, ok := src.(*value.Array)
 		if !ok {
-			raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("cannot destructure values of %s", src.Type())})
+			fr.vals[r] = fr.error(i.Span(), fmt.Sprintf("cannot destructure values of %s", src.Type()))
+			return
 		}
 		if i.Index >= len(arr.Elems) {
-			raise(&ValueError{span: i.Span(), msg: "destructure index out of range"})
+			fr.vals[r] = fr.error(i.Span(), "destructure index out of range")
+			return
 		}
 		fr.vals[r] = arr.Elems[i.Index]
 	case *expr.LengthCheck:
 		src := fr.get(i.Source)
 		arr, ok := src.(*value.Array)
 		if !ok {
-			raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("cannot destructure values of %s", src.Type())})
+			fr.error(i.Span(), fmt.Sprintf("cannot destructure values of %s", src.Type()))
+			return
 		}
 		switch {
 		case i.HasSink && len(arr.Elems) < i.Want:
-			raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("need at least %d elements, got %d", i.Want, len(arr.Elems))})
+			fr.error(i.Span(), fmt.Sprintf("need at least %d elements, got %d", i.Want, len(arr.Elems)))
 		case !i.HasSink && len(arr.Elems) != i.Want:
-			raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("need exactly %d elements, got %d", i.Want, len(arr.Elems))})
+			fr.error(i.Span(), fmt.Sprintf("need exactly %d elements, got %d", i.Want, len(arr.Elems)))
 		}
 	case *expr.IterOpen:
+		state, e := fr.newIterator(fr.get(i.Iterable), i.Span())
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
 		if fr.iters == nil {
 			fr.iters = make(map[expr.Ref]*iteratorState)
 		}
-		fr.iters[r] = newIterator(fr.get(i.Iterable), i.Span())
+		fr.iters[r] = state
 		// No meaningful value, but slot is non-nil to indicate "live".
 		fr.vals[r] = value.None{}
 	case *expr.IterHasNext:
@@ -291,9 +463,17 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		it := fr.iters[i.Iter]
 		fr.vals[r] = it.advance()
 	case *expr.ContentResult:
-		fr.vals[r] = evalContentResult(fr, i)
-	case *expr.RaiseError:
-		raise(&ValueError{span: i.Span(), msg: i.Msg})
+		fr.vals[r] = fr.evalContentResult(i)
+	case *expr.Error:
+		// When the upstream Ref already errored, propagate it and suppress
+		// Msg so the original failure isn't double-reported.
+		if i.From != expr.NoRef {
+			if e, ok := value.IsError(fr.get(i.From)); ok {
+				fr.vals[r] = e
+				return
+			}
+		}
+		fr.vals[r] = fr.error(i.Span(), i.Msg, i.Hints...)
 	case *expr.AttachLabel:
 		// Coerce the prior content to value.Content, attach the label, emit
 		// a warning if overwriting, and register the label.
@@ -305,26 +485,14 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			fr.vals[r] = value.None{}
 			break
 		}
-		labelVal := &value.Label{Name: i.Label}
-		if old := c.SetLabel(labelVal); old != nil {
-			fr.s.warn(&ValueError{
-				span:  fr.fn.Defs[fr.fn.Resolve(i.Content)].Span(),
-				msg:   "content labelled multiple times",
-				hints: []string{"only the last label is used, the rest are ignored"},
-			})
-			delete(fr.s.labels, old.Name)
-		}
-		if fr.s.labels == nil {
-			fr.s.labels = make(map[name.Name]struct{})
-		}
-		fr.s.labels[i.Label] = struct{}{}
+		fr.attachLabel(c, &value.Label{Name: i.Label}, fr.fn.Defs[fr.fn.Resolve(i.Content)].Span())
 		// Also overwrite the operand slot so the label is visible to any
 		// subsequent consumer that re-fetches it; this keeps the value in
 		// sync with the side-effect.
 		fr.vals[fr.fn.Resolve(i.Content)] = c
 		fr.vals[r] = value.None{}
 	case *expr.CodeJoin:
-		fr.vals[r] = evalCodeJoin(fr, i)
+		fr.vals[r] = fr.evalCodeJoin(i)
 	case *expr.LoopAccBegin:
 		fr.vals[r] = &value.Array{}
 	case *expr.LoopAccAdd:
@@ -339,33 +507,70 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		if !ok {
 			panic("loop_acc_result: accumulator is not an array")
 		}
-		fr.vals[r] = joinValues(arr.Elems, i.Span())
+		fr.vals[r] = fr.joinValues(arr.Elems, i.Span())
 	case *expr.Heading:
-		fr.vals[r] = &value.Heading{Depth: i.Level, Body: contentOf(fr.get(i.Body), i.Span())}
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.Heading{Depth: i.Level, Body: body}
+		} else {
+			fr.vals[r] = e
+		}
 	case *expr.Strong:
-		fr.vals[r] = &value.Strong{Body: contentOf(fr.get(i.Body), i.Span())}
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.Strong{Body: body}
+		} else {
+			fr.vals[r] = e
+		}
 	case *expr.Emph:
-		fr.vals[r] = &value.Emph{Body: contentOf(fr.get(i.Body), i.Span())}
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.Emph{Body: body}
+		} else {
+			fr.vals[r] = e
+		}
 	case *expr.Link:
-		fr.vals[r] = &value.Link{Dest: i.Dest, Body: contentOf(fr.get(i.Body), i.Span())}
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.Link{Dest: i.Dest, Body: body}
+		} else {
+			fr.vals[r] = e
+		}
 	case *expr.RefMarkup:
 		if _, ok := fr.s.labels[i.Target]; !ok {
-			raise(&ValueError{span: i.Span(), msg: fmt.Sprintf("label `<%s>` does not exist in the document", i.Target.String())})
+			fr.vals[r] = fr.errorf(i.Span(), "label `<%s>` does not exist in the document", i.Target.String())
+			return
 		}
 		v := &value.Ref{Target: i.Target}
 		if i.Supplement != expr.NoRef {
-			v.Supplement = contentOf(fr.get(i.Supplement), i.Span())
+			body, e := fr.contentOf(fr.get(i.Supplement), i.Span())
+			if e != nil {
+				fr.vals[r] = e
+				return
+			}
+			v.Supplement = body
 		}
 		fr.vals[r] = v
 	case *expr.ListItem:
-		fr.vals[r] = &value.ListItem{Body: contentOf(fr.get(i.Body), i.Span())}
-	case *expr.EnumItem:
-		fr.vals[r] = &value.EnumItem{Number: i.Number, Body: contentOf(fr.get(i.Body), i.Span())}
-	case *expr.TermItem:
-		fr.vals[r] = &value.TermItem{
-			Term:        contentOf(fr.get(i.Term), i.Span()),
-			Description: contentOf(fr.get(i.Description), i.Span()),
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.ListItem{Body: body}
+		} else {
+			fr.vals[r] = e
 		}
+	case *expr.EnumItem:
+		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+			fr.vals[r] = &value.EnumItem{Number: i.Number, Body: body}
+		} else {
+			fr.vals[r] = e
+		}
+	case *expr.TermItem:
+		term, e := fr.contentOf(fr.get(i.Term), i.Span())
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		desc, e := fr.contentOf(fr.get(i.Description), i.Span())
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		fr.vals[r] = &value.TermItem{Term: term, Description: desc}
 	case *expr.SetRule, *expr.ShowRule, *expr.Contextual, *expr.ModuleInclude:
 		panic(fmt.Sprintf("TODO: ssa eval %T", i))
 	default:
@@ -373,33 +578,47 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	}
 }
 
-// contentOf coerces a value to content, raising a ValueError on failure.
-func contentOf(v value.Value, span syntax.Span) value.Content {
+// contentOf coerces a value to content. Returns (nil-content, error) when
+// the value isn't content-coercible; on success the second return is nil.
+// A nil content from value.ToContent is normalized to an empty Sequence.
+func (fr *frame) contentOf(v value.Value, span syntax.Span) (value.Content, *value.Error) {
 	c, err := value.ToContent(v)
 	if err != nil {
-		raise(&ValueError{span: span, msg: err.Error()})
+		return nil, fr.error(span, err.Error())
 	}
 	if c == nil {
-		return &value.Sequence{}
+		return &value.Sequence{}, nil
 	}
-	return c
+	return c, nil
 }
 
 // evalCodeJoin runs the code-mode joiner over a list of value Refs and
 // returns the joined result. Per-item spans are used so type-mismatch
-// errors point at the offending value (matching legacy behaviour).
-func evalCodeJoin(fr *frame, c *expr.CodeJoin) value.Value {
+// errors point at the offending value (matching legacy behavior).
+//
+// Returns (nil, err) when the joiner rejects an operand; (joined, nil)
+// otherwise. Items whose value is already a [*value.Error] are skipped so a
+// previously-recorded failure doesn't block a partial join; when at least
+// one error operand was dropped, a subsequent type-mismatch among the
+// remaining operands is also suppressed (the user already has a real
+// diagnostic, the cascade adds no information).
+func (fr *frame) evalCodeJoin(c *expr.CodeJoin) value.Value {
 	type item struct {
 		v    value.Value
 		span syntax.Span
 	}
 	var items []item
+	dropped := false
 	for i, r := range c.Items {
 		if r == expr.NoRef {
 			continue
 		}
 		v := fr.get(r)
 		if v == nil {
+			continue
+		}
+		if _, ok := value.IsError(v); ok {
+			dropped = true
 			continue
 		}
 		sp := c.Span()
@@ -411,28 +630,50 @@ func evalCodeJoin(fr *frame, c *expr.CodeJoin) value.Value {
 	var sel joiner.Selector
 	for _, it := range items {
 		if err := sel.Add(it.v.Type()); err != nil {
-			raise(&ValueError{span: it.span, msg: err.Error()})
+			if dropped {
+				return value.None{}
+			}
+			return fr.error(it.span, err.Error())
 		}
 	}
 	j := sel.Joiner()
 	for _, it := range items {
 		if err := j.Add(it.v); err != nil {
-			raise(&ValueError{span: it.span, msg: err.Error()})
+			if dropped {
+				return value.None{}
+			}
+			return fr.error(it.span, err.Error())
 		}
 	}
 	return j.Result()
 }
 
-// joinValues runs the code-mode joiner over a slice of values. Returns the
-// joined result, raising a ValueError on incompatible types.
-func joinValues(values []value.Value, span syntax.Span) value.Value {
+// joinValues runs the code-mode joiner over a slice of values. Returns
+// *value.Error on incompatible types. Already-failed values (those carrying
+// a [*value.Error] in the slot) are dropped: the underlying error is
+// already on the session, and including it would either cascade into
+// "cannot join error with …" or replace the real diagnostic with a
+// vacuous one. When at least one operand is dropped this way, an
+// incompatible-types failure among the remaining operands is also
+// suppressed — the user already has a diagnostic to act on and the
+// secondary "cannot join X with Y" is just noise about the corrupted
+// remainder.
+func (fr *frame) joinValues(values []value.Value, span syntax.Span) value.Value {
+	dropped := false
 	var sel joiner.Selector
 	for _, v := range values {
 		if v == nil {
 			continue
 		}
+		if _, ok := value.IsError(v); ok {
+			dropped = true
+			continue
+		}
 		if err := sel.Add(v.Type()); err != nil {
-			raise(&ValueError{span: span, msg: err.Error()})
+			if dropped {
+				return value.None{}
+			}
+			return fr.error(span, err.Error())
 		}
 	}
 	j := sel.Joiner()
@@ -440,8 +681,14 @@ func joinValues(values []value.Value, span syntax.Span) value.Value {
 		if v == nil {
 			continue
 		}
+		if _, ok := value.IsError(v); ok {
+			continue
+		}
 		if err := j.Add(v); err != nil {
-			raise(&ValueError{span: span, msg: err.Error()})
+			if dropped {
+				return value.None{}
+			}
+			return fr.error(span, err.Error())
 		}
 	}
 	return j.Result()
@@ -449,32 +696,29 @@ func joinValues(values []value.Value, span syntax.Span) value.Value {
 
 // evalContentResult joins a list of value-producing items into a Sequence,
 // applying labels to the preceding content element (mirroring evalContents).
-func evalContentResult(fr *frame, c *expr.ContentResult) value.Value {
+// Items whose value is a [*value.Error] are skipped: the error is already on
+// the session's error list, and dropping the item lets the rest of the
+// document still render. Non-content items that can't be coerced are
+// surfaced via [frame.fail] and skipped from the output.
+func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 	ret := make([]value.Content, 0, len(c.Items))
 	var lastSpan syntax.Span
 	for _, r := range c.Items {
 		v := fr.get(r)
+		if _, ok := value.IsError(v); ok {
+			continue
+		}
 		if lbl, ok := v.(*value.Label); ok {
 			if len(ret) == 0 {
 				continue
 			}
-			if old := ret[len(ret)-1].SetLabel(lbl); old != nil {
-				fr.s.warn(&ValueError{
-					span:  lastSpan,
-					msg:   "content labelled multiple times",
-					hints: []string{"only the last label is used, the rest are ignored"},
-				})
-				delete(fr.s.labels, old.Name)
-			}
-			if fr.s.labels == nil {
-				fr.s.labels = make(map[name.Name]struct{})
-			}
-			fr.s.labels[lbl.Name] = struct{}{}
+			fr.attachLabel(ret[len(ret)-1], lbl, lastSpan)
 			continue
 		}
 		cv, err := value.ToContent(v)
 		if err != nil {
-			raise(&ValueError{span: c.Span(), msg: err.Error()})
+			fr.error(c.Span(), err.Error())
+			continue
 		}
 		if cv == nil {
 			continue
@@ -499,20 +743,20 @@ func evalContentResult(fr *frame, c *expr.ContentResult) value.Value {
 // methods, module definitions, dict keys, and content fields are all
 // supported. span covers the whole `target.field` expression and is used
 // for type-level errors; fieldSpan covers just the `.field` portion and is
-// used for content-field errors.
-func evalFieldRead(target value.Value, fname name.Name, span, fieldSpan syntax.Span) value.Value {
+// used for content-field errors. Returns (nil, err) when the access fails.
+func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldSpan syntax.Span) value.Value {
 	switch t := target.(type) {
 	case *value.Type:
 		ms := builtin.TypeFields[t.Reflected]
 		f := ms[fname]
 		if f == nil {
-			raise(&ValueError{span: span, msg: fmt.Sprintf("type %s has no method `%s`", t.Reflected, fname.String())})
+			return fr.errorf(span, "type %s has no method `%s`", t.Reflected, fname.String())
 		}
 		return f
 	case *value.Module:
 		def := t.Definitions[fname]
 		if def == nil {
-			raise(&ValueError{span: fieldSpan, msg: fmt.Sprintf("module %s has no definition `%s`", t.Name, fname.String())})
+			return fr.errorf(fieldSpan, "module %s has no definition `%s`", t.Name, fname.String())
 		}
 		return def
 	}
@@ -522,9 +766,9 @@ func evalFieldRead(target value.Value, fname name.Name, span, fieldSpan syntax.S
 			fn, err := f.With(&value.Arguments{Positional: []value.Value{target}})
 			if err != nil {
 				if fcerr, ok := err.(*value.FunctionCallError); ok {
-					raise(&ValueError{span: fieldSpan, msg: fcerr.Msg, hints: fcerr.Hints})
+					return fr.error(fieldSpan, fcerr.Msg, fcerr.Hints...)
 				}
-				raise(&ValueError{span: fieldSpan, msg: err.Error()})
+				return fr.error(fieldSpan, err.Error())
 			}
 			return fn
 		default:
@@ -536,38 +780,37 @@ func evalFieldRead(target value.Value, fname name.Name, span, fieldSpan syntax.S
 		if val, ok := t.Elems.Get(value.Str(fname.String())); ok {
 			return val
 		}
-		raise(&ValueError{span: fieldSpan, msg: fmt.Sprintf("dictionary does not have an entry %q", fname.String())})
+		return fr.errorf(fieldSpan, "dictionary does not have an entry %q", fname.String())
 	case value.Content:
 		f := t.Field(fname)
 		if f == nil {
-			raise(&ValueError{span: fieldSpan, msg: fmt.Sprintf("content does not have field %q", fname.String())})
+			return fr.errorf(fieldSpan, "content does not have field %q", fname.String())
 		}
 		return f
 	}
-	raise(&ValueError{span: span, msg: fmt.Sprintf("type %s has no method `%s`", target.Type(), fname.String())})
-	panic("unreachable")
+	return fr.errorf(span, "type %s has no method `%s`", target.Type(), fname.String())
 }
 
-// resolveCallee unwraps a callee value into the underlying function. Raises
-// a value error if the value is not callable.
-func resolveCallee(callee value.Value, span syntax.Span) *value.Function {
+// resolveCallee unwraps a callee value into the underlying function.
+// Returns (nil, err) when the value isn't callable.
+func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Function, *value.Error) {
 	switch cc := callee.(type) {
 	case *value.Function:
-		return cc
+		return cc, nil
 	case *value.Type:
 		if cc.Constructor == nil {
-			raise(&ValueError{span: span, msg: fmt.Sprintf("type %s is not callable", cc.Reflected)})
+			return nil, fr.errorf(span, "type %s is not callable", cc.Reflected)
 		}
-		return cc.Constructor
+		return cc.Constructor, nil
 	default:
-		raise(&ValueError{span: span, msg: fmt.Sprintf("attempted to call a non-function value of type %s", callee.Type())})
+		return nil, fr.errorf(span, "attempted to call a non-function value of type %s", callee.Type())
 	}
-	panic("unreachable")
 }
 
 // buildCallArgs evaluates a SSA call's argument list and trailing content
-// blocks into a runtime [value.Arguments].
-func buildCallArgs(fr *frame, callSpan syntax.Span, callArgs []expr.CallArg, blocks []expr.Ref) value.Arguments {
+// blocks into a runtime [value.Arguments]. Returns (args, err) where err is
+// non-nil when a spread operand has an unsupported type.
+func (fr *frame) buildCallArgs(callSpan syntax.Span, callArgs []expr.CallArg, blocks []expr.Ref) (value.Arguments, *value.Error) {
 	var args value.Arguments
 	for _, a := range callArgs {
 		if a.Value == expr.NoRef {
@@ -603,61 +846,77 @@ func buildCallArgs(fr *frame, callSpan syntax.Span, callArgs []expr.CallArg, blo
 				}
 			case value.None:
 			default:
-				raise(&ValueError{span: callSpan, msg: fmt.Sprintf("cannot spread %s", v.Type())})
+				return args, fr.errorf(callSpan, "cannot spread %s", v.Type())
 			}
 		}
 	}
 	for _, b := range blocks {
 		args.Positional = append(args.Positional, fr.get(b))
 	}
-	return args
+	return args, nil
 }
 
-// raiseApplyErr unwraps a function-call error and re-raises one [ValueError]
-// per inner error, attributed to the source span of the offending argument
-// (or callSpan when the location can't be matched).
-func raiseApplyErr(fn *value.Function, callSpan syntax.Span, callArgs []expr.CallArg, err error) {
+// applyErr unwraps a function-call error returned by [value.Function.Apply]
+// and records one diagnostic per inner error, each attributed to the source
+// span of the offending argument (or callSpan when the location can't be
+// matched). Returns a [*value.Error] suitable for assigning to the call's
+// result slot (the first recorded error).
+func (fr *frame) applyErr(fn *value.Function, callSpan syntax.Span, callArgs []expr.CallArg, err error) *value.Error {
 	var inErrs []error
 	if wrapped, ok := err.(interface{ Unwrap() []error }); ok {
 		inErrs = wrapped.Unwrap()
 	} else {
 		inErrs = []error{err}
 	}
-	var errs []Error
+	var first *value.Error
 	for _, ie := range inErrs {
+		var span syntax.Span
+		var msg string
+		var hints []string
 		if fcerr, ok := errors.AsType[*value.FunctionCallError](ie); ok {
-			errs = append(errs, &ValueError{
-				span:  locateArgErrSpan(fn, callSpan, callArgs, fcerr.Location),
-				msg:   fcerr.Msg,
-				hints: fcerr.Hints,
-			})
+			span = locateArgErrSpan(fn, callSpan, callArgs, fcerr.Location)
+			msg = fcerr.Msg
+			hints = fcerr.Hints
 		} else {
-			errs = append(errs, &ValueError{span: callSpan, msg: ie.Error()})
+			span = callSpan
+			msg = ie.Error()
+		}
+		ve := fr.error(span, msg, hints...)
+		if first == nil {
+			first = ve
 		}
 	}
-	raise(errs...)
+	return first
 }
 
 // evalCall lowers an SSA Call instruction to a [value.Function.Apply].
-func evalCall(fr *frame, c *expr.Call) value.Value {
-	fn := resolveCallee(fr.get(c.Callee), c.Span())
-	args := buildCallArgs(fr, c.Span(), c.Args, c.Blocks)
+// Returns (nil, err) when the callee can't be resolved, an argument spread
+// fails, or the call itself reports an error.
+func (fr *frame) evalCall(c *expr.Call) value.Value {
+	fn, e := fr.resolveCallee(fr.get(c.Callee), c.Span())
+	if e != nil {
+		return e
+	}
+	args, e := fr.buildCallArgs(c.Span(), c.Args, c.Blocks)
+	if e != nil {
+		return e
+	}
 
 	// Warn when a direct float literal is passed to decimal().
 	if fn.Name == "decimal" && len(c.Args) > 0 && c.Args[0].DirectFloatLit {
 		if f, ok := fr.get(c.Args[0].Value).(value.Float); ok {
-			fr.s.warn(&ValueError{
-				span:  c.Args[0].Span,
-				msg:   "creating a decimal using imprecise float literal",
-				hints: []string{"use a string in the decimal constructor to avoid loss of precision: `decimal(\"" + f.String() + "\")`"},
-			})
+			fr.warn(
+				c.Args[0].Span,
+				"creating a decimal using imprecise float literal",
+				"use a string in the decimal constructor to avoid loss of precision: `decimal(\""+f.String()+"\")`",
+			)
 		}
 	}
 
 	fcc := value.FunctionCallContext{Span: c.Span()}
 	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
-		raiseApplyErr(fn, c.Span(), c.Args, err)
+		return fr.applyErr(fn, c.Span(), c.Args, err)
 	}
 	return v
 }
@@ -665,35 +924,43 @@ func evalCall(fr *frame, c *expr.Call) value.Value {
 // evalCallSet implements lvalue-style assignment to a function call (e.g.
 // `arr.at(i) = v`, `dict.at("k") += 1`). The callee is invoked with a
 // [FunctionCallContext.Setter] pointer; if the function registers a setter,
-// it is invoked with the (possibly op-combined) new value.
-func evalCallSet(fr *frame, c *expr.CallSet) {
-	fn := resolveCallee(fr.get(c.Callee), c.Span())
-	args := buildCallArgs(fr, c.Span(), c.Args, c.Blocks)
+// it is invoked with the (possibly op-combined) new value. Returns the
+// first error encountered, or none on success.
+func (fr *frame) evalCallSet(c *expr.CallSet) value.Value {
+	fn, e := fr.resolveCallee(fr.get(c.Callee), c.Span())
+	if e != nil {
+		return e
+	}
+	args, e := fr.buildCallArgs(c.Span(), c.Args, c.Blocks)
+	if e != nil {
+		return e
+	}
 
 	var setter func(value.Value)
 	fcc := value.FunctionCallContext{Span: c.Span(), Setter: &setter}
 	cur, err := fn.Apply(&fcc, &args)
 	if err != nil {
-		raiseApplyErr(fn, c.Span(), c.Args, err)
+		return fr.applyErr(fn, c.Span(), c.Args, err)
 	}
 	if setter == nil {
-		raise(&ValueError{span: c.Span(), msg: "cannot mutate a temporary value"})
+		return fr.error(c.Span(), "cannot mutate a temporary value")
 	}
 	newVal := fr.get(c.NewVal)
 	if c.Op != syntax.Assign {
 		combined, err := value.BinaryOp(c.Op, cur, newVal)
 		if err != nil {
-			raise(&ValueError{span: c.Span(), msg: err.Error()})
+			return fr.error(c.Span(), err.Error())
 		}
 		newVal = combined
 	}
 	setter(newVal)
+	return value.None{}
 }
 
 // evalFieldWrite implements `x.f = v` (and compound forms). For now it
 // supports writing to dictionary fields; other field-writes (e.g. content
-// fields) are uncommon as lvalues and will raise an error.
-func evalFieldWrite(fr *frame, w *expr.FieldWrite) {
+// fields) are uncommon as lvalues and return an error.
+func (fr *frame) evalFieldWrite(w *expr.FieldWrite) value.Value {
 	target := fr.get(w.Target)
 	newVal := fr.get(w.NewVal)
 	switch t := target.(type) {
@@ -702,17 +969,18 @@ func evalFieldWrite(fr *frame, w *expr.FieldWrite) {
 		if w.Op != syntax.Assign {
 			cur, ok := t.Elems.Get(key)
 			if !ok {
-				raise(&ValueError{span: w.Span(), msg: fmt.Sprintf("dictionary does not have an entry %q", w.Field.String())})
+				return fr.errorf(w.Span(), "dictionary does not have an entry %q", w.Field.String())
 			}
 			combined, err := value.BinaryOp(w.Op, cur, newVal)
 			if err != nil {
-				raise(&ValueError{span: w.Span(), msg: err.Error()})
+				return fr.error(w.Span(), err.Error())
 			}
 			newVal = combined
 		}
 		t.Elems.Put(key, newVal)
+		return value.None{}
 	default:
-		raise(&ValueError{span: w.Span(), msg: fmt.Sprintf("cannot assign to field of %s", target.Type())})
+		return fr.errorf(w.Span(), "cannot assign to field of %s", target.Type())
 	}
 }
 
@@ -834,9 +1102,11 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 // iterator backing store. [value.Value] is a closed interface, so we keep
 // the state in a sidecar map ([ssaFrame.iters]) instead.
 
+// iteratorState is the runtime cursor for one IterOpen/IterHasNext/IterAdvance
+// triple. Only one of the three value fields (arr, dict, str) is non-nil at a
+// time, depending on the type of the iterable passed to IterOpen.
 type iteratorState struct {
-	span syntax.Span
-	// One of the four populated per kind:
+	// One of the three groups is populated per kind:
 	arr    *value.Array
 	arrPos int
 	dict   *value.Dict
@@ -846,11 +1116,15 @@ type iteratorState struct {
 	strI   int
 }
 
-func newIterator(v value.Value, span syntax.Span) *iteratorState {
-	s := &iteratorState{span: span}
+// newIterator creates an [iteratorState] for the given value. Arrays, dicts,
+// and strings are supported; any other type yields an error. For dicts the
+// key slice is snapshotted at open time so concurrent mutations don't affect
+// iteration order.
+func (fr *frame) newIterator(v value.Value, span syntax.Span) (*iteratorState, *value.Error) {
 	if v == nil {
-		raise(&ValueError{span: span, msg: "cannot loop over uninitialised value"})
+		return nil, fr.error(span, "cannot loop over uninitialised value")
 	}
+	s := &iteratorState{}
 	switch v := v.(type) {
 	case *value.Array:
 		s.arr = v
@@ -864,11 +1138,12 @@ func newIterator(v value.Value, span syntax.Span) *iteratorState {
 			s.str = append(s.str, g)
 		}
 	default:
-		raise(&ValueError{span: span, msg: fmt.Sprintf("cannot loop over %s", v.Type())})
+		return nil, fr.errorf(span, "cannot loop over %s", v.Type())
 	}
-	return s
+	return s, nil
 }
 
+// hasNext reports whether the iterator has at least one more element.
 func (s *iteratorState) hasNext() bool {
 	switch {
 	case s.arr != nil:
@@ -880,6 +1155,8 @@ func (s *iteratorState) hasNext() bool {
 	}
 }
 
+// advance returns the next element and advances the cursor. Callers must
+// check [iteratorState.hasNext] before calling advance.
 func (s *iteratorState) advance() value.Value {
 	switch {
 	case s.arr != nil:

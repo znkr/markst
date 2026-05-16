@@ -350,11 +350,12 @@ func (b *Builder) AttachLabel(span syntax.Span, content Ref, label name.Name) Re
 	})
 }
 
-// RaiseError emits an instruction that, at eval time, unconditionally raises
-// a value error with msg.
-func (b *Builder) RaiseError(span syntax.Span, msg string) Ref {
+// Error emits an instruction that, at eval time, raises a value error with
+// msg. If from is non-NoRef and resolves to a [value.Error] at runtime, the
+// upstream error is propagated as the result and msg is suppressed.
+func (b *Builder) Error(span syntax.Span, msg string, from Ref, hints ...string) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &RaiseError{instr: instr{result: ref, span: span}, Msg: msg}
+		return &Error{instr: instr{result: ref, span: span}, Msg: msg, Hints: hints, From: from}
 	})
 }
 

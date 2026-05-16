@@ -75,6 +75,7 @@
 
 // Error: 7-8 unknown variable: x
 #test(x, 1)
+│ #parbreak()
 
 --- code-block-scope-in-let ---
 // Block in expression does create a scope.
@@ -87,6 +88,8 @@
 
 // Error: 3-4 unknown variable: b
 #{b}
+│ #parbreak()
+│ #parbreak()
 
 --- code-block-double-scope (skip: modules not implemented yet) ---
 // Double block creates a scope.
@@ -123,6 +126,7 @@
 // Error: 13 expected semicolon or line break
 // Error: 23 expected semicolon or line break
 #{let x = -1 let y = 3 x + y}
+│ #raw("2")
 
 --- code-block-incomplete-expressions ---
 #{
@@ -159,6 +163,21 @@
   // Hint: 10-11 try using a backslash escape: \]
   - error][]
 [[]]
+│ #text("[")
+│ #heading(level: 1)
+│ #text("]")
+│ #text("]")
+│ #list.item[#text("how")
+│ #text("[")
+│ #list.item[#text("are")]]
+│ #text("]")
+│ #list.item[#text("error")]
+│ #text("[")
+│ #text("]")
+│ #text("[")
+│ #text("[")
+│ #text("]")
+│ #text("]")
 
 --- right-bracket-hash ---
 // Error: 2-3 unexpected closing bracket
@@ -184,6 +203,8 @@
 // Error: 4-5 unexpected closing bracket
 // Hint: 4-5 try using a backslash escape: \]
 #{{]}}
+│ #parbreak()
+│ #text("}}")
 
 --- content-block-in-markup-scope ---
 // Content blocks also create a scope.
@@ -191,3 +212,5 @@
 
 // Error: 2-3 unknown variable: x
 #x
+│ 
+│ #parbreak()

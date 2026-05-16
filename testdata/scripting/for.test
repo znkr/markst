@@ -179,3 +179,16 @@ A#for "v" thing
 #for x "a
 b
 c
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()
+│ #text("v in iter")
+│ #text("{}")
+│ #parbreak()
+│ #text("A")
+│ #parbreak()
+│ #parbreak()
+│ #parbreak()

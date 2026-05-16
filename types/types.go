@@ -39,6 +39,7 @@ const (
 	Content
 	Label
 	Module
+	Error
 )
 
 var types = [...]string{
@@ -63,6 +64,7 @@ var types = [...]string{
 	Content:       "content",
 	Label:         "label",
 	Module:        "module",
+	Error:         "error",
 }
 
 func (t Type) String() string {

@@ -389,10 +389,7 @@ fn $fn_0 name="f" captures=[v1=n] params=[v0=x]:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := parser.Parse(tt.src)
-			mod, err := Analyze(root)
-			if err != nil {
-				t.Fatalf("Analyze: %v", err)
-			}
+			mod := Analyze(root)
 			got := expr.FormatModule(mod)
 			if got != tt.want {
 				t.Errorf("Analyze mismatch:\n--- got ---\n%s--- want ---\n%s", got, tt.want)

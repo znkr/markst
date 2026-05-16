@@ -282,6 +282,14 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 		fmt.Fprintf(sb, "contextual %s", formatRef(i.Body))
 	case *ModuleInclude:
 		fmt.Fprintf(sb, "module_include %s", formatRef(i.Source))
+	case *Error:
+		fmt.Fprintf(sb, "error msg=%q", i.Msg)
+		if i.From != NoRef {
+			fmt.Fprintf(sb, " from=%s", formatRef(i.From))
+		}
+		for _, h := range i.Hints {
+			fmt.Fprintf(sb, " hint=%q", h)
+		}
 	default:
 		fmt.Fprintf(sb, "%T", inst)
 	}
