@@ -54,6 +54,12 @@ func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	}
 }
 
+// UnsafeKeys returns the keys in insertion order.
+// The returned slice should not be modified by the caller.
+func (m *Map[K, V]) UnsafeKeys() []K {
+	return m.keys
+}
+
 // Len returns the number of key-value pairs in the map.
 func (m *Map[K, V]) Len() int {
 	return len(m.keys)

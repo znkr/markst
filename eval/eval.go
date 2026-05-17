@@ -458,7 +458,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.vals[r] = value.None{}
 	case *expr.IterHasNext:
 		it := fr.iters[i.Iter]
-		fr.vals[r] = value.Bool(it.hasNext())
+		fr.vals[r] = value.Bool(it.hasNext)
 	case *expr.IterAdvance:
 		it := fr.iters[i.Iter]
 		fr.vals[r] = it.advance()
@@ -1106,14 +1106,8 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 // triple. Only one of the three value fields (arr, dict, str) is non-nil at a
 // time, depending on the type of the iterable passed to IterOpen.
 type iteratorState struct {
-	// One of the three groups is populated per kind:
-	arr    *value.Array
-	arrPos int
-	dict   *value.Dict
-	keys   []value.Str
-	dictI  int
-	str    []string // grapheme-segmented string; consumed front-to-back
-	strI   int
+	hasNext bool
+	next    func() (value.Value, bool)
 }
 
 // newIterator creates an [iteratorState] for the given value. Arrays, dicts,
@@ -1125,52 +1119,44 @@ func (fr *frame) newIterator(v value.Value, span syntax.Span) (*iteratorState, *
 		return nil, fr.error(span, "cannot loop over uninitialised value")
 	}
 	s := &iteratorState{}
-	switch v := v.(type) {
+	switch val := v.(type) {
 	case *value.Array:
-		s.arr = v
+		i := 0
+		s.hasNext = i < len(val.Elems)
+		s.next = func() (value.Value, bool) {
+			v := val.Elems[i]
+			i = min(i+1, len(val.Elems))
+			return v, i < len(val.Elems)
+		}
 	case *value.Dict:
-		s.dict = v
-		for k := range v.Elems.All() {
-			s.keys = append(s.keys, k)
+		i := 0
+		keys := val.Elems.UnsafeKeys()
+		s.hasNext = i < len(keys)
+		s.next = func() (value.Value, bool) {
+			k := keys[i]
+			i = min(i+1, len(keys))
+			v, _ := val.Elems.Get(k)
+			return &value.Array{Elems: []value.Value{k, v}}, i < len(keys)
 		}
 	case value.Str:
-		for g := range graphemes.Graphemes(string(v)) {
-			s.str = append(s.str, g)
+		i := 0
+		str := string(val)
+		s.hasNext = i < len(str)
+		s.next = func() (value.Value, bool) {
+			r, size := graphemes.Decode(str[i:])
+			i = min(i+size, len(str))
+			return value.Str(r), i < len(str)
 		}
 	default:
-		return nil, fr.errorf(span, "cannot loop over %s", v.Type())
+		return nil, fr.errorf(span, "cannot loop over %s", val.Type())
 	}
 	return s, nil
-}
-
-// hasNext reports whether the iterator has at least one more element.
-func (s *iteratorState) hasNext() bool {
-	switch {
-	case s.arr != nil:
-		return s.arrPos < len(s.arr.Elems)
-	case s.dict != nil:
-		return s.dictI < len(s.keys)
-	default:
-		return s.strI < len(s.str)
-	}
 }
 
 // advance returns the next element and advances the cursor. Callers must
 // check [iteratorState.hasNext] before calling advance.
 func (s *iteratorState) advance() value.Value {
-	switch {
-	case s.arr != nil:
-		v := s.arr.Elems[s.arrPos]
-		s.arrPos++
-		return v
-	case s.dict != nil:
-		k := s.keys[s.dictI]
-		s.dictI++
-		v, _ := s.dict.Elems.Get(k)
-		return &value.Array{Elems: []value.Value{k, v}}
-	default:
-		g := s.str[s.strI]
-		s.strI++
-		return value.Str(g)
-	}
+	v, hasNext := s.next()
+	s.hasNext = hasNext
+	return v
 }
