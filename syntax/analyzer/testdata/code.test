@@ -2,65 +2,53 @@
 #"hello world"
 │ fn $top:
 │   b0:
-│     v0 = const hello world
-│     return v0
+│     return hello world
 
 --- identifier ---
 #let foo
 #foo
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     return v0
+│     return none
 
 --- field-access ---
 #let foo = (bar: "bar")
 #foo.bar
 │ fn $top:
 │   b0:
-│     v0 = const bar
-│     v1 = const bar
-│     v2 = make_dict (v0: v1)
-│     v3 = field_read v2.bar
-│     return v3
+│     v0 = make_dict (bar: bar)
+│     v1 = field_read v0.bar
+│     return v1
 
 --- nested-field-access ---
 #let foo = (bar: (baz: "baz"))
 #foo.bar.baz
 │ fn $top:
 │   b0:
-│     v0 = const bar
-│     v1 = const baz
-│     v2 = const baz
-│     v3 = make_dict (v1: v2)
-│     v4 = make_dict (v0: v3)
-│     v5 = field_read v4.bar
-│     v6 = field_read v5.baz
-│     return v6
+│     v0 = make_dict (baz: baz)
+│     v1 = make_dict (bar: v0)
+│     v2 = field_read v1.bar
+│     v3 = field_read v2.baz
+│     return v3
 
 --- code-block-empty ---
 #{}
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     return v0
+│     return none
 
 --- code-block-single ---
 #{ 1 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     return v0
+│     return 1
 
 --- code-block-multiple ---
 #{ 1; 2; 3 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = const 3
-│     v3 = code_join [v0, v1, v2]
-│     return v3
+│     v0 = code_join [1, 2, 3]
+│     return v0
 
 --- content-block-in-code ---
 #{ [hello *world*] }
@@ -76,150 +64,106 @@
 #{ (1) }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     return v0
+│     return 1
 
 --- unary-plus ---
 #{ +1 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = + v0
-│     return v1
+│     return 1
 
 --- unary-minus ---
 #{ -1 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = - v0
-│     return v1
+│     return -1
 
 --- unary-not ---
 #{ not true }
 │ fn $top:
 │   b0:
-│     v0 = const true
-│     v1 = not v0
-│     return v1
+│     return false
 
 --- binary-addition ---
 #{ 1 + 2 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = v0 + v1
-│     return v2
+│     return 3
 
 --- binary-subtraction ---
 #{ 3 - 4 }
 │ fn $top:
 │   b0:
-│     v0 = const 3
-│     v1 = const 4
-│     v2 = v0 - v1
-│     return v2
+│     return -1
 
 --- binary-multiplication ---
 #{ 5 * 6 }
 │ fn $top:
 │   b0:
-│     v0 = const 5
-│     v1 = const 6
-│     v2 = v0 * v1
-│     return v2
+│     return 30
 
 --- binary-division ---
 #{ 7 / 8 }
 │ fn $top:
 │   b0:
-│     v0 = const 7
-│     v1 = const 8
-│     v2 = v0 / v1
-│     return v2
+│     return 0.875
 
 --- binary-equality ---
 #{ 1 == 2 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = v0 == v1
-│     return v2
+│     return false
 
 --- binary-inequality ---
 #{ 3 != 4 }
 │ fn $top:
 │   b0:
-│     v0 = const 3
-│     v1 = const 4
-│     v2 = v0 != v1
-│     return v2
+│     return true
 
 --- binary-less-than ---
 #{ 5 < 6 }
 │ fn $top:
 │   b0:
-│     v0 = const 5
-│     v1 = const 6
-│     v2 = v0 < v1
-│     return v2
+│     return true
 
 --- binary-less-than-or-equal ---
 #{ 7 <= 8 }
 │ fn $top:
 │   b0:
-│     v0 = const 7
-│     v1 = const 8
-│     v2 = v0 <= v1
-│     return v2
+│     return true
 
 --- binary-greater-than ---
 #{ 9 > 10 }
 │ fn $top:
 │   b0:
-│     v0 = const 9
-│     v1 = const 10
-│     v2 = v0 > v1
-│     return v2
+│     return false
 
 --- binary-greater-than-or-equal ---
 #{ 11 >= 12 }
 │ fn $top:
 │   b0:
-│     v0 = const 11
-│     v1 = const 12
-│     v2 = v0 >= v1
-│     return v2
+│     return false
 
 --- binary-and ---
 #{ true and false }
 │ fn $top:
 │   b0:
-│     v0 = const true
-│     branch v0, b1, b2
+│     branch true, b1, b2
 │   b1:
-│     v1 = const false
-│     v2 = v0 and v1
 │     jump b2
 │   b2:
-│     v3 = phi [b0 v0, b1 v2]
-│     return v3
+│     v0 = phi [b0 true, b1 false]
+│     return v0
 
 --- binary-or ---
 #{ true or false }
 │ fn $top:
 │   b0:
-│     v0 = const true
-│     branch v0, b2, b1
+│     branch true, b2, b1
 │   b1:
-│     v1 = const false
-│     v2 = v0 or v1
 │     jump b2
 │   b2:
-│     v3 = phi [b0 v0, b1 v2]
-│     return v3
+│     return true
 
 --- binary-in ---
 #let x = 1
@@ -227,11 +171,9 @@
 #{ x in y }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 1
-│     v2 = make_array [v1]
-│     v3 = v0 in v2
-│     return v3
+│     v0 = make_array [1]
+│     v1 = 1 in v0
+│     return v1
 
 --- binary-not-in ---
 #let x = 1
@@ -239,98 +181,62 @@
 #{ x not in y }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 1
-│     v2 = make_array [v1]
-│     v3 = v0 not in v2
-│     return v3
+│     v0 = make_array [1]
+│     v1 = 1 not in v0
+│     return v1
 
 --- binary-assignment ---
 #let x
 #{ x = 1 }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const 1
-│     v2 = const none
-│     return v2
+│     return none
 
 --- binary-add-assign ---
 #let x = 2
 #{ x += 2 }
 │ fn $top:
 │   b0:
-│     v0 = const 2
-│     v1 = const 2
-│     v2 = v0 + v1
-│     v3 = const none
-│     return v3
+│     return none
 
 --- binary-sub-assign ---
 #let x = 2
 #{ x -= 3 }
 │ fn $top:
 │   b0:
-│     v0 = const 2
-│     v1 = const 3
-│     v2 = v0 - v1
-│     v3 = const none
-│     return v3
+│     return none
 
 --- binary-mul-assign ---
 #let x = 2
 #{ x *= 4 }
 │ fn $top:
 │   b0:
-│     v0 = const 2
-│     v1 = const 4
-│     v2 = v0 * v1
-│     v3 = const none
-│     return v3
+│     return none
 
 --- binary-div-assign ---
 #let x = 2
 #{ x /= 5 }
 │ fn $top:
 │   b0:
-│     v0 = const 2
-│     v1 = const 5
-│     v2 = v0 / v1
-│     v3 = const none
-│     return v3
+│     return none
 
 --- operator-precedence-mul-over-add ---
 #{ 1 + 2 * 3 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = const 3
-│     v3 = v1 * v2
-│     v4 = v0 + v3
-│     return v4
+│     return 7
 
 --- operator-precedence-with-parens ---
 #{ (1 + 2) * 3 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = v0 + v1
-│     v3 = const 3
-│     v4 = v2 * v3
-│     return v4
+│     return 9
 
 --- left-associativity ---
 #{ 1 - 2 - 3 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = v0 - v1
-│     v3 = const 3
-│     v4 = v2 - v3
-│     return v4
+│     return -4
 
 --- right-associativity-assignment ---
 #let x
@@ -338,12 +244,7 @@
 #{ x = y = 1 }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const 1
-│     v3 = const none
-│     v4 = const none
-│     return v4
+│     return none
 
 --- empty-array ---
 #()
@@ -356,19 +257,15 @@
 #(1,)
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = make_array [v0]
-│     return v1
+│     v0 = make_array [1]
+│     return v0
 
 --- multi-element-array ---
 #(1, 2, 3)
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = const 3
-│     v3 = make_array [v0, v1, v2]
-│     return v3
+│     v0 = make_array [1, 2, 3]
+│     return v0
 
 --- empty-dictionary ---
 #(:)
@@ -381,52 +278,39 @@
 #(a: 1, b: 2)
 │ fn $top:
 │   b0:
-│     v0 = const a
-│     v1 = const 1
-│     v2 = const b
-│     v3 = const 2
-│     v4 = make_dict (v0: v1, v2: v3)
-│     return v4
+│     v0 = make_dict (a: 1, b: 2)
+│     return v0
 
 --- dictionary-with-keyed-entries ---
 #("key": "value")
 │ fn $top:
 │   b0:
-│     v0 = const key
-│     v1 = const value
-│     v2 = make_dict (v0: v1)
-│     return v2
+│     v0 = make_dict (key: value)
+│     return v0
 
 --- function-call-no-args ---
 #let foo
 #foo()
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = call v0()
-│     return v1
+│     v0 = call none()
+│     return v0
 
 --- function-call-with-args ---
 #let foo
 #{ foo(1, 2) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const 1
-│     v2 = const 2
-│     v3 = call v0(v1, v2)
-│     return v3
+│     v0 = call none(1, 2)
+│     return v0
 
 --- function-call-with-named-args ---
 #let foo
 #{ foo(a: 1, b: 2) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const 1
-│     v2 = const 2
-│     v3 = call v0(a: v1, b: v2)
-│     return v3
+│     v0 = call none(a: 1, b: 2)
+│     return v0
 
 --- function-call-with-spread ---
 #let foo
@@ -434,56 +318,49 @@
 #{ foo(..args) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = call v0(..v1)
-│     return v2
+│     v0 = call none(..none)
+│     return v0
 
 --- function-call-with-content-block ---
 #let foo
 #foo[hello]
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const text "hello"
-│     v2 = content_result [v1]
-│     v3 = call v0()[v2]
-│     return v3
+│     v0 = const text "hello"
+│     v1 = content_result [v0]
+│     v2 = call none()[v1]
+│     return v2
 
 --- function-call-with-multiple-content-blocks ---
 #let foo
 #foo[hello][world]
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const text "hello"
-│     v2 = content_result [v1]
-│     v3 = const text "world"
-│     v4 = content_result [v3]
-│     v5 = call v0()[v2][v4]
-│     return v5
+│     v0 = const text "hello"
+│     v1 = content_result [v0]
+│     v2 = const text "world"
+│     v3 = content_result [v2]
+│     v4 = call none()[v1][v3]
+│     return v4
 
 --- function-call-with-args-and-content ---
 #let foo
 #foo(1)[hello]
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const 1
-│     v2 = const text "hello"
-│     v3 = content_result [v2]
-│     v4 = call v0(v1)[v3]
-│     return v4
+│     v0 = const text "hello"
+│     v1 = content_result [v0]
+│     v2 = call none(1)[v1]
+│     return v2
 
 --- method-call ---
 #let foo
 #foo.bar()
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = field_read v0.bar
-│     v2 = call v1()
-│     return v2
+│     v0 = field_read none.bar
+│     v1 = call v0()
+│     return v1
 
 --- simple-closure ---
 #{ x => x + 1 }
@@ -494,9 +371,8 @@
 │ 
 │ fn $fn_0 params=[v0=x]:
 │   b0:
-│     v1 = const 1
-│     v2 = v0 + v1
-│     return v2
+│     v1 = v0 + 1
+│     return v1
 
 --- underscore-closure ---
 #{ _ => 42 }
@@ -507,8 +383,7 @@
 │ 
 │ fn $fn_0 params=[v0=_]:
 │   b0:
-│     v1 = const 42
-│     return v1
+│     return 42
 
 --- multi-param-closure ---
 #{ (x, y) => x + y }
@@ -526,9 +401,8 @@
 #{ (a, b: 1) => a + b }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = make_closure $fn_0 captures=[v0]
-│     return v1
+│     v0 = make_closure $fn_0 captures=[1]
+│     return v0
 │ 
 │ fn $fn_0 captures=[v1=$default$b] params=[v0=a, v2=b:v1]:
 │   b0:
@@ -567,80 +441,93 @@
 #{ let n = 10; () => () => n }
 │ fn $top:
 │   b0:
-│     v0 = const 10
-│     v1 = make_closure $fn_1 captures=[v0]
-│     return v1
-│ 
-│ fn $fn_0 captures=[v0=n]:
-│   b0:
+│     v0 = make_closure $fn_1
 │     return v0
 │ 
-│ fn $fn_1 captures=[v0=n]:
+│ fn $fn_0:
 │   b0:
-│     v1 = make_closure $fn_0 captures=[v0]
-│     return v1
+│     return 10
+│ 
+│ fn $fn_1:
+│   b0:
+│     v0 = make_closure $fn_0
+│     return v0
 
 --- transitive-capture-shared ---
 #{ let n = 10; () => (n, () => n) }
 │ fn $top:
 │   b0:
-│     v0 = const 10
-│     v1 = make_closure $fn_1 captures=[v0]
-│     return v1
-│ 
-│ fn $fn_0 captures=[v0=n]:
-│   b0:
+│     v0 = make_closure $fn_1
 │     return v0
 │ 
-│ fn $fn_1 captures=[v0=n]:
+│ fn $fn_0:
 │   b0:
-│     v1 = make_closure $fn_0 captures=[v0]
+│     return 10
+│ 
+│ fn $fn_1:
+│   b0:
+│     v0 = make_closure $fn_0
+│     v1 = make_array [10, v0]
+│     return v1
+
+--- capture-tracks-mutation ---
+#{
+  let x = 1
+  let f = () => x
+  x = 2
+  let g = () => x
+  (f, g)
+}
+│ fn $top:
+│   b0:
+│     v0 = make_closure $fn_0
+│     v1 = make_closure $fn_1
 │     v2 = make_array [v0, v1]
-│     return v2
+│     v3 = code_join [none, v2]
+│     return v3
+│ 
+│ fn $fn_0 name="f":
+│   b0:
+│     return 1
+│ 
+│ fn $fn_1 name="g":
+│   b0:
+│     return 2
 
 --- let-binding-simple ---
 #{ let x = 1 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const none
-│     return v1
+│     return none
 
 --- let-binding-no-code-block ---
 #let x = 1
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const none
-│     return v1
+│     return none
 
 --- let-binding-pattern ---
 #let pair
 #{ let (a, b) = pair }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     length_check v0, want=2
-│     v2 = extract v0[0]
-│     v3 = extract v0[1]
-│     v4 = const none
-│     return v4
+│     length_check none, want=2
+│     v1 = extract none[0]
+│     v2 = extract none[1]
+│     return none
 
 --- let-binding-without-assignment ---
 #{ let x }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     return v1
+│     return none
 
 --- let-function ---
 #{ let add(x, y) = x + y }
 │ fn $top:
 │   b0:
 │     v0 = make_closure $fn_0
-│     v1 = const none
-│     return v1
+│     return none
 │ 
 │ fn $fn_0 name="add" params=[v0=x, v1=y]:
 │   b0:
@@ -652,10 +539,8 @@
 #{ set text(size: 12pt) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const 12pt
-│     v2 = set_rule v0
-│     return v2
+│     v0 = set_rule none
+│     return v0
 
 --- set-rule-with-condition ---
 #let text
@@ -664,11 +549,8 @@
 #{ set text(red) if enabled }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const none
-│     v3 = set_rule v0
-│     return v3
+│     v0 = set_rule none
+│     return v0
 
 --- set-rule-with-field-access ---
 #let table
@@ -676,20 +558,17 @@
 #{ set table.cell(fill: blue) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = field_read v0.cell
-│     v3 = set_rule v2
-│     return v3
+│     v0 = field_read none.cell
+│     v1 = set_rule v0
+│     return v1
 
 --- show-rule-without-selector ---
 #let emph
 #{ show: emph }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = show_rule: v0
-│     return v1
+│     v0 = show_rule: none
+│     return v0
 
 --- show-rule-with-selector ---
 #let heading
@@ -697,17 +576,15 @@
 #{ show heading: it => emph(it.body) }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = make_closure $fn_0 captures=[v1]
-│     v3 = show_rule v0: v2
-│     return v3
+│     v0 = make_closure $fn_0
+│     v1 = show_rule none: v0
+│     return v1
 │ 
-│ fn $fn_0 captures=[v1=emph] params=[v0=it]:
+│ fn $fn_0 params=[v0=it]:
 │   b0:
-│     v2 = field_read v0.body
-│     v3 = call v1(v2)
-│     return v3
+│     v1 = field_read v0.body
+│     v2 = call none(v1)
+│     return v2
 
 --- conditional-if-only ---
 #let x
@@ -715,16 +592,12 @@
 #{ if x { y } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     branch v0, b2, b3
+│     branch none, b2, b3
 │   b1:
-│     v3 = phi [b2 v1, b3 v2]
-│     return v3
+│     return none
 │   b2:
 │     jump b1
 │   b3:
-│     v2 = const none
 │     jump b1
 
 --- conditional-if-else ---
@@ -734,13 +607,9 @@
 #{ if x { y } else { z } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const none
-│     branch v0, b2, b3
+│     branch none, b2, b3
 │   b1:
-│     v3 = phi [b2 v1, b3 v2]
-│     return v3
+│     return none
 │   b2:
 │     jump b1
 │   b3:
@@ -752,22 +621,17 @@
 #{ if a { 1 } else if b { 2 } else { 3 } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     branch v0, b2, b3
+│     branch none, b2, b3
 │   b1:
-│     v5 = phi [b2 v2, b4 v3, b5 v4]
-│     return v5
+│     v0 = phi [b2 1, b4 2, b5 3]
+│     return v0
 │   b2:
-│     v2 = const 1
 │     jump b1
 │   b3:
-│     branch v1, b4, b5
+│     branch none, b4, b5
 │   b4:
-│     v3 = const 2
 │     jump b1
 │   b5:
-│     v4 = const 3
 │     jump b1
 
 --- while-loop ---
@@ -776,64 +640,60 @@
 #{ while x { y } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = loop_acc_begin
+│     v0 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v5 = phi [b0 v2, b2 v6]
-│     branch v3, b2, b3
+│     v3 = phi [b0 v0, b2 v4]
+│     branch v1, b2, b3
 │   b2:
-│     v6 = loop_acc_add v5, v4
+│     v4 = loop_acc_add v3, v2
 │     jump b1
 │   b3:
-│     v7 = loop_acc_result v5
-│     return v7
+│     v5 = loop_acc_result v3
+│     return v5
 
 --- for-loop ---
 #let items
 #{ for x in items { x } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = iter_open v0
-│     v2 = loop_acc_begin
+│     v0 = iter_open none
+│     v1 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v5 = phi [b0 v2, b2 v6]
-│     v3 = iter_has_next v1
-│     branch v3, b2, b3
+│     v4 = phi [b0 v1, b2 v5]
+│     v2 = iter_has_next v0
+│     branch v2, b2, b3
 │   b2:
-│     v4 = iter_advance v1
-│     v6 = loop_acc_add v5, v4
+│     v3 = iter_advance v0
+│     v5 = loop_acc_add v4, v3
 │     jump b1
 │   b3:
-│     v7 = loop_acc_result v5
-│     return v7
+│     v6 = loop_acc_result v4
+│     return v6
 
 --- for-loop-with-pattern ---
 #let dict
 #{ for (k, v) in dict { k } }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = iter_open v0
-│     v2 = loop_acc_begin
+│     v0 = iter_open none
+│     v1 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v8 = phi [b0 v2, b2 v9]
-│     v3 = iter_has_next v1
-│     branch v3, b2, b3
+│     v7 = phi [b0 v1, b2 v8]
+│     v2 = iter_has_next v0
+│     branch v2, b2, b3
 │   b2:
-│     v4 = iter_advance v1
-│     length_check v4, want=2
-│     v6 = extract v4[0]
-│     v7 = extract v4[1]
-│     v9 = loop_acc_add v8, v6
+│     v3 = iter_advance v0
+│     length_check v3, want=2
+│     v5 = extract v3[0]
+│     v6 = extract v3[1]
+│     v8 = loop_acc_add v7, v5
 │     jump b1
 │   b3:
-│     v10 = loop_acc_result v8
-│     return v10
+│     v9 = loop_acc_result v7
+│     return v9
 
 --- break ---
 #{ while true { break } }
@@ -842,17 +702,15 @@
 │     v0 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v5 = phi [b0 v0, b4 v3]
-│     v1 = const true
-│     branch v1, b2, b3
+│     v3 = phi [b0 v0, b4 v1]
+│     branch true, b2, b3
 │   b2:
 │     jump b3
 │   b3:
-│     v6 = loop_acc_result v5
-│     return v6
+│     v4 = loop_acc_result v3
+│     return v4
 │   b4:
-│     v2 = const none
-│     v3 = loop_acc_add <noref>, v2
+│     v1 = loop_acc_add <noref>, none
 │     jump b1
 
 --- continue ---
@@ -862,17 +720,15 @@
 │     v0 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v4 = phi [b0 v0, b2 v4, b4 v3]
-│     v1 = const true
-│     branch v1, b2, b3
+│     v2 = phi [b0 v0, b2 v2, b4 v1]
+│     branch true, b2, b3
 │   b2:
 │     jump b1
 │   b3:
-│     v5 = loop_acc_result v4
-│     return v5
+│     v3 = loop_acc_result v2
+│     return v3
 │   b4:
-│     v2 = const none
-│     v3 = loop_acc_add <noref>, v2
+│     v1 = loop_acc_add <noref>, none
 │     jump b1
 
 --- return-with-value ---
@@ -880,58 +736,49 @@
 │ fn $top:
 │   b0:
 │     v0 = make_closure $fn_0
-│     v1 = const none
-│     return v1
+│     return none
 │ 
 │ fn $fn_0 name="f":
 │   b0:
-│     v0 = const 1
-│     return v0
+│     return 1
 │   b1:
-│     v1 = const none
-│     return v1
+│     return none
 
 --- return-without-value ---
 #{ let f() = { return } }
 │ fn $top:
 │   b0:
 │     v0 = make_closure $fn_0
-│     v1 = const none
-│     return v1
+│     return none
 │ 
 │ fn $fn_0 name="f":
 │   b0:
 │     return
 │   b1:
-│     v0 = const none
-│     return v0
+│     return none
 
 --- include ---
 #{ include "other.typ" }
 │ fn $top:
 │   b0:
-│     v0 = const other.typ
-│     v1 = module_include v0
-│     return v1
+│     v0 = module_include other.typ
+│     return v0
 
 --- context-expression ---
 #let text
 #{ context text.lang }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = field_read v0.lang
-│     v2 = contextual v1
-│     return v2
+│     v0 = field_read none.lang
+│     v1 = contextual v0
+│     return v1
 
 --- destructuring-assignment ---
 #let expr
 #{ _ = expr }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     return v1
+│     return none
 
 --- tuple-destructuring ---
 #let x
@@ -940,14 +787,10 @@
 #{ (x, y) = point }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const none
-│     length_check v2, want=2
-│     v4 = extract v2[0]
-│     v5 = extract v2[1]
-│     v6 = const none
-│     return v6
+│     length_check none, want=2
+│     v1 = extract none[0]
+│     v2 = extract none[1]
+│     return none
 
 --- spread-in-destructuring ---
 #let first
@@ -956,11 +799,7 @@
 #{ (first, ..rest) = arr }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const none
-│     v3 = const none
-│     return v3
+│     return none
 
 --- named-in-destructuring ---
 #let a
@@ -969,41 +808,31 @@
 #{ (x: a, y: b) = point }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const none
-│     v2 = const none
-│     length_check v2, want=0
-│     v4 = const none
-│     return v4
+│     length_check none, want=0
+│     return none
 
 --- literals-none-auto-bool ---
 #none #auto #true #false
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = const auto
-│     v2 = const true
-│     v3 = const false
-│     v4 = content_result [v0, v1, v2, v3]
-│     return v4
+│     v0 = const auto
+│     v1 = content_result [none, v0, true, false]
+│     return v1
 
 --- literal-int ---
 #42
 │ fn $top:
 │   b0:
-│     v0 = const 42
-│     return v0
+│     return 42
 
 --- literal-float ---
 #3.14
 │ fn $top:
 │   b0:
-│     v0 = const 3.14
-│     return v0
+│     return 3.14
 
 --- literal-numeric ---
 #12pt
 │ fn $top:
 │   b0:
-│     v0 = const 12pt
-│     return v0
+│     return 12pt

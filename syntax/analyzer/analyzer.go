@@ -98,9 +98,9 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 		opt(a)
 	}
 
-	a.mod = &expr.Module{}
-	a.b = expr.NewBuilder()
-	a.mod.Top = a.b.Function()
+	a.mb = expr.NewModuleBuilder()
+	a.b = a.mb.NewBuilder()
+	a.mb.Module().Top = a.b.Function()
 
 	// Push a new scope to avoid confusion about global names.
 	a.openScope()
@@ -108,14 +108,14 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 
 	result := a.lowerMarkup(n)
 	a.b.Return(syntax.Span{}, result)
-	return a.mod
+	return a.mb.Module()
 }
 
 type analyzer struct {
 	source syntax.Source
 	scope  *scope
 	b      *expr.Builder
-	mod    *expr.Module
+	mb     *expr.ModuleBuilder
 
 	// frames is the stack of in-progress functions. frames[0] is the
 	// document body; frames[len-1] is the innermost closure under
@@ -150,7 +150,7 @@ type frame struct {
 // pushFrame opens a fresh builder and frame scope for a nested closure.
 // Updates [a.b] and [a.scope] to point at the new frame.
 func (a *analyzer) pushFrame() {
-	b := expr.NewBuilder()
+	b := a.mb.NewBuilder()
 	s := &scope{parent: a.scope}
 	a.b = b
 	a.scope = s

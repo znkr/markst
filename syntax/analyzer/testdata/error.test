@@ -142,8 +142,7 @@ Hello #0xG world
 │ fn $top:
 │   b0:
 │     v0 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- unexpected-comma-in-for-pattern ---
 // Error: 7-8 unexpected comma
@@ -152,8 +151,7 @@ Hello #0xG world
 │ fn $top:
 │   b0:
 │     v0 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- for-loop-missing-pattern ---
 // Error: 5 expected pattern
@@ -161,8 +159,7 @@ Hello #0xG world
 │ fn $top:
 │   b0:
 │     v0 = error msg="expected pattern"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- for-loop-missing-iterable ---
 // Error: 10 expected expression
@@ -170,8 +167,7 @@ Hello #0xG world
 │ fn $top:
 │   b0:
 │     v0 = error msg="expected expression"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- for-loop-missing-body ---
 // Error: 15 expected block
@@ -179,8 +175,7 @@ Hello #0xG world
 │ fn $top:
 │   b0:
 │     v0 = error msg="expected block"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- for-loop-pattern-on-next-line ---
 // Error: 5 expected pattern
@@ -200,8 +195,7 @@ v in iter {}
 │ fn $top:
 │   b0:
 │     v0 = error msg="expected pattern, found string"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- for-loop-binary-as-pattern ---
 // Error: 7 expected keyword `in`
@@ -209,8 +203,7 @@ v in iter {}
 │ fn $top:
 │   b0:
 │     v0 = error msg="expected keyword `in`"
-│     v1 = const none
-│     return v1
+│     return none
 
 --- duplicate-args-sink ---
 // Error: 15-18 only one arguments sink is allowed
@@ -219,13 +212,11 @@ v in iter {}
 │   b0:
 │     v0 = error msg="only one arguments sink is allowed"
 │     v1 = make_closure $fn_0
-│     v2 = const none
-│     return v2
+│     return none
 │ 
 │ fn $fn_0 name="f" params=[v0=..a, v1=..b]:
 │   b0:
-│     v2 = const 1
-│     return v2
+│     return 1
 
 --- duplicate-destructuring-sink ---
 #{
@@ -235,63 +226,45 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = error msg="only one destructuring sink is allowed"
-│     length_check v0, want=0, has_sink
-│     v3 = const none
-│     return v3
+│     v0 = error msg="only one destructuring sink is allowed"
+│     length_check none, want=0, has_sink
+│     return none
 
 --- plain-value-in-dict ---
 // Error: 17-18 expected named or keyed pair
 #{ (a: 1, b: 2, 3) }
 │ fn $top:
 │   b0:
-│     v0 = const a
-│     v1 = const 1
-│     v2 = const b
-│     v3 = const 2
-│     v4 = error msg="expected named or keyed pair"
-│     v5 = make_dict (v0: v1, v2: v3)
-│     return v5
+│     v0 = error msg="expected named or keyed pair"
+│     v1 = make_dict (a: 1, b: 2)
+│     return v1
 
 --- duplicate-dict-key-named ---
 // Error: 11-15 duplicate key: a
 #{ (a: 1, a: 2) }
 │ fn $top:
 │   b0:
-│     v0 = const a
-│     v1 = const 1
-│     v2 = error msg="duplicate key: a"
-│     v3 = const a
-│     v4 = const 2
-│     v5 = make_dict (v0: v1, v3: v4)
-│     return v5
+│     v0 = error msg="duplicate key: a"
+│     v1 = make_dict (a: 1, a: 2)
+│     return v1
 
 --- duplicate-dict-key-string ---
 // Error: 15-23 duplicate key: key
 #{ ("key": 1, "key": 2) }
 │ fn $top:
 │   b0:
-│     v0 = const key
-│     v1 = const 1
-│     v2 = const key
-│     v3 = const 2
-│     v4 = error msg="duplicate key: key"
-│     v5 = make_dict (v0: v1, v2: v3)
-│     return v5
+│     v0 = error msg="duplicate key: key"
+│     v1 = make_dict (key: 1, key: 2)
+│     return v1
 
 --- duplicate-dict-key-mixed ---
 // Error: 11-17 duplicate key: a
 #{ (a: 1, "a": 2) }
 │ fn $top:
 │   b0:
-│     v0 = const a
-│     v1 = const 1
-│     v2 = const a
-│     v3 = const 2
-│     v4 = error msg="duplicate key: a"
-│     v5 = make_dict (v0: v1, v2: v3)
-│     return v5
+│     v0 = error msg="duplicate key: a"
+│     v1 = make_dict (a: 1, a: 2)
+│     return v1
 
 --- duplicate-named-argument ---
 #let f = size => none
@@ -300,16 +273,13 @@ v in iter {}
 │ fn $top:
 │   b0:
 │     v0 = make_closure $fn_0
-│     v1 = const 1
-│     v2 = const 2
-│     v3 = error msg="duplicate argument: size"
-│     v4 = call v0(size: v1, size: v2)
-│     return v4
+│     v1 = error msg="duplicate argument: size"
+│     v2 = call v0(size: 1, size: 2)
+│     return v2
 │ 
 │ fn $fn_0 name="f" params=[v0=size]:
 │   b0:
-│     v1 = const none
-│     return v1
+│     return none
 
 --- duplicate-binding ---
 #{
@@ -319,13 +289,11 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = const none
-│     v1 = error msg="duplicate binding: a"
-│     length_check v0, want=2
-│     v3 = extract v0[0]
-│     v4 = extract v0[1]
-│     v5 = const none
-│     return v5
+│     v0 = error msg="duplicate binding: a"
+│     length_check none, want=2
+│     v2 = extract none[0]
+│     v3 = extract none[1]
+│     return none
 
 --- duplicate-param ---
 // Error: 13-14 duplicate parameter: x
@@ -334,13 +302,11 @@ v in iter {}
 │   b0:
 │     v0 = error msg="duplicate parameter: x"
 │     v1 = make_closure $fn_0
-│     v2 = const none
-│     return v2
+│     return none
 │ 
 │ fn $fn_0 name="f" params=[v0=x, v1=x]:
 │   b0:
-│     v2 = const 1
-│     return v2
+│     return 1
 
 --- break-in-closure-inside-loop ---
 // A break inside a closure must not target a loop in the enclosing function.
@@ -353,26 +319,23 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = const 3
-│     v3 = make_array [v0, v1, v2]
-│     v4 = iter_open v3
-│     v5 = loop_acc_begin
+│     v0 = make_array [1, 2, 3]
+│     v1 = iter_open v0
+│     v2 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v10 = phi [b0 v5, b2 v11]
-│     v6 = iter_has_next v4
-│     branch v6, b2, b3
+│     v7 = phi [b0 v2, b2 v8]
+│     v3 = iter_has_next v1
+│     branch v3, b2, b3
 │   b2:
-│     v7 = iter_advance v4
-│     v8 = make_closure $fn_0
-│     v9 = call v8()
-│     v11 = loop_acc_add v10, v9
+│     v4 = iter_advance v1
+│     v5 = make_closure $fn_0
+│     v6 = call v5()
+│     v8 = loop_acc_add v7, v6
 │     jump b1
 │   b3:
-│     v12 = loop_acc_result v10
-│     return v12
+│     v9 = loop_acc_result v7
+│     return v9
 │ 
 │ fn $fn_0 name="f":
 │   b0:
@@ -389,26 +352,23 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = const 1
-│     v1 = const 2
-│     v2 = const 3
-│     v3 = make_array [v0, v1, v2]
-│     v4 = iter_open v3
-│     v5 = loop_acc_begin
+│     v0 = make_array [1, 2, 3]
+│     v1 = iter_open v0
+│     v2 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v10 = phi [b0 v5, b2 v11]
-│     v6 = iter_has_next v4
-│     branch v6, b2, b3
+│     v7 = phi [b0 v2, b2 v8]
+│     v3 = iter_has_next v1
+│     branch v3, b2, b3
 │   b2:
-│     v7 = iter_advance v4
-│     v8 = make_closure $fn_0
-│     v9 = call v8()
-│     v11 = loop_acc_add v10, v9
+│     v4 = iter_advance v1
+│     v5 = make_closure $fn_0
+│     v6 = call v5()
+│     v8 = loop_acc_add v7, v6
 │     jump b1
 │   b3:
-│     v12 = loop_acc_result v10
-│     return v12
+│     v9 = loop_acc_result v7
+│     return v9
 │ 
 │ fn $fn_0 name="f":
 │   b0:

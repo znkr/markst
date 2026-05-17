@@ -3,6 +3,7 @@ package expr
 import (
 	"cmp"
 	"maps"
+	"math"
 	"slices"
 
 	"znkr.io/writst/name"
@@ -18,7 +19,9 @@ import (
 //
 // Typical usage:
 //
-//	b := expr.NewBuilder()
+//	mod := &expr.Module{}
+//	mb := expr.NewModuleBuilder()
+//	b := mb.NewBuilder()
 //	v := b.Const(span, value.Int(1))
 //	b.WriteVar(name, b.CurrentBlock(), v)
 //	then := b.NewBlock()
@@ -31,6 +34,7 @@ import (
 //	fn := b.Build()
 type Builder struct {
 	fn  *Function
+	mb  *ModuleBuilder
 	cur BlockID
 
 	// Braun "current definition" table: per-variable, per-block, the SSA
@@ -63,11 +67,38 @@ type Builder struct {
 	versions map[name.Name]int
 }
 
-// NewBuilder starts construction of a fresh [Function]. The entry block (id 0)
-// is created and made current.
-func NewBuilder() *Builder {
+// ModuleBuilder accumulates the per-module state shared by every [Builder]
+// during analysis: the [Module] being built and the constant-pool dedup
+// index. The dedup index is build-time only — after [ModuleBuilder.Build]
+// returns, the [Module] holds the finished IR with no transient state.
+type ModuleBuilder struct {
+	mod *Module
+
+	// constIndex dedupes [Module.Constants] entries for values whose Go type
+	// is comparable (Int, Bool, Str, None, Auto, etc.) so repeated references
+	// to the same constant share a single pool slot. Non-comparable values
+	// (slice-bearing values, etc.) are appended without dedup.
+	constIndex map[any]int32
+}
+
+// NewModuleBuilder starts a fresh module. The returned ModuleBuilder is the
+// hub from which per-function [Builder]s are created.
+func NewModuleBuilder() *ModuleBuilder {
+	return &ModuleBuilder{mod: &Module{}}
+}
+
+// Module returns the [Module] under construction. Safe to call mid-build to
+// e.g. attach the top-level function, but Constants is still growing until
+// every [Builder] has finished emitting.
+func (mb *ModuleBuilder) Module() *Module { return mb.mod }
+
+// NewBuilder starts construction of a fresh [Function] inside mb's module.
+// The entry block (id 0) is created and made current. All builders created
+// from the same ModuleBuilder share the constant pool.
+func (mb *ModuleBuilder) NewBuilder() *Builder {
 	b := &Builder{
 		fn:             &Function{},
+		mb:             mb,
 		currentDef:     make(map[Var]map[BlockID]Ref),
 		incompletePhis: make(map[BlockID]map[Var]*Phi),
 		sealed:         make(map[BlockID]bool),
@@ -79,6 +110,42 @@ func NewBuilder() *Builder {
 	// The entry block has no predecessors; it can be sealed immediately.
 	b.SealBlock(entry)
 	return b
+}
+
+// addConstant registers v in the module's constant pool and returns the
+// resulting [ModConstRef]. Comparable values are deduplicated; non-comparable
+// values are appended each call.
+func (mb *ModuleBuilder) addConstant(v value.Value) Ref {
+	key := indexKey(v)
+	if key == nil {
+		return NoRef
+	}
+	if mb.constIndex == nil {
+		mb.constIndex = make(map[any]int32)
+	}
+	if id, ok := mb.constIndex[key]; ok {
+		return ModConstRef(id)
+	}
+	id := int32(len(mb.mod.Constants))
+	mb.mod.Constants = append(mb.mod.Constants, v)
+	mb.constIndex[key] = id
+	return ModConstRef(id)
+}
+
+type float64key uint64
+
+func indexKey(v value.Value) any {
+	switch v := v.(type) {
+	case value.None, value.Bool, value.Int, value.Decimal, value.Str, value.Bytes, value.Ratio, value.Fraction, value.Length, value.Relative, value.Angle:
+		return v
+	case value.Float:
+		// Use a bitwise representation for float64 to ensure that different
+		// float values that compare equal (e.g. +0.0 and -0.0) get different
+		// keys, and that NaNs work as expected.
+		return float64key(math.Float64bits(float64(v)))
+	default:
+		return nil
+	}
 }
 
 // Function returns the function under construction. Callers should generally
@@ -160,15 +227,57 @@ func (b *Builder) Return(span syntax.Span, v Ref) {
 
 // Instructions ////////////////////////////////////////////////////////////////
 
-// Const emits a [Const] instruction in the current block.
+// Const registers v in the module's constant pool (deduping when possible)
+// and returns the resulting module-constant [Ref]. No instruction is emitted
+// and no function-local [Def] slot is consumed. span is currently unused —
+// spans on constants only matter at their use sites, which carry their own
+// spans on the consuming instruction.
 func (b *Builder) Const(span syntax.Span, v value.Value) Ref {
+	if ref := b.mb.addConstant(v); ref != NoRef {
+		return ref
+	}
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Const{instr: instr{result: ref, span: span}, Value: v}
 	})
 }
 
+// ConstValue returns the constant value materialised by ref, if ref refers to
+// the module-constant pool. Function-local Defs never hold constants under the
+// pool scheme, so non-module refs always return (nil, false).
+func (b *Builder) ConstValue(r Ref) (value.Value, bool) {
+	if !r.IsModConst() {
+		return nil, false
+	}
+	id := r.ModConstID()
+	if int(id) >= len(b.mb.mod.Constants) {
+		return nil, false
+	}
+	return b.mb.mod.Constants[id], true
+}
+
+// PeekVar returns the SSA def currently visible for v in this builder's
+// current block, without inserting any phi nodes. Returns (NoRef, false) when
+// the variable has no definition recorded in the current block — predecessors
+// are not walked. Used by side-effect-free callers (e.g. the analyzer's
+// capture-time const peek) that want a conservative "current value" lookup.
+func (b *Builder) PeekVar(v Var) (Ref, bool) {
+	refs, ok := b.currentDef[v]
+	if !ok {
+		return NoRef, false
+	}
+	r, ok := refs[b.cur]
+	return r, ok
+}
+
 // Unary emits a unary-operator instruction.
 func (b *Builder) Unary(span syntax.Span, op syntax.UnaryOp, x Ref) Ref {
+	if x.IsModConst() {
+		xv, _ := b.ConstValue(x)
+		v, err := value.UnaryOp(op, xv)
+		if err == nil {
+			return b.Const(span, v)
+		}
+	}
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Unary{instr: instr{result: ref, span: span}, Op: op, X: x}
 	})
@@ -176,6 +285,14 @@ func (b *Builder) Unary(span syntax.Span, op syntax.UnaryOp, x Ref) Ref {
 
 // Binary emits a non-assignment binary-operator instruction.
 func (b *Builder) Binary(span syntax.Span, op syntax.BinaryOp, l, r Ref) Ref {
+	if l.IsModConst() && r.IsModConst() {
+		lv, _ := b.ConstValue(l)
+		rv, _ := b.ConstValue(r)
+		v, err := value.BinaryOp(op, lv, rv)
+		if err == nil {
+			return b.Const(span, v)
+		}
+	}
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Binary{instr: instr{result: ref, span: span}, Op: op, L: l, R: r}
 	})
@@ -472,13 +589,13 @@ func (b *Builder) ModuleInclude(span syntax.Span, source Ref) Ref {
 	})
 }
 
-// emit allocates a fresh Ref, hands it to mkInst to produce the instruction,
+// emit allocates a fresh Ref, hands it to mkInstr to produce the instruction,
 // then appends to the current block and registers the Def.
-func (b *Builder) emit(span syntax.Span, mkInst func(result Ref) Instruction) Ref {
+func (b *Builder) emit(span syntax.Span, mkInstr func(result Ref) Instruction) Ref {
 	ref := Ref(len(b.fn.Defs))
 	d := &DefInstr{def: def{block: b.cur, span: span}}
 	b.fn.Defs = append(b.fn.Defs, d)
-	instance := mkInst(ref)
+	instance := mkInstr(ref)
 	d.Instr = instance
 	b.fn.Blocks[b.cur].Instrs = append(b.fn.Blocks[b.cur].Instrs, instance)
 	return ref

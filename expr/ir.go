@@ -3,6 +3,7 @@ package expr
 import (
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
 )
 
 // This file contains the SSA-form intermediate representation produced by
@@ -25,8 +26,9 @@ import (
 // Module is a fully analyzed writst program: the document body plus every
 // closure hoisted out into a top-level [Function].
 type Module struct {
-	Top       *Function   // the document body
-	Functions []*Function // closures, indexed by FuncID
+	Top       *Function     // the document body
+	Functions []*Function   // closures, indexed by FuncID
+	Constants []value.Value // module-wide constant pool, indexed by ModConstID
 }
 
 // FuncID indexes [Module.Functions]. It is used in MakeClosure-style
@@ -75,13 +77,27 @@ type BasicBlock struct {
 	Term   Terminator
 }
 
-// Ref is a function-local SSA value handle: an index into [Function.Defs].
-// References are dense and stable for the lifetime of the function.
+// Ref is an SSA value handle. Non-negative refs index a function's [Defs]
+// slice (function-local). [NoRef] is the missing-reference sentinel. Refs
+// strictly below [NoRef] (i.e. r <= -2) encode a module-level constant: the
+// [ModConstID] is `-2 - r`, indexing [Module.Constants]. Module-const refs are
+// global to a [Module] — the same ref is valid in any function within that
+// module — and never appear in [Function.Defs].
 type Ref int32
 
 // NoRef is the sentinel value for a missing reference (e.g. an absent default
 // argument or the value operand of a bare return).
 const NoRef Ref = -1
+
+// ModConstRef constructs a module-constant [Ref] from a pool index.
+func ModConstRef(id int32) Ref { return Ref(-2 - id) }
+
+// IsModConst reports whether r refers to a module-level constant.
+func (r Ref) IsModConst() bool { return r < NoRef }
+
+// ModConstID returns the [Module.Constants] index for a module-constant ref.
+// Result is undefined if [Ref.IsModConst] returns false.
+func (r Ref) ModConstID() int32 { return -2 - int32(r) }
 
 // Def records how to materialise the SSA value with a given [Ref]. There is
 // one Def per Ref; storing them in a flat slice makes the runtime value
@@ -140,8 +156,9 @@ type DefRedirect struct {
 }
 
 // Resolve follows [DefRedirect] chains and returns the underlying Ref.
+// Module-constant refs and [NoRef] are returned unchanged.
 func (f *Function) Resolve(r Ref) Ref {
-	for r != NoRef && int(r) < len(f.Defs) {
+	for r >= 0 && int(r) < len(f.Defs) {
 		d, ok := f.Defs[r].(*DefRedirect)
 		if !ok {
 			break

@@ -304,12 +304,57 @@ func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
 	if ref, ok := f.captures[source]; ok {
 		return ref
 	}
+	// If the outer frame's current SSA def for source is already a
+	// module-constant ref (typical for `let n = <literal>` at the top of an
+	// enclosing frame), reuse it directly — module-const refs are global
+	// across all functions in the module, so no DefCapture is needed.
+	if ref, ok := a.peekOuterConst(source); ok {
+		return ref
+	}
 	ref := a.b.AddCapture(expr.Var{Name: source}, span)
 	if f.captures == nil {
 		f.captures = make(map[name.Name]expr.Ref)
 	}
 	f.captures[source] = ref
 	return ref
+}
+
+// peekOuterConst checks whether source resolves to a module-constant ref in
+// the outer frame that owns its binding, without inserting any phi nodes.
+// Returns (NoRef, false) when the binding is in the current frame, when its
+// owning frame's current block has no recorded def, or when the def is not a
+// module-const ref. Used by [captureRef] to short-circuit capture allocation
+// for constants visible in the outer scope.
+func (a *analyzer) peekOuterConst(source name.Name) (expr.Ref, bool) {
+	frameIdx := len(a.frames) - 1
+	inCurrent := true
+	for s := a.scope; s != nil; s = s.parent {
+		if b, ok := s.bindings[source]; ok {
+			if inCurrent {
+				return expr.NoRef, false
+			}
+			if b.variable.Name == name.Invalid {
+				// Value-only binding (builtin / WithBindings); resolveName
+				// already inlined it via the b.value path, captureRef
+				// shouldn't have been called.
+				return expr.NoRef, false
+			}
+			outerB := a.frames[frameIdx].b
+			ref, ok := outerB.PeekVar(b.variable)
+			if !ok || !ref.IsModConst() {
+				return expr.NoRef, false
+			}
+			return ref, true
+		}
+		if s == a.frames[frameIdx].scope {
+			inCurrent = false
+			frameIdx--
+			if frameIdx < 0 {
+				return expr.NoRef, false
+			}
+		}
+	}
+	return expr.NoRef, false
 }
 
 // Operators ///////////////////////////////////////////////////////////////////
@@ -1382,8 +1427,9 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	captures := innerFn.Captures
 	a.popFrame()
 	// Register the function in the module.
-	funcID := expr.FuncID(len(a.mod.Functions))
-	a.mod.Functions = append(a.mod.Functions, innerFn)
+	mod := a.mb.Module()
+	funcID := expr.FuncID(len(mod.Functions))
+	mod.Functions = append(mod.Functions, innerFn)
 
 	// Build the capture Ref list in outer scope. The first
 	// len(defaultOuterRefs) entries are the default-value captures (in

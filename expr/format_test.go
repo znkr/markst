@@ -9,7 +9,7 @@ import (
 )
 
 func TestFormatFunctionIfElseJoin(t *testing.T) {
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	x := Var{Name: name.Make("x"), Version: 1}
 	span := syntax.Span{}
 
@@ -42,18 +42,14 @@ func TestFormatFunctionIfElseJoin(t *testing.T) {
 
 	want := `fn $top:
   b0:
-    v0 = const 1
-    v1 = const true
-    branch v1, b1, b2
+    branch c1, b1, b2
   b1:
-    v2 = const 10
     jump b3
   b2:
-    v3 = const 20
     jump b3
   b3:
-    v4 = phi [b1 v2, b2 v3]
-    return v4
+    v0 = phi [b1 c2, b2 c3]
+    return v0
 `
 	got := FormatFunction("$top", b.Build())
 	if got != want {

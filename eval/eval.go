@@ -164,8 +164,12 @@ type frame struct {
 }
 
 // get returns the value stored for ref, following [DefRedirect] chains
-// installed by trivial-phi elimination.
+// installed by trivial-phi elimination. Module-constant refs are looked up
+// in the session's [expr.Module.Constants] pool.
 func (fr *frame) get(ref expr.Ref) value.Value {
+	if ref.IsModConst() {
+		return fr.s.mod.Constants[ref.ModConstID()]
+	}
 	ref = fr.fn.Resolve(ref)
 	if ref == expr.NoRef {
 		return nil
@@ -485,11 +489,22 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			fr.vals[r] = value.None{}
 			break
 		}
-		fr.attachLabel(c, &value.Label{Name: i.Label}, fr.fn.Defs[fr.fn.Resolve(i.Content)].Span())
-		// Also overwrite the operand slot so the label is visible to any
-		// subsequent consumer that re-fetches it; this keeps the value in
-		// sync with the side-effect.
-		fr.vals[fr.fn.Resolve(i.Content)] = c
+		// Use the operand's defining instruction span for the attach
+		// diagnostic. Module-const refs have no per-function def — use the
+		// AttachLabel's own span instead, and skip the operand-slot writeback
+		// (the pool is shared across uses and must stay immutable; the label is
+		// still registered on the session).
+		resolved := fr.fn.Resolve(i.Content)
+		var attachSpan syntax.Span
+		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
+			attachSpan = fr.fn.Defs[resolved].Span()
+		} else {
+			attachSpan = i.Span()
+		}
+		fr.attachLabel(c, &value.Label{Name: i.Label}, attachSpan)
+		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
+			fr.vals[resolved] = c
+		}
 		fr.vals[r] = value.None{}
 	case *expr.CodeJoin:
 		fr.vals[r] = fr.evalCodeJoin(i)
@@ -726,8 +741,10 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		ret = append(ret, cv)
 		// Use the producing instruction's span so warnings/errors against
 		// the most-recent content point at the right source location.
+		// Module-const refs have no per-function Def — fall back to the
+		// consuming instruction's span.
 		resolved := fr.fn.Resolve(r)
-		if resolved != expr.NoRef {
+		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
 			lastSpan = fr.fn.Defs[resolved].Span()
 		} else {
 			lastSpan = c.Span()
@@ -1064,9 +1081,14 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 				out.Named = make(map[name.Name]value.Param)
 			}
 			// Defaults are captured from the outer scope at MakeClosure time
-			// and arrive as DefCapture entries.
+			// and arrive as DefCapture entries — or, for constant defaults,
+			// as module-const refs that resolve directly from the pool.
 			var defaultVal value.Value
-			if p.Default != expr.NoRef && int(p.Default) < len(fn.Defs) {
+			switch {
+			case p.Default == expr.NoRef:
+			case p.Default.IsModConst():
+				defaultVal = s.mod.Constants[p.Default.ModConstID()]
+			case int(p.Default) < len(fn.Defs):
 				if d, ok := fn.Defs[p.Default].(*expr.DefCapture); ok && d.Idx < len(caps) {
 					defaultVal = caps[d.Idx]
 				}

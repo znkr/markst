@@ -10,7 +10,7 @@ import (
 
 func TestBuilderLinear(t *testing.T) {
 	// Trivial: write a var in the entry block, read it back. No phi expected.
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	x := Var{Name: name.Make("x"), Version: 1}
 	v0 := b.Const(syntax.Span{}, value.Int(1))
 	b.WriteVar(x, b.CurrentBlock(), v0)
@@ -36,7 +36,7 @@ func TestBuilderIfElseJoin(t *testing.T) {
 	//        write x = v2
 	//        jump b3
 	//   b3:  read x  // expect phi [b1 v1, b2 v2]
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	x := Var{Name: name.Make("x"), Version: 1}
 	span := syntax.Span{}
 
@@ -104,7 +104,7 @@ func TestBuilderIfOneArmWrites(t *testing.T) {
 	//        jump b3
 	//   b2:  jump b3   // no write to x
 	//   b3:  read x  // expect phi [b1 v1, b2 v0]
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	x := Var{Name: name.Make("x"), Version: 1}
 	span := syntax.Span{}
 
@@ -166,7 +166,7 @@ func TestBuilderLoopHeaderPhi(t *testing.T) {
 	//   b3 (exit)
 	// SealBlock(b1) after back-edge is added.
 	// Expect: header phi with operands [b0 v0, b2 v1].
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	i := Var{Name: name.Make("i"), Version: 1}
 	span := syntax.Span{}
 
@@ -223,7 +223,7 @@ func TestBuilderTrivialPhiElim(t *testing.T) {
 	//   b1: jump b3   // x not rewritten (still v0)
 	//   b2: jump b3   // x not rewritten (still v0)
 	//   b3: read x  -> expect v0 directly, no phi
-	b := NewBuilder()
+	b := NewModuleBuilder().NewBuilder()
 	x := Var{Name: name.Make("x"), Version: 1}
 	span := syntax.Span{}
 

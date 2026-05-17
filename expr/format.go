@@ -16,24 +16,35 @@ import (
 // This is the format consumed by analyzer golden tests under the new IR. It
 // is not pretty-printed writst source — see the migration plan for why.
 func FormatModule(mod *Module) string {
-	var sb strings.Builder
-	formatFunction(&sb, "$top", mod.Top)
+	f := formatter{mod: mod}
+	f.formatFunction("$top", mod.Top)
 	for i, fn := range mod.Functions {
-		sb.WriteString("\n")
-		formatFunction(&sb, fmt.Sprintf("$fn_%d", i), fn)
+		f.sb.WriteString("\n")
+		f.formatFunction(fmt.Sprintf("$fn_%d", i), fn)
 	}
-	return sb.String()
+	return f.sb.String()
 }
 
 // FormatFunction returns the SSA dump of a single function with the given
-// label (e.g. "$top", "$fn_0").
+// label (e.g. "$top", "$fn_0"). Module-constant refs render as `c<id>` since
+// the pool isn't reachable without the enclosing module; use [FormatModule]
+// for inline-literal rendering.
 func FormatFunction(label string, fn *Function) string {
-	var sb strings.Builder
-	formatFunction(&sb, label, fn)
-	return sb.String()
+	f := formatter{}
+	f.formatFunction(label, fn)
+	return f.sb.String()
 }
 
-func formatFunction(sb *strings.Builder, label string, fn *Function) {
+// formatter carries the rendering state for one FormatModule/FormatFunction
+// call. mod is nil when only a single function is being formatted; in that
+// case module-constant refs render as `c<id>` rather than as inline literals.
+type formatter struct {
+	sb  strings.Builder
+	mod *Module
+}
+
+func (f *formatter) formatFunction(label string, fn *Function) {
+	sb := &f.sb
 	sb.WriteString("fn ")
 	sb.WriteString(label)
 	if fn.Name != "" {
@@ -60,12 +71,12 @@ func formatFunction(sb *strings.Builder, label string, fn *Function) {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			fmt.Fprintf(sb, "%s=%s", formatRef(captureRefs[i]), c.String())
+			fmt.Fprintf(sb, "%s=%s", f.ref(captureRefs[i]), c.String())
 		}
 		sb.WriteString("]")
 	}
 	if selfRef != NoRef {
-		fmt.Fprintf(sb, " self=%s", formatRef(selfRef))
+		fmt.Fprintf(sb, " self=%s", f.ref(selfRef))
 	}
 	if len(fn.Params) > 0 {
 		sb.WriteString(" params=[")
@@ -75,31 +86,32 @@ func formatFunction(sb *strings.Builder, label string, fn *Function) {
 			}
 			switch p.Kind {
 			case ParamSink:
-				fmt.Fprintf(sb, "%s=..%s", formatRef(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=..%s", f.ref(paramRefs[i]), p.Name.String())
 			case ParamNamed:
-				fmt.Fprintf(sb, "%s=%s", formatRef(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=%s", f.ref(paramRefs[i]), p.Name.String())
 				if p.Default != NoRef {
-					fmt.Fprintf(sb, ":%s", formatRef(p.Default))
+					fmt.Fprintf(sb, ":%s", f.ref(p.Default))
 				}
 			default:
-				fmt.Fprintf(sb, "%s=%s", formatRef(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=%s", f.ref(paramRefs[i]), p.Name.String())
 			}
 		}
 		sb.WriteString("]")
 	}
 	sb.WriteString(":\n")
 	for _, block := range fn.Blocks {
-		formatBlock(sb, block)
+		f.formatBlock(block)
 	}
 }
 
-func formatBlock(sb *strings.Builder, block *BasicBlock) {
+func (f *formatter) formatBlock(block *BasicBlock) {
+	sb := &f.sb
 	sb.WriteString("  ")
 	sb.WriteString(formatBlockID(block.ID))
 	sb.WriteString(":\n")
 	for _, phi := range block.Phis {
 		sb.WriteString("    ")
-		sb.WriteString(formatRef(phi.result))
+		sb.WriteString(f.ref(phi.result))
 		sb.WriteString(" = phi [")
 		for i, op := range phi.operands {
 			if i > 0 {
@@ -107,25 +119,26 @@ func formatBlock(sb *strings.Builder, block *BasicBlock) {
 			}
 			sb.WriteString(formatBlockID(op.Pred))
 			sb.WriteString(" ")
-			sb.WriteString(formatRef(op.Value))
+			sb.WriteString(f.ref(op.Value))
 		}
 		sb.WriteString("]\n")
 	}
 	for _, inst := range block.Instrs {
 		sb.WriteString("    ")
-		formatInst(sb, inst)
+		f.formatInst(inst)
 		sb.WriteString("\n")
 	}
 	if block.Term != nil {
 		sb.WriteString("    ")
-		formatTerm(sb, block.Term)
+		f.formatTerm(block.Term)
 		sb.WriteString("\n")
 	}
 }
 
-func formatInst(sb *strings.Builder, inst Instruction) {
+func (f *formatter) formatInst(inst Instruction) {
+	sb := &f.sb
 	if r := inst.Result(); r != NoRef {
-		sb.WriteString(formatRef(r))
+		sb.WriteString(f.ref(r))
 		sb.WriteString(" = ")
 	}
 	switch i := inst.(type) {
@@ -133,9 +146,9 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 		sb.WriteString("const ")
 		sb.WriteString(formatConst(i.Value))
 	case *Unary:
-		fmt.Fprintf(sb, "%s %s", i.Op.String(), formatRef(i.X))
+		fmt.Fprintf(sb, "%s %s", i.Op.String(), f.ref(i.X))
 	case *Binary:
-		fmt.Fprintf(sb, "%s %s %s", formatRef(i.L), i.Op.String(), formatRef(i.R))
+		fmt.Fprintf(sb, "%s %s %s", f.ref(i.L), i.Op.String(), f.ref(i.R))
 	case *MakeArray:
 		sb.WriteString("make_array [")
 		for j, item := range i.Items {
@@ -145,7 +158,7 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 			if item.Spread {
 				sb.WriteString("..")
 			}
-			sb.WriteString(formatRef(item.Value))
+			sb.WriteString(f.ref(item.Value))
 		}
 		sb.WriteString("]")
 	case *MakeDict:
@@ -157,19 +170,19 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 			switch {
 			case e.Spread:
 				sb.WriteString("..")
-				sb.WriteString(formatRef(e.Value))
+				sb.WriteString(f.ref(e.Value))
 			default:
-				sb.WriteString(formatRef(e.Key))
+				sb.WriteString(f.ref(e.Key))
 				sb.WriteString(": ")
-				sb.WriteString(formatRef(e.Value))
+				sb.WriteString(f.ref(e.Value))
 			}
 		}
 		sb.WriteString(")")
 	case *FieldRead:
-		fmt.Fprintf(sb, "field_read %s.%s", formatRef(i.Target), i.Field.String())
+		fmt.Fprintf(sb, "field_read %s.%s", f.ref(i.Target), i.Field.String())
 	case *Call:
 		sb.WriteString("call ")
-		sb.WriteString(formatRef(i.Callee))
+		sb.WriteString(f.ref(i.Callee))
 		sb.WriteString("(")
 		for j, a := range i.Args {
 			if j > 0 {
@@ -178,37 +191,37 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 			switch a.Kind {
 			case ArgSpread:
 				sb.WriteString("..")
-				sb.WriteString(formatRef(a.Value))
+				sb.WriteString(f.ref(a.Value))
 			case ArgNamed:
 				sb.WriteString(a.Name.String())
 				sb.WriteString(": ")
-				sb.WriteString(formatRef(a.Value))
+				sb.WriteString(f.ref(a.Value))
 			default:
-				sb.WriteString(formatRef(a.Value))
+				sb.WriteString(f.ref(a.Value))
 			}
 		}
 		sb.WriteString(")")
 		for _, blk := range i.Blocks {
 			sb.WriteString("[")
-			sb.WriteString(formatRef(blk))
+			sb.WriteString(f.ref(blk))
 			sb.WriteString("]")
 		}
 		if i.AllowSetter {
 			sb.WriteString(" lvalue")
 		}
 	case *Extract:
-		fmt.Fprintf(sb, "extract %s[%d]", formatRef(i.Source), i.Index)
+		fmt.Fprintf(sb, "extract %s[%d]", f.ref(i.Source), i.Index)
 	case *LengthCheck:
-		fmt.Fprintf(sb, "length_check %s, want=%d", formatRef(i.Source), i.Want)
+		fmt.Fprintf(sb, "length_check %s, want=%d", f.ref(i.Source), i.Want)
 		if i.HasSink {
 			sb.WriteString(", has_sink")
 		}
 	case *IterOpen:
-		fmt.Fprintf(sb, "iter_open %s", formatRef(i.Iterable))
+		fmt.Fprintf(sb, "iter_open %s", f.ref(i.Iterable))
 	case *IterHasNext:
-		fmt.Fprintf(sb, "iter_has_next %s", formatRef(i.Iter))
+		fmt.Fprintf(sb, "iter_has_next %s", f.ref(i.Iter))
 	case *IterAdvance:
-		fmt.Fprintf(sb, "iter_advance %s", formatRef(i.Iter))
+		fmt.Fprintf(sb, "iter_advance %s", f.ref(i.Iter))
 	case *MakeClosure:
 		fmt.Fprintf(sb, "make_closure $fn_%d", i.Func)
 		if len(i.Captures) > 0 {
@@ -217,7 +230,7 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 				if j > 0 {
 					sb.WriteString(", ")
 				}
-				sb.WriteString(formatRef(c))
+				sb.WriteString(f.ref(c))
 			}
 			sb.WriteString("]")
 		}
@@ -227,65 +240,65 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 			if j > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(formatRef(r))
+			sb.WriteString(f.ref(r))
 		}
 		sb.WriteString("]")
 	case *AttachLabel:
-		fmt.Fprintf(sb, "attach_label %s, @%s", formatRef(i.Content), i.Label.String())
+		fmt.Fprintf(sb, "attach_label %s, @%s", f.ref(i.Content), i.Label.String())
 	case *CodeJoin:
 		sb.WriteString("code_join [")
 		for j, r := range i.Items {
 			if j > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(formatRef(r))
+			sb.WriteString(f.ref(r))
 		}
 		sb.WriteString("]")
 	case *LoopAccBegin:
 		sb.WriteString("loop_acc_begin")
 	case *LoopAccAdd:
-		fmt.Fprintf(sb, "loop_acc_add %s, %s", formatRef(i.Acc), formatRef(i.Item))
+		fmt.Fprintf(sb, "loop_acc_add %s, %s", f.ref(i.Acc), f.ref(i.Item))
 	case *LoopAccResult:
-		fmt.Fprintf(sb, "loop_acc_result %s", formatRef(i.Acc))
+		fmt.Fprintf(sb, "loop_acc_result %s", f.ref(i.Acc))
 	case *Heading:
-		fmt.Fprintf(sb, "heading level=%d %s", i.Level, formatRef(i.Body))
+		fmt.Fprintf(sb, "heading level=%d %s", i.Level, f.ref(i.Body))
 	case *Strong:
-		fmt.Fprintf(sb, "strong %s", formatRef(i.Body))
+		fmt.Fprintf(sb, "strong %s", f.ref(i.Body))
 	case *Emph:
-		fmt.Fprintf(sb, "emph %s", formatRef(i.Body))
+		fmt.Fprintf(sb, "emph %s", f.ref(i.Body))
 	case *Link:
-		fmt.Fprintf(sb, "link %q %s", i.Dest, formatRef(i.Body))
+		fmt.Fprintf(sb, "link %q %s", i.Dest, f.ref(i.Body))
 	case *RefMarkup:
 		fmt.Fprintf(sb, "ref @%s", i.Target.String())
 		if i.Supplement != NoRef {
-			fmt.Fprintf(sb, " %s", formatRef(i.Supplement))
+			fmt.Fprintf(sb, " %s", f.ref(i.Supplement))
 		}
 	case *ListItem:
-		fmt.Fprintf(sb, "list_item %s", formatRef(i.Body))
+		fmt.Fprintf(sb, "list_item %s", f.ref(i.Body))
 	case *EnumItem:
 		if i.Number < 0 {
-			fmt.Fprintf(sb, "enum_item %s", formatRef(i.Body))
+			fmt.Fprintf(sb, "enum_item %s", f.ref(i.Body))
 		} else {
-			fmt.Fprintf(sb, "enum_item number=%d %s", i.Number, formatRef(i.Body))
+			fmt.Fprintf(sb, "enum_item number=%d %s", i.Number, f.ref(i.Body))
 		}
 	case *TermItem:
-		fmt.Fprintf(sb, "term_item %s, %s", formatRef(i.Term), formatRef(i.Description))
+		fmt.Fprintf(sb, "term_item %s, %s", f.ref(i.Term), f.ref(i.Description))
 	case *SetRule:
-		fmt.Fprintf(sb, "set_rule %s", formatRef(i.Target))
+		fmt.Fprintf(sb, "set_rule %s", f.ref(i.Target))
 	case *ShowRule:
-		fmt.Fprintf(sb, "show_rule")
+		sb.WriteString("show_rule")
 		if i.Selector != NoRef {
-			fmt.Fprintf(sb, " %s", formatRef(i.Selector))
+			fmt.Fprintf(sb, " %s", f.ref(i.Selector))
 		}
-		fmt.Fprintf(sb, ": %s", formatRef(i.Transform))
+		fmt.Fprintf(sb, ": %s", f.ref(i.Transform))
 	case *Contextual:
-		fmt.Fprintf(sb, "contextual %s", formatRef(i.Body))
+		fmt.Fprintf(sb, "contextual %s", f.ref(i.Body))
 	case *ModuleInclude:
-		fmt.Fprintf(sb, "module_include %s", formatRef(i.Source))
+		fmt.Fprintf(sb, "module_include %s", f.ref(i.Source))
 	case *Error:
 		fmt.Fprintf(sb, "error msg=%q", i.Msg)
 		if i.From != NoRef {
-			fmt.Fprintf(sb, " from=%s", formatRef(i.From))
+			fmt.Fprintf(sb, " from=%s", f.ref(i.From))
 		}
 		for _, h := range i.Hints {
 			fmt.Fprintf(sb, " hint=%q", h)
@@ -295,14 +308,15 @@ func formatInst(sb *strings.Builder, inst Instruction) {
 	}
 }
 
-func formatTerm(sb *strings.Builder, t Terminator) {
+func (f *formatter) formatTerm(t Terminator) {
+	sb := &f.sb
 	switch t := t.(type) {
 	case *Jump:
 		sb.WriteString("jump ")
 		sb.WriteString(formatBlockID(t.Target))
 	case *Branch:
 		sb.WriteString("branch ")
-		sb.WriteString(formatRef(t.Cond))
+		sb.WriteString(f.ref(t.Cond))
 		sb.WriteString(", ")
 		sb.WriteString(formatBlockID(t.Then))
 		sb.WriteString(", ")
@@ -311,7 +325,7 @@ func formatTerm(sb *strings.Builder, t Terminator) {
 		sb.WriteString("return")
 		if t.Value != NoRef {
 			sb.WriteString(" ")
-			sb.WriteString(formatRef(t.Value))
+			sb.WriteString(f.ref(t.Value))
 		}
 	case *Unreachable:
 		sb.WriteString("unreachable")
@@ -320,9 +334,19 @@ func formatTerm(sb *strings.Builder, t Terminator) {
 	}
 }
 
-func formatRef(r Ref) string {
+// ref renders r as an SSA-ref string. Module-constant refs render as the
+// inline constant literal when the formatter has the enclosing module
+// available; otherwise as `c<id>`. Function-local refs render as `vN`.
+func (f *formatter) ref(r Ref) string {
 	if r == NoRef {
 		return "<noref>"
+	}
+	if r.IsModConst() {
+		id := r.ModConstID()
+		if f.mod != nil && int(id) < len(f.mod.Constants) {
+			return formatConst(f.mod.Constants[id])
+		}
+		return "c" + strconv.Itoa(int(id))
 	}
 	return "v" + strconv.Itoa(int(r))
 }

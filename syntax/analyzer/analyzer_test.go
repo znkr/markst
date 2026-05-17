@@ -70,7 +70,7 @@ func TestAnalyzeWithBindings(t *testing.T) {
 			name:         "supplied value resolves as constant",
 			src:          "#{ injected }",
 			bindings:     map[name.Name]value.Value{name.Make("injected"): value.Str("hello")},
-			wantSubstr:   `const hello`,
+			wantSubstr:   `return hello`,
 			wantNoSubstr: "unknown variable",
 		},
 		{
