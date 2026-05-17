@@ -51,7 +51,7 @@ func TestFormatFunctionIfElseJoin(t *testing.T) {
     v0 = phi [b1 c2, b2 c3]
     return v0
 `
-	got := FormatFunction("$top", b.Build())
+	got := FormatFunction("$top", b.Function())
 	if got != want {
 		t.Errorf("FormatFunction mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}

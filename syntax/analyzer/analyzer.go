@@ -167,10 +167,6 @@ func (a *analyzer) popFrame() {
 	a.scope = f.scope.parent
 }
 
-// closureDepth reports how many nested closures are currently being lowered
-// (0 at the top level).
-func (a *analyzer) closureDepth() int { return len(a.frames) - 1 }
-
 // pushLoop records header/exit targets for the innermost enclosing loop on
 // the current frame. Break/continue inside the body resolve to these.
 func (a *analyzer) pushLoop(header, exit expr.BlockID) {

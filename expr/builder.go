@@ -11,27 +11,38 @@ import (
 	"znkr.io/writst/value"
 )
 
-// Builder constructs an SSA [Function]. The analyzer drives it as it walks
-// the syntax tree, emitting instructions and tracking variable definitions
-// per block. SSA phi nodes are inserted on demand by [Builder.ReadVar],
-// following Braun, Buchwald & Hack (2013), "Simple and Efficient Construction
-// of Static Single Assignment Form".
+// ModuleBuilder accumulates the per-module state shared by every [Builder]
+// during analysis.
+type ModuleBuilder struct {
+	mod *Module
+
+	// constIndex provides an index from a constant to [Module.Constants]
+	// entries so repeated references to the same constant share a single module
+	// constant entry.
+	constIndex map[any]int32
+}
+
+// Builder constructs an SSA [Function]. The analyzer drives it as it walks the
+// syntax tree, emitting instructions and tracking variable definitions per
+// block. SSA phi nodes are inserted on demand by [Builder.ReadVar], following
+// Braun, Buchwald & Hack (2013), "Simple and Efficient Construction of Static
+// Single Assignment Form".
 //
 // Typical usage:
 //
-//	mod := &expr.Module{}
-//	mb := expr.NewModuleBuilder()
-//	b := mb.NewBuilder()
-//	v := b.Const(span, value.Int(1))
-//	b.WriteVar(name, b.CurrentBlock(), v)
-//	then := b.NewBlock()
-//	els  := b.NewBlock()
-//	join := b.NewBlock()
-//	b.Branch(span, cond, then, els)
-//	... emit then and els blocks, each ending with b.Jump(join) ...
-//	b.SealBlock(join)
-//	r := b.ReadVar(name, join)   // inserts a phi at join if needed
-//	fn := b.Build()
+//		mb := expr.NewModuleBuilder()
+//		b := mb.NewBuilder()
+//		v := b.Const(span, value.Int(1))
+//		b.WriteVar(name, b.CurrentBlock(), v)
+//		then := b.NewBlock()
+//		els  := b.NewBlock()
+//		join := b.NewBlock()
+//		b.Branch(span, cond, then, els)
+//		... emit then and els blocks, each ending with b.Jump(join) ...
+//		b.SealBlock(join)
+//		r := b.ReadVar(name, join)   // inserts a phi at join if needed
+//		fn := b.Function()
+//	 mod := mb.Module()
 type Builder struct {
 	fn  *Function
 	mb  *ModuleBuilder
@@ -65,20 +76,6 @@ type Builder struct {
 	// `let x; let x` yields x$1 then x$2, while a separate `let y` starts
 	// at y$1. Used by [NewVar].
 	versions map[name.Name]int
-}
-
-// ModuleBuilder accumulates the per-module state shared by every [Builder]
-// during analysis: the [Module] being built and the constant-pool dedup
-// index. The dedup index is build-time only — after [ModuleBuilder.Build]
-// returns, the [Module] holds the finished IR with no transient state.
-type ModuleBuilder struct {
-	mod *Module
-
-	// constIndex dedupes [Module.Constants] entries for values whose Go type
-	// is comparable (Int, Bool, Str, None, Auto, etc.) so repeated references
-	// to the same constant share a single pool slot. Non-comparable values
-	// (slice-bearing values, etc.) are appended without dedup.
-	constIndex map[any]int32
 }
 
 // NewModuleBuilder starts a fresh module. The returned ModuleBuilder is the
@@ -148,15 +145,8 @@ func indexKey(v value.Value) any {
 	}
 }
 
-// Function returns the function under construction. Callers should generally
-// not mutate it until [Build] has been called.
+// Function returns the function under construction.
 func (b *Builder) Function() *Function { return b.fn }
-
-// Build finalizes and returns the function. The Builder must not be used
-// after Build returns.
-func (b *Builder) Build() *Function {
-	return b.fn
-}
 
 // CurrentBlock returns the block that subsequent [Emit]/terminator calls
 // will append to.
@@ -241,20 +231,6 @@ func (b *Builder) Const(span syntax.Span, v value.Value) Ref {
 	})
 }
 
-// ConstValue returns the constant value materialised by ref, if ref refers to
-// the module-constant pool. Function-local Defs never hold constants under the
-// pool scheme, so non-module refs always return (nil, false).
-func (b *Builder) ConstValue(r Ref) (value.Value, bool) {
-	if !r.IsModConst() {
-		return nil, false
-	}
-	id := r.ModConstID()
-	if int(id) >= len(b.mb.mod.Constants) {
-		return nil, false
-	}
-	return b.mb.mod.Constants[id], true
-}
-
 // PeekVar returns the SSA def currently visible for v in this builder's
 // current block, without inserting any phi nodes. Returns (NoRef, false) when
 // the variable has no definition recorded in the current block — predecessors
@@ -272,7 +248,7 @@ func (b *Builder) PeekVar(v Var) (Ref, bool) {
 // Unary emits a unary-operator instruction.
 func (b *Builder) Unary(span syntax.Span, op syntax.UnaryOp, x Ref) Ref {
 	if x.IsModConst() {
-		xv, _ := b.ConstValue(x)
+		xv := b.mb.mod.Constants[x.ModConstID()]
 		v, err := value.UnaryOp(op, xv)
 		if err == nil {
 			return b.Const(span, v)
@@ -286,8 +262,8 @@ func (b *Builder) Unary(span syntax.Span, op syntax.UnaryOp, x Ref) Ref {
 // Binary emits a non-assignment binary-operator instruction.
 func (b *Builder) Binary(span syntax.Span, op syntax.BinaryOp, l, r Ref) Ref {
 	if l.IsModConst() && r.IsModConst() {
-		lv, _ := b.ConstValue(l)
-		rv, _ := b.ConstValue(r)
+		lv := b.mb.mod.Constants[l.ModConstID()]
+		rv := b.mb.mod.Constants[r.ModConstID()]
 		v, err := value.BinaryOp(op, lv, rv)
 		if err == nil {
 			return b.Const(span, v)
@@ -451,7 +427,7 @@ func (b *Builder) Self(span syntax.Span) Ref {
 	return ref
 }
 
-// Markup helpers /////////////////////////////////////////////////////////////
+// Markup helpers //////////////////////////////////////////////////////////////
 
 // ContentResult emits a content-join instruction over items.
 func (b *Builder) ContentResult(span syntax.Span, items []Ref) Ref {

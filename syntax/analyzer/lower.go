@@ -267,7 +267,7 @@ func (a *analyzer) lowerIdent(n syntax.Node) expr.Ref {
 // each capture's outer Ref in its enclosing builder via resolveName, which
 // recurses through any intermediate closures.
 func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
-	f := a.frames[len(a.frames)-1]
+	frameIdx := len(a.frames) - 1
 	inCurrent := true
 	for s := a.scope; s != nil; s = s.parent {
 		if binding, ok := s.bindings[source]; ok {
@@ -279,11 +279,20 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 			case inCurrent:
 				return a.b.ReadVar(binding.variable, a.b.CurrentBlock())
 			default:
+				// Found the name outside the current closure.
+				f := a.frames[frameIdx]
+				if ref, ok := f.b.PeekVar(binding.variable); ok && ref.IsModConst() {
+					// Reference is a module-constant, which is immutable which
+					// doesn't require a capture.
+					return ref
+				}
+				// Fall back to capturing the variable in the current closure.
 				return a.captureRef(source, span)
 			}
 		}
-		if s == f.scope {
+		if s == a.frames[frameIdx].scope {
 			inCurrent = false
+			frameIdx--
 		}
 	}
 	// checkIdent already reported "unknown variable" — this is a bug if we
@@ -295,20 +304,9 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 // frame, allocating one on first reference. Captures are never reassignable,
 // so no SSA-variable indirection is needed — the returned Ref is the
 // canonical value for source in this frame.
-//
-// The cache lives inside the capture branch (not in front of the scope walk)
-// so that a later `let source = ...` inside the closure body can shadow the
-// captured name without the cache silently returning the outer value.
 func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
 	f := a.frames[len(a.frames)-1]
 	if ref, ok := f.captures[source]; ok {
-		return ref
-	}
-	// If the outer frame's current SSA def for source is already a
-	// module-constant ref (typical for `let n = <literal>` at the top of an
-	// enclosing frame), reuse it directly — module-const refs are global
-	// across all functions in the module, so no DefCapture is needed.
-	if ref, ok := a.peekOuterConst(source); ok {
 		return ref
 	}
 	ref := a.b.AddCapture(expr.Var{Name: source}, span)
@@ -319,53 +317,12 @@ func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
 	return ref
 }
 
-// peekOuterConst checks whether source resolves to a module-constant ref in
-// the outer frame that owns its binding, without inserting any phi nodes.
-// Returns (NoRef, false) when the binding is in the current frame, when its
-// owning frame's current block has no recorded def, or when the def is not a
-// module-const ref. Used by [captureRef] to short-circuit capture allocation
-// for constants visible in the outer scope.
-func (a *analyzer) peekOuterConst(source name.Name) (expr.Ref, bool) {
-	frameIdx := len(a.frames) - 1
-	inCurrent := true
-	for s := a.scope; s != nil; s = s.parent {
-		if b, ok := s.bindings[source]; ok {
-			if inCurrent {
-				return expr.NoRef, false
-			}
-			if b.variable.Name == name.Invalid {
-				// Value-only binding (builtin / WithBindings); resolveName
-				// already inlined it via the b.value path, captureRef
-				// shouldn't have been called.
-				return expr.NoRef, false
-			}
-			outerB := a.frames[frameIdx].b
-			ref, ok := outerB.PeekVar(b.variable)
-			if !ok || !ref.IsModConst() {
-				return expr.NoRef, false
-			}
-			return ref, true
-		}
-		if s == a.frames[frameIdx].scope {
-			inCurrent = false
-			frameIdx--
-			if frameIdx < 0 {
-				return expr.NoRef, false
-			}
-		}
-	}
-	return expr.NoRef, false
-}
-
 // Operators ///////////////////////////////////////////////////////////////////
 
 func (a *analyzer) lowerUnary(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindUnary)
 	op := syntax.UnaryOpFromKind(ns.node().Kind())
 	x := a.lowerExpr(ns.node())
-	if x == expr.NoRef {
-		return expr.NoRef
-	}
 	return a.b.Unary(n.Span(), op, x)
 }
 
@@ -389,24 +346,14 @@ func (a *analyzer) lowerBinary(n syntax.Node) expr.Ref {
 	}
 	left := a.lowerExpr(leftNode)
 	right := a.lowerExpr(rightNode)
-	// Partial-expression recovery: if one operand is missing because the
-	// parser substituted an [*syntax.Error] (already recorded), fall back
-	// to the other operand so the surrounding context still sees a value.
-	// Matches tests that treat `{1+}` as evaluating to `1`.
-	if left == expr.NoRef {
-		return right
-	}
-	if right == expr.NoRef {
-		return left
-	}
 	return a.b.Binary(n.Span(), op, left, right)
 }
 
-// lowerShortCircuit lowers `left and right` / `left or right` into a CFG
-// that evaluates the right operand only when needed. The left operand is
-// always evaluated (and required to be a boolean by the [expr.Branch]
-// terminator); the right operand is only evaluated when the result isn't
-// already determined by the left.
+// lowerShortCircuit lowers `left and right` / `left or right` into a CFG that
+// evaluates the right operand only when needed. The left operand is always
+// evaluated (and required to be a boolean by the [expr.Branch] terminator); the
+// right operand is only evaluated when the result isn't already determined by
+// the left.
 func (a *analyzer) lowerShortCircuit(span syntax.Span, op syntax.BinaryOp, leftNode, rightNode syntax.Node) expr.Ref {
 	left := a.lowerExpr(leftNode)
 	result := a.b.NewVar(name.Make("$sc"))
@@ -437,14 +384,15 @@ func (a *analyzer) lowerShortCircuit(span syntax.Span, op syntax.BinaryOp, leftN
 // isCapturedVar reports whether source resolves as a capture in the current
 // function, i.e. it is defined outside the innermost closure boundary.
 func (a *analyzer) isCapturedVar(source name.Name) bool {
-	if a.closureDepth() == 0 {
+	if len(a.frames) == 1 {
+		// No closures, so no captures.
 		return false
 	}
 	boundary := a.frames[len(a.frames)-1].scope
 	inCurrent := true
 	for s := a.scope; s != nil; s = s.parent {
-		if binding, ok := s.bindings[source]; ok {
-			return !inCurrent && binding.value == nil
+		if _, ok := s.bindings[source]; ok {
+			return !inCurrent
 		}
 		if s == boundary {
 			inCurrent = false
@@ -502,9 +450,19 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		if op == syntax.Assign {
 			newVal = a.lowerExpr(rightNode)
 		} else {
-			// Match Typst semantics: RHS is computed first (may shadow the
-			// LHS via side-effects), then the LHS's current value is read,
-			// then combined with the RHS.
+			// Match Typst semantics: RHS is computed first (may shadow the LHS
+			// via side-effects), then the LHS's current value is read, then
+			// combined with the RHS.
+			//
+			// This feels more like an accident than a deliberate design choice,
+			// but here we are. For reference, here is an example that shadows
+			// the LHS via a let binding on the RHS:
+			//
+			//   #{
+			//     let var = "a"
+			//     var += var.at(0, default: let var = "b")
+			//     test(var, "ba")
+			//   }
 			rhs := a.lowerExpr(rightNode)
 			// Re-resolve in case the RHS shadowed the binding via a `let`.
 			if b, ok := a.lookup(source); ok {
@@ -540,8 +498,8 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		if op != syntax.Assign {
 			stripped = op.StripAssign()
 		}
-		// Use the LHS span for the FieldWrite so runtime errors point at
-		// the field-access expression, not the whole assignment.
+		// Use the LHS span for the FieldWrite so runtime errors point at the
+		// field-access expression, not the whole assignment.
 		a.b.FieldWrite(leftNode.Span(), target, fieldName, newVal, stripped)
 		return a.b.Const(span, value.None{})
 	case syntax.KindFuncCall:

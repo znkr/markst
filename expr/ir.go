@@ -99,7 +99,7 @@ func (r Ref) IsModConst() bool { return r < NoRef }
 // Result is undefined if [Ref.IsModConst] returns false.
 func (r Ref) ModConstID() int32 { return -2 - int32(r) }
 
-// Def records how to materialise the SSA value with a given [Ref]. There is
+// Def records how to materialize the SSA value with a given [Ref]. There is
 // one Def per Ref; storing them in a flat slice makes the runtime value
 // table a simple `[]value.Value` indexed by Ref.
 type Def interface {
