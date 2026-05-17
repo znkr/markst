@@ -12,7 +12,7 @@ import (
 // (also [Function]s). Each function is a CFG of [BasicBlock]s in SSA form,
 // terminated by a [Terminator]. SSA values are referenced by [Ref], a
 // function-local handle into [Function.Defs]; each [Def] records how to
-// materialise the value (constant, parameter, capture, phi result, or
+// materialize the value (constant, parameter, capture, phi result, or
 // instruction result).
 //
 // Phi nodes live on the block, separately from straight-line instructions,
@@ -22,7 +22,7 @@ import (
 // The construction algorithm is Braun, Buchwald & Hack (2013), "Simple and
 // Efficient Construction of Static Single Assignment Form".
 
-// Module is a fully analysed writst program: the document body plus every
+// Module is a fully analyzed writst program: the document body plus every
 // closure hoisted out into a top-level [Function].
 type Module struct {
 	Top       *Function   // the document body
@@ -40,7 +40,7 @@ type Function struct {
 	Params   []Param
 	Captures []Var         // free-variable identifiers; values arrive at MakeClosure
 	Blocks   []*BasicBlock // Blocks[0] is the entry block
-	Defs     []Def         // Defs[ref] describes how to materialise that SSA value
+	Defs     []Def         // Defs[ref] describes how to materialize that SSA value
 	Span     syntax.Span
 }
 
@@ -128,7 +128,7 @@ type DefCapture struct {
 
 // DefSelf is a Def for the currently-executing closure value. It lets a
 // closure body refer to itself without an explicit capture, enabling direct
-// recursion. The runtime materialises it from the call-time `self` slot.
+// recursion. The runtime materializes it from the call-time `self` slot.
 type DefSelf struct {
 	def
 }

@@ -7,8 +7,8 @@ import (
 )
 
 // Instruction is a single SSA operation. Instructions live inside
-// [BasicBlock.Insts] in program order; each produces a single SSA value
-// (its [Result]) or [NoRef] for void operations.
+// [BasicBlock.Instrs] in program order; each produces a single SSA value (its
+// [Result]) or [NoRef] for void operations.
 type Instruction interface {
 	Result() Ref
 	Operands() []Ref
@@ -16,8 +16,8 @@ type Instruction interface {
 	aInstruction()
 }
 
-// instr is the common base for instruction types; concrete instructions
-// embed it to inherit Result/Span and to satisfy aInstruction().
+// instr is the common base for instruction types; concrete instructions embed
+// it to inherit Result/Span and to satisfy aInstruction().
 type instr struct {
 	result Ref
 	span   syntax.Span
@@ -68,7 +68,7 @@ type Return struct {
 
 func (t *Return) Successors() []BlockID { return nil }
 
-// Unreachable marks a control-flow position that the analyser has proved
+// Unreachable marks a control-flow position that the analyzer has proved
 // cannot be reached (e.g. straight-line code after a Return). Evaluating it
 // is a bug.
 type Unreachable struct {
@@ -81,7 +81,7 @@ func (t *Unreachable) Successors() []BlockID { return nil }
 //
 // Concrete instruction types live here. Each embeds [inst] for span/result.
 
-// Const materialises a constant runtime value.
+// Const materializes a constant runtime value.
 type Const struct {
 	instr
 	Value value.Value
@@ -161,8 +161,8 @@ type DictEntry struct {
 //
 // FieldSpan covers just the `.field` portion of the source (used by errors
 // pointing at the field name, e.g. "content does not have field X");
-// [inst.span] covers the whole `target.field` expression (used by errors
-// that report against the access as a whole, e.g. "type T has no method").
+// [inst.span] covers the whole `target.field` expression (used by errors that
+// report against the access as a whole, e.g. "type T has no method").
 type FieldRead struct {
 	instr
 	Target    Ref
@@ -195,11 +195,11 @@ type CallArg struct {
 	DirectFloatLit bool
 }
 
-// Call invokes a function value. Args carry the positional, named, and
-// spread arguments in source order; Blocks holds the Refs of any trailing
-// content blocks (markup form: `f[...]`). AllowSetter is true when this call
-// is the LHS of an assignment, signalling that the callee's runtime should
-// surface a setter via FunctionCallContext.
+// Call invokes a function value. Args carry the positional, named, and spread
+// arguments in source order; Blocks holds the Refs of any trailing content
+// blocks (markup form: `f[...]`). AllowSetter is true when this call is the LHS
+// of an assignment, signalling that the callee's runtime should surface a
+// setter via FunctionCallContext.
 type Call struct {
 	instr
 	Callee      Ref
@@ -218,12 +218,12 @@ func (c *Call) Operands() []Ref {
 	return out
 }
 
-// CallSet invokes a function whose return is an lvalue (the called
-// function registers a setter via [value.FunctionCallContext.Setter]); the
-// runtime then invokes the setter with the supplied new value. For
-// compound assignments (`+=`, etc.) Op is the binary op (StripAssign
-// applied); the setter receives `op(callResult, NewVal)`. For plain
-// assignment Op == [syntax.Assign] and NewVal is written directly.
+// CallSet invokes a function whose return is an lvalue (the called function
+// registers a setter via [value.FunctionCallContext.Setter]); the runtime then
+// invokes the setter with the supplied new value. For compound assignments
+// (`+=`, etc.) Op is the binary op (StripAssign applied); the setter receives
+// `op(callResult, NewVal)`. For plain assignment Op == [syntax.Assign] and
+// NewVal is written directly.
 type CallSet struct {
 	instr
 	Callee Ref
@@ -244,10 +244,9 @@ func (c *CallSet) Operands() []Ref {
 	return out
 }
 
-// FieldWrite writes a value into a named field of a target (a dictionary
-// entry, content field, etc.). For compound assignment, Op carries the
-// stripped binary op so the runtime can compute `old op NewVal` before
-// writing.
+// FieldWrite writes a value into a named field of a target (a dictionary entry,
+// content field, etc.). For compound assignment, Op carries the stripped binary
+// op so the runtime can compute `old op NewVal` before writing.
 type FieldWrite struct {
 	instr
 	Target Ref
@@ -268,9 +267,9 @@ type Extract struct {
 
 func (e *Extract) Operands() []Ref { return []Ref{e.Source} }
 
-// LengthCheck asserts that Source has at least Want elements (or exactly
-// Want if HasSink is false). Used to lower destructuring patterns; raises
-// a runtime error if the assertion fails.
+// LengthCheck asserts that Source has at least Want elements (or exactly Want
+// if HasSink is false). Used to lower destructuring patterns; raises a runtime
+// error if the assertion fails.
 type LengthCheck struct {
 	instr
 	Source  Ref
@@ -298,8 +297,8 @@ type IterHasNext struct {
 
 func (i *IterHasNext) Operands() []Ref { return []Ref{i.Iter} }
 
-// IterAdvance advances the iterator one step and yields the next element.
-// Must only be evaluated when [IterHasNext] just returned true.
+// IterAdvance advances the iterator one step and yields the next element. Must
+// only be evaluated when [IterHasNext] just returned true.
 type IterAdvance struct {
 	instr
 	Iter Ref
@@ -307,9 +306,9 @@ type IterAdvance struct {
 
 func (i *IterAdvance) Operands() []Ref { return []Ref{i.Iter} }
 
-// MakeClosure constructs a closure value pointing at the [Function] with
-// the given FuncID, capturing one outer SSA value per entry in the
-// function's [Function.Captures] list.
+// MakeClosure constructs a closure value pointing at the [Function] with the
+// given FuncID, capturing one outer SSA value per entry in the function's
+// [Function.Captures] list.
 type MakeClosure struct {
 	instr
 	Func     FuncID
@@ -333,14 +332,14 @@ func (c *ContentResult) Operands() []Ref { return c.Items }
 // Error raises a value error at eval time with the stored message. Used to
 // surface deferred analyzer errors (e.g. "cannot mutate a temporary value").
 //
-// If From is set, the instruction propagates from that Ref's value when it
-// is already a [*value.Error]: the propagating error is yielded as the
-// instruction's result and Msg is suppressed. This keeps the diagnostic
-// from cascading when an upstream computation already failed.
+// If From is set, the instruction propagates from that Ref's value when it is
+// already a [*value.Error]: the propagating error is yielded as the
+// instruction's result and Msg is suppressed. This keeps the diagnostic from
+// cascading when an upstream computation already failed.
 //
 // From is intentionally NOT returned from [Error.Operands]: generic
-// operand-propagation must not short-circuit this instruction (the case body
-// in evalInst implements the cascade-suppression rule explicitly).
+// operand-propagation must not short-circuit this instruction (the case body in
+// evalInst implements the cascade-suppression rule explicitly).
 type Error struct {
 	instr
 	Msg   string
@@ -350,10 +349,10 @@ type Error struct {
 
 func (r *Error) Operands() []Ref { return nil }
 
-// AttachLabel binds a label name to the content produced by Content. It
-// also registers the label in the evaluator's label set so subsequent
-// [RefMarkup] instructions can resolve it. Re-labelling produces a runtime
-// warning and discards the older label, matching legacy semantics.
+// AttachLabel binds a label name to the content produced by Content. It also
+// registers the label in the evaluator's label set so subsequent [RefMarkup]
+// instructions can resolve it. Re-labelling produces a runtime warning and
+// discards the older label, matching legacy semantics.
 type AttachLabel struct {
 	instr
 	Content Ref
@@ -363,8 +362,8 @@ type AttachLabel struct {
 func (a *AttachLabel) Operands() []Ref { return []Ref{a.Content} }
 
 // CodeJoin joins a sequence of value refs using the code-mode joiner. The
-// joiner selects an output type based on the input types (strings concat,
-// ints sum, content sequence, etc.). Used as the final value of code blocks.
+// joiner selects an output type based on the input types (strings concat, ints
+// sum, content sequence, etc.). Used as the final value of code blocks.
 type CodeJoin struct {
 	instr
 	Items     []Ref
@@ -375,18 +374,18 @@ func (c *CodeJoin) Operands() []Ref { return c.Items }
 
 // LoopAccBegin produces an initial loop-accumulator value (an empty array
 // internally; treated as opaque accumulator state). Each iteration's body
-// result is added via [LoopAccAdd], and the final joined value is obtained
-// via [LoopAccResult].
+// result is added via [LoopAccAdd], and the final joined value is obtained via
+// [LoopAccResult].
 type LoopAccBegin struct {
 	instr
 }
 
 func (*LoopAccBegin) Operands() []Ref { return nil }
 
-// LoopAccAdd appends item to the accumulator and returns the same
-// accumulator (mutated in place). The mutation is safe under SSA because
-// the previous accumulator value is read exactly once per iteration before
-// being overwritten by the WriteVar that follows.
+// LoopAccAdd appends item to the accumulator and returns the same accumulator
+// (mutated in place). The mutation is safe under SSA because the previous
+// accumulator value is read exactly once per iteration before being overwritten
+// by the WriteVar that follows.
 type LoopAccAdd struct {
 	instr
 	Acc  Ref
@@ -479,7 +478,7 @@ type TermItem struct {
 
 func (t *TermItem) Operands() []Ref { return []Ref{t.Term, t.Description} }
 
-// Stub instructions for currently-unimplemented constructs ///////////////////
+// Stub instructions for currently-unimplemented constructs ////////////////////
 //
 // Set/show rules, contextual blocks, and module includes have IR placeholders
 // so the analyser can produce well-formed modules; the evaluator panics on
