@@ -125,6 +125,7 @@ func (p *Phi) Result() Ref            { return p.result }
 func (p *Phi) Block() BlockID         { return p.block }
 func (p *Phi) Operands() []PhiOperand { return p.operands }
 func (p *Phi) Span() syntax.Span      { return p.span }
+func (p *Phi) setResult(r Ref)        { p.result = r }
 
 // RemapOperands substitutes every operand Ref through rename. Used by
 // [Builder.Finalize] to inline trivial-phi removals.

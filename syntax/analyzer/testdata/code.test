@@ -483,7 +483,7 @@
 │     v0 = make_closure $fn_0
 │     v1 = make_closure $fn_1
 │     v2 = make_array [v0, v1]
-│     v3 = code_join [none, v2]
+│     v3 = code_join [v2]
 │     return v3
 │ 
 │ fn $fn_0 name="f":
@@ -643,14 +643,14 @@
 │     v0 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v3 = phi [b0 v0, b2 v4]
+│     v1 = phi [b0 v0, b2 v2]
 │     branch none, b2, b3
 │   b2:
-│     v4 = loop_acc_add v3, none
+│     v2 = loop_acc_add v1, none
 │     jump b1
 │   b3:
-│     v5 = loop_acc_result v3
-│     return v5
+│     v3 = loop_acc_result v1
+│     return v3
 
 --- for-loop ---
 #let items
@@ -702,13 +702,13 @@
 │     v0 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v3 = phi [b0 v0, b4 v1]
+│     v2 = phi [b0 v0, b4 v1]
 │     branch true, b2, b3
 │   b2:
 │     jump b3
 │   b3:
-│     v4 = loop_acc_result v3
-│     return v4
+│     v3 = loop_acc_result v2
+│     return v3
 │   b4:
 │     v1 = loop_acc_add <noref>, none
 │     jump b1
@@ -816,7 +816,7 @@
 │ fn $top:
 │   b0:
 │     v0 = const auto
-│     v1 = content_result [none, v0, true, false]
+│     v1 = content_result [v0, true, false]
 │     return v1
 
 --- literal-int ---

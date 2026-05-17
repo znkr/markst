@@ -73,6 +73,16 @@ type Builder struct {
 	// map and then discards it. Never escapes the builder.
 	redirects map[Ref]Ref
 
+	// liveWrites collects every Ref ever passed as the value side of a
+	// user-level [WriteVar] call. The SSA graph does not record these uses
+	// (writes update an internal table, not an instruction operand), so DCE
+	// counts each entry as +1 use to prevent dropping the RHS of a
+	// write-only assignment — whose evaluation may surface a runtime error
+	// even when the bound name is never read again. Builder-internal
+	// caching writes (from [readVarRecursive]) bypass this slice via
+	// [writeVarInternal] so they don't artificially pin phi results.
+	liveWrites []Ref
+
 	// selfRef caches the self Ref for this function. NoRef until the
 	// first [Self] call allocates one.
 	selfRef Ref
@@ -94,6 +104,14 @@ func NewModuleBuilder() *ModuleBuilder {
 // e.g. attach the top-level function, but Constants is still growing until
 // every [Builder] has finished emitting.
 func (mb *ModuleBuilder) Module() *Module { return mb.mod }
+
+// noneConstID returns the [Module.Constants] index of the interned
+// [value.None] entry, if one has been emitted. Used by DCE to recognize
+// constant-`none` joiner items.
+func (mb *ModuleBuilder) noneConstID() (int32, bool) {
+	id, ok := mb.constIndex[value.None{}]
+	return id, ok
+}
 
 // NewBuilder starts construction of a fresh [Function] inside mb's module.
 // The entry block (id 0) is created and made current. All builders created
@@ -153,58 +171,6 @@ func indexKey(v value.Value) any {
 
 // Function returns the function under construction.
 func (b *Builder) Function() *Function { return b.fn }
-
-// Finalize seals the function for consumption. It transitively closes the
-// trivial-phi rename map, then rewrites every Ref-typed operand in the IR
-// through the closed map and discards the map. After Finalize, no live Ref
-// in the function points at a trivially-removed phi. Must be called once
-// construction is complete, before the function is handed to the evaluator
-// or formatter.
-func (b *Builder) Finalize() {
-	if len(b.redirects) == 0 {
-		return
-	}
-	// Transitively close: rewrite each entry's target to its terminal value.
-	for ref, target := range b.redirects {
-		seen := target
-		for {
-			t, ok := b.redirects[seen]
-			if !ok || t == seen {
-				break
-			}
-			seen = t
-		}
-		if seen != target {
-			b.redirects[ref] = seen
-		}
-	}
-	rename := func(r Ref) Ref {
-		if r < 0 {
-			return r
-		}
-		if t, ok := b.redirects[r]; ok {
-			return t
-		}
-		return r
-	}
-	for i := range b.fn.Params {
-		if b.fn.Params[i].Default != NoRef {
-			b.fn.Params[i].Default = rename(b.fn.Params[i].Default)
-		}
-	}
-	for _, block := range b.fn.Blocks {
-		for _, phi := range block.Phis {
-			phi.RemapOperands(rename)
-		}
-		for _, inst := range block.Instrs {
-			inst.RemapOperands(rename)
-		}
-		if block.Term != nil {
-			block.Term.RemapOperands(rename)
-		}
-	}
-	b.redirects = nil
-}
 
 // CurrentBlock returns the block that subsequent [Emit]/terminator calls
 // will append to.
@@ -367,29 +333,33 @@ func (b *Builder) Call(span syntax.Span, callee Ref, args []CallArg, blocks []Re
 	})
 }
 
-// CallSet emits a function-call lvalue assignment.
-func (b *Builder) CallSet(span syntax.Span, callee Ref, args []CallArg, blocks []Ref, newVal Ref, op syntax.BinaryOp) Ref {
-	return b.emit(span, func(ref Ref) Instruction {
+// CallSet emits a function-call lvalue assignment. The instruction is
+// side-effect-only: it has no SSA result. Errors during the call flow
+// through the session, not through a value Ref.
+func (b *Builder) CallSet(span syntax.Span, callee Ref, args []CallArg, blocks []Ref, newVal Ref, op syntax.BinaryOp) {
+	b.emitVoid(func() Instruction {
 		return &CallSet{
-			instr:  instr{result: ref, span: span},
-			Callee: callee,
-			Args:   args,
-			Blocks: blocks,
-			NewVal: newVal,
-			Op:     op,
+			voidInstr: voidInstr{span: span},
+			Callee:    callee,
+			Args:      args,
+			Blocks:    blocks,
+			NewVal:    newVal,
+			Op:        op,
 		}
 	})
 }
 
-// FieldWrite emits a field-write instruction.
-func (b *Builder) FieldWrite(span syntax.Span, target Ref, field name.Name, newVal Ref, op syntax.BinaryOp) Ref {
-	return b.emit(span, func(ref Ref) Instruction {
+// FieldWrite emits a field-write instruction. The instruction is
+// side-effect-only: it has no SSA result. Errors during the write flow
+// through the session, not through a value Ref.
+func (b *Builder) FieldWrite(span syntax.Span, target Ref, field name.Name, newVal Ref, op syntax.BinaryOp) {
+	b.emitVoid(func() Instruction {
 		return &FieldWrite{
-			instr:  instr{result: ref, span: span},
-			Target: target,
-			Field:  field,
-			NewVal: newVal,
-			Op:     op,
+			voidInstr: voidInstr{span: span},
+			Target:    target,
+			Field:     field,
+			NewVal:    newVal,
+			Op:        op,
 		}
 	})
 }
@@ -405,7 +375,7 @@ func (b *Builder) Extract(span syntax.Span, source Ref, index int) Ref {
 // It produces no SSA value, so no Ref is allocated.
 func (b *Builder) LengthCheck(span syntax.Span, source Ref, want int, hasSink bool) {
 	b.emitVoid(func() Instruction {
-		return &LengthCheck{instr: instr{result: NoRef, span: span}, Source: source, Want: want, HasSink: hasSink}
+		return &LengthCheck{voidInstr: voidInstr{span: span}, Source: source, Want: want, HasSink: hasSink}
 	})
 }
 
@@ -648,7 +618,20 @@ func (b *Builder) emitVoid(mkInstr func() Instruction) {
 // Braun SSA construction //////////////////////////////////////////////////////
 
 // WriteVar records that v has SSA value val visible from block onwards.
+// This is the user-level entry point (called from analyzer lowering); the
+// write is also recorded in [Builder.liveWrites] so DCE keeps val alive
+// even when v is never read again. Internal SSA-construction writes
+// (cycle-breaking caches in [readVarRecursive]) call [writeVarInternal]
+// instead so they don't artificially pin phi results.
 func (b *Builder) WriteVar(v Var, block BlockID, val Ref) {
+	b.writeVarInternal(v, block, val)
+	if val >= 0 {
+		b.liveWrites = append(b.liveWrites, val)
+	}
+}
+
+// writeVarInternal is the unbookkept WriteVar used by SSA construction.
+func (b *Builder) writeVarInternal(v Var, block BlockID, val Ref) {
 	defs, ok := b.currentDef[v]
 	if !ok {
 		defs = make(map[BlockID]Ref)
@@ -690,10 +673,10 @@ func (b *Builder) readVarRecursive(v Var, block BlockID) Ref {
 		// Place phi, write before recursing to break cycles.
 		phi := b.newPhi(block)
 		val = phi.result
-		b.WriteVar(v, block, val)
+		b.writeVarInternal(v, block, val)
 		val = b.addPhiOperands(v, phi)
 	}
-	b.WriteVar(v, block, val)
+	b.writeVarInternal(v, block, val)
 	return val
 }
 

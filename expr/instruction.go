@@ -19,8 +19,30 @@ type Instruction interface {
 	aInstruction()
 }
 
-// instr is the common base for instruction types; concrete instructions embed
-// it to inherit Result/Span and to satisfy aInstruction().
+// IsPure reports whether inst can be safely removed when its result Ref has
+// no uses. Pure instructions have no observable effect beyond producing
+// their result; impure ones (calls, error-recording, iterator mutation,
+// stub TODO instructions) must be kept regardless of use count.
+//
+// Phis are always pure; this predicate is only consulted for instructions.
+func IsPure(inst Instruction) bool {
+	switch inst.(type) {
+	case *Const, *Unary, *Binary,
+		*MakeArray, *MakeDict, *FieldRead, *Extract,
+		*MakeClosure,
+		*Heading, *Strong, *Emph, *Link, *RefMarkup,
+		*ListItem, *EnumItem, *TermItem,
+		*ContentResult, *CodeJoin,
+		*LoopAccBegin, *LoopAccResult:
+		return true
+	}
+	return false
+}
+
+// instr is the base for value-producing instruction kinds: those that
+// publish their result as an SSA value via [Result]. Concrete kinds embed
+// *instr to inherit Result/Span/aInstruction (and setResult, which is used
+// by [Builder.Finalize]'s Ref-compaction pass).
 type instr struct {
 	result Ref
 	span   syntax.Span
@@ -29,10 +51,28 @@ type instr struct {
 func (i *instr) Result() Ref       { return i.result }
 func (i *instr) Span() syntax.Span { return i.span }
 func (i *instr) aInstruction()     {}
+func (i *instr) setResult(r Ref)   { i.result = r }
+
+// voidInstr is the base for side-effect-only instruction kinds: those that
+// have no SSA result. Embedding voidInstr instead of [instr] is what makes
+// a kind structurally void — there is no result field to misuse, no
+// setResult method, and [Result] is hardcoded to [NoRef]. Compaction and
+// other Ref-rewriting passes dispatch on the absence of setResult to skip
+// these kinds.
+type voidInstr struct {
+	span syntax.Span
+}
+
+func (i *voidInstr) Result() Ref       { return NoRef }
+func (i *voidInstr) Span() syntax.Span { return i.span }
+func (i *voidInstr) aInstruction()     {}
 
 // Terminator ends a [BasicBlock]. Every block has exactly one.
 type Terminator interface {
 	Successors() []BlockID
+	// Operands returns the Ref-typed operands of the terminator. Empty for
+	// control-only terminators ([Jump], [Unreachable]).
+	Operands() []Ref
 	// RemapOperands substitutes every Ref-typed operand through rename.
 	RemapOperands(rename func(Ref) Ref)
 	Span() syntax.Span
@@ -52,8 +92,9 @@ type Jump struct {
 	Target BlockID
 }
 
-func (t *Jump) Successors() []BlockID            { return []BlockID{t.Target} }
-func (t *Jump) RemapOperands(_ func(Ref) Ref)    {}
+func (t *Jump) Successors() []BlockID         { return []BlockID{t.Target} }
+func (t *Jump) Operands() []Ref               { return nil }
+func (t *Jump) RemapOperands(_ func(Ref) Ref) {}
 
 // Branch is a two-way branch on a boolean SSA value.
 type Branch struct {
@@ -64,6 +105,7 @@ type Branch struct {
 }
 
 func (t *Branch) Successors() []BlockID         { return []BlockID{t.Then, t.Else} }
+func (t *Branch) Operands() []Ref               { return []Ref{t.Cond} }
 func (t *Branch) RemapOperands(f func(Ref) Ref) { t.Cond = f(t.Cond) }
 
 // Return exits the enclosing [Function]. Value is the returned SSA value, or
@@ -74,6 +116,12 @@ type Return struct {
 }
 
 func (t *Return) Successors() []BlockID { return nil }
+func (t *Return) Operands() []Ref {
+	if t.Value == NoRef {
+		return nil
+	}
+	return []Ref{t.Value}
+}
 func (t *Return) RemapOperands(f func(Ref) Ref) {
 	if t.Value != NoRef {
 		t.Value = f(t.Value)
@@ -88,6 +136,7 @@ type Unreachable struct {
 }
 
 func (t *Unreachable) Successors() []BlockID         { return nil }
+func (t *Unreachable) Operands() []Ref               { return nil }
 func (t *Unreachable) RemapOperands(_ func(Ref) Ref) {}
 
 // Instructions ////////////////////////////////////////////////////////////////
@@ -201,8 +250,8 @@ type FieldRead struct {
 	FieldSpan syntax.Span
 }
 
-func (f *FieldRead) Operands() []Ref                  { return []Ref{f.Target} }
-func (f *FieldRead) RemapOperands(rn func(Ref) Ref)   { f.Target = rn(f.Target) }
+func (f *FieldRead) Operands() []Ref                { return []Ref{f.Target} }
+func (f *FieldRead) RemapOperands(rn func(Ref) Ref) { f.Target = rn(f.Target) }
 
 // ArgKind discriminates the variants of [CallArg].
 type ArgKind uint8
@@ -265,9 +314,9 @@ func (c *Call) RemapOperands(f func(Ref) Ref) {
 // invokes the setter with the supplied new value. For compound assignments
 // (`+=`, etc.) Op is the binary op (StripAssign applied); the setter receives
 // `op(callResult, NewVal)`. For plain assignment Op == [syntax.Assign] and
-// NewVal is written directly.
+// NewVal is written directly. Side-effect-only — no SSA result.
 type CallSet struct {
-	instr
+	voidInstr
 	Callee Ref
 	Args   []CallArg
 	Blocks []Ref
@@ -299,9 +348,10 @@ func (c *CallSet) RemapOperands(f func(Ref) Ref) {
 
 // FieldWrite writes a value into a named field of a target (a dictionary entry,
 // content field, etc.). For compound assignment, Op carries the stripped binary
-// op so the runtime can compute `old op NewVal` before writing.
+// op so the runtime can compute `old op NewVal` before writing. Side-effect-
+// only — no SSA result.
 type FieldWrite struct {
-	instr
+	voidInstr
 	Target Ref
 	Field  name.Name
 	NewVal Ref
@@ -327,15 +377,14 @@ func (e *Extract) RemapOperands(f func(Ref) Ref) { e.Source = f(e.Source) }
 
 // LengthCheck asserts that Source has at least Want elements (or exactly Want
 // if HasSink is false). Used to lower destructuring patterns; raises a runtime
-// error if the assertion fails.
+// error if the assertion fails. Side-effect-only — no SSA result.
 type LengthCheck struct {
-	instr
+	voidInstr
 	Source  Ref
 	Want    int
 	HasSink bool
 }
 
-func (l *LengthCheck) Result() Ref                   { return NoRef }
 func (l *LengthCheck) Operands() []Ref               { return []Ref{l.Source} }
 func (l *LengthCheck) RemapOperands(f func(Ref) Ref) { l.Source = f(l.Source) }
 
@@ -404,14 +453,13 @@ func (c *ContentResult) RemapOperands(f func(Ref) Ref) {
 // Error raises a value error at eval time with the stored message. Used to
 // surface deferred analyzer errors (e.g. "cannot mutate a temporary value").
 //
-// If From is set, the instruction propagates from that Ref's value when it is
-// already a [*value.Error]: the propagating error is yielded as the
-// instruction's result and Msg is suppressed. This keeps the diagnostic from
-// cascading when an upstream computation already failed.
-//
-// From is intentionally NOT returned from [Error.Operands]: generic
-// operand-propagation must not short-circuit this instruction (the case body in
-// evalInst implements the cascade-suppression rule explicitly).
+// If From is set, the instruction propagates from that Ref's value when it
+// is already a [*value.Error]: the propagating error is yielded as the
+// instruction's result and Msg is suppressed. This keeps the diagnostic
+// from cascading when an upstream computation already failed. The cascade
+// is implemented by the generic operand-error propagation in evalInst,
+// driven by [Error.Operands] returning From — no special-case logic in the
+// Error case body.
 type Error struct {
 	instr
 	Msg   string
@@ -419,7 +467,12 @@ type Error struct {
 	From  Ref // optional; NoRef when this Error is unconditional
 }
 
-func (r *Error) Operands() []Ref { return nil }
+func (r *Error) Operands() []Ref {
+	if r.From == NoRef {
+		return nil
+	}
+	return []Ref{r.From}
+}
 func (r *Error) RemapOperands(f func(Ref) Ref) {
 	if r.From != NoRef {
 		r.From = f(r.From)

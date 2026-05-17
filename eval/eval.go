@@ -326,10 +326,12 @@ func runFunction(s *session, call functionCall) value.Value {
 func evalInst(fr *frame, inst expr.Instruction) {
 	r := inst.Result()
 
-	if propagatesFromOperands(inst) && r != expr.NoRef {
+	if propagatesFromOperands(inst) {
 		for _, op := range inst.Operands() {
 			if e, ok := value.IsError(fr.get(op)); ok {
-				fr.vals[r] = e
+				if r != expr.NoRef {
+					fr.vals[r] = e
+				}
 				return
 			}
 		}
@@ -411,9 +413,9 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.Call:
 		fr.vals[r] = fr.evalCall(i)
 	case *expr.CallSet:
-		fr.vals[r] = fr.evalCallSet(i)
+		fr.evalCallSet(i)
 	case *expr.FieldWrite:
-		fr.vals[r] = fr.evalFieldWrite(i)
+		fr.evalFieldWrite(i)
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
 	case *expr.Extract:
@@ -462,14 +464,11 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.ContentResult:
 		fr.vals[r] = fr.evalContentResult(i)
 	case *expr.Error:
-		// When the upstream Ref already errored, propagate it and suppress
-		// Msg so the original failure isn't double-reported.
-		if i.From != expr.NoRef {
-			if e, ok := value.IsError(fr.get(i.From)); ok {
-				fr.vals[r] = e
-				return
-			}
-		}
+		// The cascade-suppression rule (when From is already a *value.Error,
+		// propagate it and suppress Msg) is handled by the generic operand-
+		// error short-circuit at the top of evalInst; by the time we reach
+		// here, From is known to be non-error (or absent), so we always
+		// record the Msg.
 		fr.vals[r] = fr.error(i.Span(), i.Msg, i.Hints...)
 	case *expr.AttachLabel:
 		// Coerce the prior content to value.Content, attach the label, emit
@@ -934,41 +933,48 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 // [FunctionCallContext.Setter] pointer; if the function registers a setter,
 // it is invoked with the (possibly op-combined) new value. Returns the
 // first error encountered, or none on success.
-func (fr *frame) evalCallSet(c *expr.CallSet) value.Value {
+// evalCallSet implements `f(args) = v` (and compound forms). Side-effect
+// only: all error paths record on the session, and the instruction has no
+// SSA result.
+func (fr *frame) evalCallSet(c *expr.CallSet) {
 	fn, e := fr.resolveCallee(fr.get(c.Callee), c.Span())
 	if e != nil {
-		return e
+		return
 	}
 	args, e := fr.buildCallArgs(c.Span(), c.Args, c.Blocks)
 	if e != nil {
-		return e
+		return
 	}
 
 	var setter func(value.Value)
 	fcc := value.FunctionCallContext{Span: c.Span(), Setter: &setter}
 	cur, err := fn.Apply(&fcc, &args)
 	if err != nil {
-		return fr.applyErr(fn, c.Span(), c.Args, err)
+		fr.applyErr(fn, c.Span(), c.Args, err)
+		return
 	}
 	if setter == nil {
-		return fr.error(c.Span(), "cannot mutate a temporary value")
+		fr.error(c.Span(), "cannot mutate a temporary value")
+		return
 	}
 	newVal := fr.get(c.NewVal)
 	if c.Op != syntax.Assign {
 		combined, err := value.BinaryOp(c.Op, cur, newVal)
 		if err != nil {
-			return fr.error(c.Span(), err.Error())
+			fr.error(c.Span(), err.Error())
+			return
 		}
 		newVal = combined
 	}
 	setter(newVal)
-	return value.None{}
 }
 
 // evalFieldWrite implements `x.f = v` (and compound forms). For now it
 // supports writing to dictionary fields; other field-writes (e.g. content
-// fields) are uncommon as lvalues and return an error.
-func (fr *frame) evalFieldWrite(w *expr.FieldWrite) value.Value {
+// fields) are uncommon as lvalues and record an error. Side-effect only:
+// all error paths record on the session, and the instruction has no SSA
+// result.
+func (fr *frame) evalFieldWrite(w *expr.FieldWrite) {
 	target := fr.get(w.Target)
 	newVal := fr.get(w.NewVal)
 	switch t := target.(type) {
@@ -977,18 +983,19 @@ func (fr *frame) evalFieldWrite(w *expr.FieldWrite) value.Value {
 		if w.Op != syntax.Assign {
 			cur, ok := t.Elems.Get(key)
 			if !ok {
-				return fr.errorf(w.Span(), "dictionary does not have an entry %q", w.Field.String())
+				fr.errorf(w.Span(), "dictionary does not have an entry %q", w.Field.String())
+				return
 			}
 			combined, err := value.BinaryOp(w.Op, cur, newVal)
 			if err != nil {
-				return fr.error(w.Span(), err.Error())
+				fr.error(w.Span(), err.Error())
+				return
 			}
 			newVal = combined
 		}
 		t.Elems.Put(key, newVal)
-		return value.None{}
 	default:
-		return fr.errorf(w.Span(), "cannot assign to field of %s", target.Type())
+		fr.errorf(w.Span(), "cannot assign to field of %s", target.Type())
 	}
 }
 
