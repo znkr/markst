@@ -163,16 +163,16 @@ type frame struct {
 	iters map[expr.Ref]*iteratorState
 }
 
-// get returns the value stored for ref, following [DefRedirect] chains
-// installed by trivial-phi elimination. Module-constant refs are looked up
-// in the session's [expr.Module.Constants] pool.
+// get returns the value stored for ref. Module-constant refs are looked up
+// in the session's [expr.Module.Constants] pool. The builder rewrites every
+// operand through the trivial-phi rename map at [expr.Builder.Finalize]
+// time, so no further resolution is needed here.
 func (fr *frame) get(ref expr.Ref) value.Value {
 	if ref.IsModConst() {
 		return fr.s.mod.Constants[ref.ModConstID()]
 	}
-	ref = fr.fn.Resolve(ref)
 	if ref == expr.NoRef {
-		return nil
+		return value.None{}
 	}
 	return fr.vals[ref]
 }
@@ -228,7 +228,7 @@ type functionCall struct {
 	// captures carries the values supplied at MakeClosure time.
 	captures []value.Value
 	// self is the [value.Function] for the currently-executing closure, used to
-	// materialize [expr.DefSelf] references. Nil for top-level functions.
+	// materialize [expr.Function.SelfRef] reads. Nil for top-level functions.
 	self value.Value
 }
 
@@ -236,23 +236,16 @@ type functionCall struct {
 func runFunction(s *session, call functionCall) value.Value {
 	fn := call.fn
 	args, captures, self := call.args, call.captures, call.self
-	fr := &frame{s: s, fn: fn, vals: make([]value.Value, len(fn.Defs))}
-	// Pre-fill Param, Capture, and Self defs.
-	for i, d := range fn.Defs {
-		switch d := d.(type) {
-		case *expr.DefParam:
-			if d.Idx < len(args) {
-				fr.vals[i] = args[d.Idx]
-			} else {
-				fr.vals[i] = value.None{}
-			}
-		case *expr.DefCapture:
-			if d.Idx < len(captures) {
-				fr.vals[i] = captures[d.Idx]
-			}
-		case *expr.DefSelf:
-			fr.vals[i] = self
-		}
+	fr := &frame{s: s, fn: fn, vals: make([]value.Value, fn.NumRefs)}
+	// Pre-fill parameter, capture, and self slots.
+	for i, p := range fn.Params {
+		fr.vals[p.Ref] = args[i]
+	}
+	for i, r := range fn.CaptureRefs {
+		fr.vals[r] = captures[i]
+	}
+	if fn.SelfRef != expr.NoRef {
+		fr.vals[fn.SelfRef] = self
 	}
 
 	bb := expr.BlockID(0)
@@ -490,20 +483,19 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			break
 		}
 		// Use the operand's defining instruction span for the attach
-		// diagnostic. Module-const refs have no per-function def — use the
+		// diagnostic. Module-const refs have no per-function span — use the
 		// AttachLabel's own span instead, and skip the operand-slot writeback
 		// (the pool is shared across uses and must stay immutable; the label is
 		// still registered on the session).
-		resolved := fr.fn.Resolve(i.Content)
 		var attachSpan syntax.Span
-		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
-			attachSpan = fr.fn.Defs[resolved].Span()
+		if i.Content >= 0 && int32(i.Content) < fr.fn.NumRefs {
+			attachSpan = fr.fn.RefSpans[i.Content]
 		} else {
 			attachSpan = i.Span()
 		}
 		fr.attachLabel(c, &value.Label{Name: i.Label}, attachSpan)
-		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
-			fr.vals[resolved] = c
+		if i.Content >= 0 && int32(i.Content) < fr.fn.NumRefs {
+			fr.vals[i.Content] = c
 		}
 		fr.vals[r] = value.None{}
 	case *expr.CodeJoin:
@@ -741,11 +733,10 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		ret = append(ret, cv)
 		// Use the producing instruction's span so warnings/errors against
 		// the most-recent content point at the right source location.
-		// Module-const refs have no per-function Def — fall back to the
+		// Module-const refs have no per-function span — fall back to the
 		// consuming instruction's span.
-		resolved := fr.fn.Resolve(r)
-		if resolved >= 0 && int(resolved) < len(fr.fn.Defs) {
-			lastSpan = fr.fn.Defs[resolved].Span()
+		if r >= 0 && int32(r) < fr.fn.NumRefs {
+			lastSpan = fr.fn.RefSpans[r]
 		} else {
 			lastSpan = c.Span()
 		}
@@ -1037,8 +1028,8 @@ func locateArgErrSpan(fn *value.Function, callSpan syntax.Span, callArgs []expr.
 
 // makeClosureWithFrame implements MakeClosure: it captures the closure's
 // nested Function and the capture values, then hands the resulting F to the
-// runtime to dispatch when invoked. Self-reference is handled by [expr.DefSelf]
-// at call time, not by patching captures.
+// runtime to dispatch when invoked. Self-reference is handled by
+// [expr.Function.SelfRef] at call time, not by patching captures.
 func makeClosureWithFrame(fr *frame, m *expr.MakeClosure) value.Value {
 	innerFn := fr.s.mod.Functions[m.Func]
 	caps := make([]value.Value, len(m.Captures))
@@ -1081,16 +1072,19 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 				out.Named = make(map[name.Name]value.Param)
 			}
 			// Defaults are captured from the outer scope at MakeClosure time
-			// and arrive as DefCapture entries — or, for constant defaults,
-			// as module-const refs that resolve directly from the pool.
+			// and arrive in fn.CaptureRefs — or, for constant defaults, as
+			// module-const refs that resolve directly from the pool.
 			var defaultVal value.Value
 			switch {
 			case p.Default == expr.NoRef:
 			case p.Default.IsModConst():
 				defaultVal = s.mod.Constants[p.Default.ModConstID()]
-			case int(p.Default) < len(fn.Defs):
-				if d, ok := fn.Defs[p.Default].(*expr.DefCapture); ok && d.Idx < len(caps) {
-					defaultVal = caps[d.Idx]
+			default:
+				for idx, r := range fn.CaptureRefs {
+					if r == p.Default {
+						defaultVal = caps[idx]
+						break
+					}
 				}
 			}
 			out.Named[p.Name] = value.Param{

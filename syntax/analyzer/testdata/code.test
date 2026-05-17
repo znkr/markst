@@ -512,8 +512,8 @@
 │ fn $top:
 │   b0:
 │     length_check none, want=2
-│     v1 = extract none[0]
-│     v2 = extract none[1]
+│     v0 = extract none[0]
+│     v1 = extract none[1]
 │     return none
 
 --- let-binding-without-assignment ---
@@ -644,9 +644,9 @@
 │     jump b1
 │   b1:
 │     v3 = phi [b0 v0, b2 v4]
-│     branch v1, b2, b3
+│     branch none, b2, b3
 │   b2:
-│     v4 = loop_acc_add v3, v2
+│     v4 = loop_acc_add v3, none
 │     jump b1
 │   b3:
 │     v5 = loop_acc_result v3
@@ -681,19 +681,19 @@
 │     v1 = loop_acc_begin
 │     jump b1
 │   b1:
-│     v7 = phi [b0 v1, b2 v8]
+│     v6 = phi [b0 v1, b2 v7]
 │     v2 = iter_has_next v0
 │     branch v2, b2, b3
 │   b2:
 │     v3 = iter_advance v0
 │     length_check v3, want=2
-│     v5 = extract v3[0]
-│     v6 = extract v3[1]
-│     v8 = loop_acc_add v7, v5
+│     v4 = extract v3[0]
+│     v5 = extract v3[1]
+│     v7 = loop_acc_add v6, v4
 │     jump b1
 │   b3:
-│     v9 = loop_acc_result v7
-│     return v9
+│     v8 = loop_acc_result v6
+│     return v8
 
 --- break ---
 #{ while true { break } }
@@ -788,8 +788,8 @@
 │ fn $top:
 │   b0:
 │     length_check none, want=2
-│     v1 = extract none[0]
-│     v2 = extract none[1]
+│     v0 = extract none[0]
+│     v1 = extract none[1]
 │     return none
 
 --- spread-in-destructuring ---

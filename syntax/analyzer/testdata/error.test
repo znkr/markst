@@ -291,8 +291,8 @@ v in iter {}
 │   b0:
 │     v0 = error msg="duplicate binding: a"
 │     length_check none, want=2
-│     v2 = extract none[0]
-│     v3 = extract none[1]
+│     v1 = extract none[0]
+│     v2 = extract none[1]
 │     return none
 
 --- duplicate-param ---

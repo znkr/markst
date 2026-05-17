@@ -12,13 +12,20 @@ import (
 // Structure: a [Module] is a top-level [Function] plus all nested closures
 // (also [Function]s). Each function is a CFG of [BasicBlock]s in SSA form,
 // terminated by a [Terminator]. SSA values are referenced by [Ref], a
-// function-local handle into [Function.Defs]; each [Def] records how to
-// materialize the value (constant, parameter, capture, phi result, or
-// instruction result).
+// function-local handle that indexes the runtime value table. Producers
+// carry their own Ref: instructions via embedded [instr], phis via [Phi.Result],
+// parameters via [Param.Ref], captures via [Function.CaptureRefs], and the
+// closure self-reference via [Function.SelfRef].
 //
 // Phi nodes live on the block, separately from straight-line instructions,
 // because they are conceptually evaluated as a parallel copy on block entry
 // rather than sequentially.
+//
+// Trivial-phi elimination is handled inside the builder: when a phi is
+// found to be trivial, its Ref is recorded in a builder-local rename map.
+// [Builder.Finalize] transitively closes the map and then rewrites every
+// Ref-typed operand in the IR through it, so by the time the function
+// reaches the evaluator, no live Ref refers to a removed phi.
 //
 // The construction algorithm is Braun, Buchwald & Hack (2013), "Simple and
 // Efficient Construction of Static Single Assignment Form".
@@ -38,12 +45,15 @@ type FuncID int32
 
 // Function is a CFG in SSA form.
 type Function struct {
-	Name     string
-	Params   []Param
-	Captures []Var         // free-variable identifiers; values arrive at MakeClosure
-	Blocks   []*BasicBlock // Blocks[0] is the entry block
-	Defs     []Def         // Defs[ref] describes how to materialize that SSA value
-	Span     syntax.Span
+	Name        string
+	Params      []Param
+	Captures    []Var         // free-variable identifiers; values arrive at MakeClosure
+	CaptureRefs []Ref         // parallel to Captures; the Ref bound at frame entry
+	SelfRef     Ref           // the Ref bound to the running closure value; NoRef if unused
+	Blocks      []*BasicBlock // Blocks[0] is the entry block
+	NumRefs     int32         // size of the per-frame value table; one slot per allocated Ref
+	RefSpans    []syntax.Span // RefSpans[r] is the source span attached to the producer of r
+	Span        syntax.Span
 }
 
 // Param describes a formal parameter of a [Function].
@@ -51,6 +61,7 @@ type Param struct {
 	Name    name.Name
 	Kind    ParamKind
 	Default Ref // for Named: the SSA value of the default; NoRef when none
+	Ref     Ref // the SSA Ref bound to this parameter inside the body
 	Span    syntax.Span
 }
 
@@ -77,12 +88,13 @@ type BasicBlock struct {
 	Term   Terminator
 }
 
-// Ref is an SSA value handle. Non-negative refs index a function's [Defs]
-// slice (function-local). [NoRef] is the missing-reference sentinel. Refs
-// strictly below [NoRef] (i.e. r <= -2) encode a module-level constant: the
-// [ModConstID] is `-2 - r`, indexing [Module.Constants]. Module-const refs are
-// global to a [Module] — the same ref is valid in any function within that
-// module — and never appear in [Function.Defs].
+// Ref is an SSA value handle. Non-negative refs are function-local handles
+// into the runtime value table (sized by [Function.NumRefs]); their source
+// spans are in [Function.RefSpans] at the same index. [NoRef] is the
+// missing-reference sentinel. Refs strictly below [NoRef] (i.e. r <= -2)
+// encode a module-level constant: the [ModConstID] is `-2 - r`, indexing
+// [Module.Constants]. Module-const refs are global to a [Module] — the same
+// ref is valid in any function within that module.
 type Ref int32
 
 // NoRef is the sentinel value for a missing reference (e.g. an absent default
@@ -99,87 +111,28 @@ func (r Ref) IsModConst() bool { return r < NoRef }
 // Result is undefined if [Ref.IsModConst] returns false.
 func (r Ref) ModConstID() int32 { return -2 - int32(r) }
 
-// Def records how to materialize the SSA value with a given [Ref]. There is
-// one Def per Ref; storing them in a flat slice makes the runtime value
-// table a simple `[]value.Value` indexed by Ref.
-type Def interface {
-	Block() BlockID
-	Span() syntax.Span
-	aDef()
-}
-
-// def is the common base embedded by all concrete Def types.
-type def struct {
-	block BlockID
-	span  syntax.Span
-}
-
-func (d *def) Block() BlockID    { return d.block }
-func (d *def) Span() syntax.Span { return d.span }
-func (d *def) aDef()             {}
-
-// DefInstr is a Def produced by an [Instruction].
-type DefInstr struct {
-	def
-	Instr Instruction
-}
-
-// DefPhi is a Def produced by a [Phi] node.
-type DefPhi struct {
-	def
-	Phi *Phi
-}
-
-// DefParam is a Def for a function parameter; Idx selects [Function.Params].
-type DefParam struct {
-	def
-	Idx int
-}
-
-// DefCapture is a Def for a captured variable; Idx selects [Function.Captures].
-type DefCapture struct {
-	def
-	Idx int
-}
-
-// DefSelf is a Def for the currently-executing closure value. It lets a
-// closure body refer to itself without an explicit capture, enabling direct
-// recursion. The runtime materializes it from the call-time `self` slot.
-type DefSelf struct {
-	def
-}
-
-// DefRedirect is a Def that aliases another Ref; reads should follow Redirect.
-type DefRedirect struct {
-	def
-	Redirect Ref
-}
-
-// Resolve follows [DefRedirect] chains and returns the underlying Ref.
-// Module-constant refs and [NoRef] are returned unchanged.
-func (f *Function) Resolve(r Ref) Ref {
-	for r >= 0 && int(r) < len(f.Defs) {
-		d, ok := f.Defs[r].(*DefRedirect)
-		if !ok {
-			break
-		}
-		r = d.Redirect
-	}
-	return r
-}
-
 // Phi is a phi node sitting at the head of a [BasicBlock]. Its [Result] is
 // the SSA value produced; Operands map each predecessor block to the Ref
 // flowing in along that edge.
 type Phi struct {
 	result   Ref
+	block    BlockID
 	operands []PhiOperand
 	span     syntax.Span
 }
 
 func (p *Phi) Result() Ref            { return p.result }
+func (p *Phi) Block() BlockID         { return p.block }
 func (p *Phi) Operands() []PhiOperand { return p.operands }
 func (p *Phi) Span() syntax.Span      { return p.span }
+
+// RemapOperands substitutes every operand Ref through rename. Used by
+// [Builder.Finalize] to inline trivial-phi removals.
+func (p *Phi) RemapOperands(rename func(Ref) Ref) {
+	for i := range p.operands {
+		p.operands[i].Value = rename(p.operands[i].Value)
+	}
+}
 
 // PhiOperand pairs a predecessor block with the SSA value that flows from it.
 type PhiOperand struct {

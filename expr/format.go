@@ -50,33 +50,18 @@ func (f *formatter) formatFunction(label string, fn *Function) {
 	if fn.Name != "" {
 		fmt.Fprintf(sb, " name=%q", fn.Name)
 	}
-	// Build reverse lookups so each capture / param entry shows the Ref
-	// the body references.
-	captureRefs := make([]Ref, len(fn.Captures))
-	paramRefs := make([]Ref, len(fn.Params))
-	selfRef := NoRef
-	for i, d := range fn.Defs {
-		switch d := d.(type) {
-		case *DefCapture:
-			captureRefs[d.Idx] = Ref(i)
-		case *DefParam:
-			paramRefs[d.Idx] = Ref(i)
-		case *DefSelf:
-			selfRef = Ref(i)
-		}
-	}
 	if len(fn.Captures) > 0 {
 		sb.WriteString(" captures=[")
 		for i, c := range fn.Captures {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			fmt.Fprintf(sb, "%s=%s", f.ref(captureRefs[i]), c.String())
+			fmt.Fprintf(sb, "%s=%s", f.ref(fn.CaptureRefs[i]), c.String())
 		}
 		sb.WriteString("]")
 	}
-	if selfRef != NoRef {
-		fmt.Fprintf(sb, " self=%s", f.ref(selfRef))
+	if fn.SelfRef != NoRef {
+		fmt.Fprintf(sb, " self=%s", f.ref(fn.SelfRef))
 	}
 	if len(fn.Params) > 0 {
 		sb.WriteString(" params=[")
@@ -86,14 +71,14 @@ func (f *formatter) formatFunction(label string, fn *Function) {
 			}
 			switch p.Kind {
 			case ParamSink:
-				fmt.Fprintf(sb, "%s=..%s", f.ref(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=..%s", f.ref(p.Ref), p.Name.String())
 			case ParamNamed:
-				fmt.Fprintf(sb, "%s=%s", f.ref(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=%s", f.ref(p.Ref), p.Name.String())
 				if p.Default != NoRef {
 					fmt.Fprintf(sb, ":%s", f.ref(p.Default))
 				}
 			default:
-				fmt.Fprintf(sb, "%s=%s", f.ref(paramRefs[i]), p.Name.String())
+				fmt.Fprintf(sb, "%s=%s", f.ref(p.Ref), p.Name.String())
 			}
 		}
 		sb.WriteString("]")

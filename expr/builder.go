@@ -67,7 +67,13 @@ type Builder struct {
 	// loses an operand.
 	phiUsers map[Ref]map[*Phi]struct{}
 
-	// selfRef caches the [DefSelf] Ref for this function. NoRef until the
+	// redirects records the rename target for each trivially-removed phi.
+	// Populated by [tryRemoveTrivialPhi]; consumed by [Finalize], which
+	// rewrites every operand in the IR through the (transitively closed)
+	// map and then discards it. Never escapes the builder.
+	redirects map[Ref]Ref
+
+	// selfRef caches the self Ref for this function. NoRef until the
 	// first [Self] call allocates one.
 	selfRef Ref
 
@@ -94,7 +100,7 @@ func (mb *ModuleBuilder) Module() *Module { return mb.mod }
 // from the same ModuleBuilder share the constant pool.
 func (mb *ModuleBuilder) NewBuilder() *Builder {
 	b := &Builder{
-		fn:             &Function{},
+		fn:             &Function{SelfRef: NoRef},
 		mb:             mb,
 		currentDef:     make(map[Var]map[BlockID]Ref),
 		incompletePhis: make(map[BlockID]map[Var]*Phi),
@@ -147,6 +153,58 @@ func indexKey(v value.Value) any {
 
 // Function returns the function under construction.
 func (b *Builder) Function() *Function { return b.fn }
+
+// Finalize seals the function for consumption. It transitively closes the
+// trivial-phi rename map, then rewrites every Ref-typed operand in the IR
+// through the closed map and discards the map. After Finalize, no live Ref
+// in the function points at a trivially-removed phi. Must be called once
+// construction is complete, before the function is handed to the evaluator
+// or formatter.
+func (b *Builder) Finalize() {
+	if len(b.redirects) == 0 {
+		return
+	}
+	// Transitively close: rewrite each entry's target to its terminal value.
+	for ref, target := range b.redirects {
+		seen := target
+		for {
+			t, ok := b.redirects[seen]
+			if !ok || t == seen {
+				break
+			}
+			seen = t
+		}
+		if seen != target {
+			b.redirects[ref] = seen
+		}
+	}
+	rename := func(r Ref) Ref {
+		if r < 0 {
+			return r
+		}
+		if t, ok := b.redirects[r]; ok {
+			return t
+		}
+		return r
+	}
+	for i := range b.fn.Params {
+		if b.fn.Params[i].Default != NoRef {
+			b.fn.Params[i].Default = rename(b.fn.Params[i].Default)
+		}
+	}
+	for _, block := range b.fn.Blocks {
+		for _, phi := range block.Phis {
+			phi.RemapOperands(rename)
+		}
+		for _, inst := range block.Instrs {
+			inst.RemapOperands(rename)
+		}
+		if block.Term != nil {
+			block.Term.RemapOperands(rename)
+		}
+	}
+	b.redirects = nil
+}
 
 // CurrentBlock returns the block that subsequent [Emit]/terminator calls
 // will append to.
@@ -344,10 +402,10 @@ func (b *Builder) Extract(span syntax.Span, source Ref, index int) Ref {
 }
 
 // LengthCheck emits a runtime length-assertion instruction for destructuring.
-// It produces no SSA value.
+// It produces no SSA value, so no Ref is allocated.
 func (b *Builder) LengthCheck(span syntax.Span, source Ref, want int, hasSink bool) {
-	b.emit(span, func(ref Ref) Instruction {
-		return &LengthCheck{instr: instr{result: ref, span: span}, Source: source, Want: want, HasSink: hasSink}
+	b.emitVoid(func() Instruction {
+		return &LengthCheck{instr: instr{result: NoRef, span: span}, Source: source, Want: want, HasSink: hasSink}
 	})
 }
 
@@ -381,24 +439,22 @@ func (b *Builder) MakeClosure(span syntax.Span, fn FuncID, captures []Ref) Ref {
 
 // Function structure helpers /////////////////////////////////////////////////
 
-// AddParam appends a parameter to the function and returns its SSA Ref.
-// The Ref's Def is of kind [DefParam].
+// AddParam appends a parameter to the function and returns its SSA Ref. The
+// Ref is also stored on [Param.Ref] so callers iterating Params can find it.
 func (b *Builder) AddParam(name name.Name, kind ParamKind, defaultVal Ref, span syntax.Span) Ref {
-	idx := len(b.fn.Params)
-	b.fn.Params = append(b.fn.Params, Param{Name: name, Kind: kind, Default: defaultVal, Span: span})
-	ref := Ref(len(b.fn.Defs))
-	b.fn.Defs = append(b.fn.Defs, &DefParam{Idx: idx, def: def{span: span}})
+	ref := b.newRef(span)
+	b.fn.Params = append(b.fn.Params, Param{Name: name, Kind: kind, Default: defaultVal, Ref: ref, Span: span})
 	return ref
 }
 
 // AddCapture appends a capture entry to the function and returns its SSA Ref.
-// The Ref's Def is of kind [DefCapture]. The runtime value flows in via the
-// [MakeClosure] instruction at the call site.
+// The Ref is appended to [Function.CaptureRefs] in parallel with Captures.
+// The runtime value flows in via the [MakeClosure] instruction at the call
+// site.
 func (b *Builder) AddCapture(v Var, span syntax.Span) Ref {
-	idx := len(b.fn.Captures)
+	ref := b.newRef(span)
 	b.fn.Captures = append(b.fn.Captures, v)
-	ref := Ref(len(b.fn.Defs))
-	b.fn.Defs = append(b.fn.Defs, &DefCapture{Idx: idx, def: def{span: span}})
+	b.fn.CaptureRefs = append(b.fn.CaptureRefs, ref)
 	return ref
 }
 
@@ -413,7 +469,7 @@ func (b *Builder) NewVar(source name.Name) Var {
 	return Var{Name: source, Version: b.versions[source]}
 }
 
-// Self returns the [DefSelf] Ref for the function under construction,
+// Self returns the self-reference Ref for the function under construction,
 // allocating it on first call. References to this Ref materialize to the
 // currently-executing closure value at runtime, enabling direct recursion
 // without a capture.
@@ -421,8 +477,8 @@ func (b *Builder) Self(span syntax.Span) Ref {
 	if b.selfRef != NoRef {
 		return b.selfRef
 	}
-	ref := Ref(len(b.fn.Defs))
-	b.fn.Defs = append(b.fn.Defs, &DefSelf{def: def{span: span}})
+	ref := b.newRef(span)
+	b.fn.SelfRef = ref
 	b.selfRef = ref
 	return ref
 }
@@ -565,16 +621,28 @@ func (b *Builder) ModuleInclude(span syntax.Span, source Ref) Ref {
 	})
 }
 
+// newRef allocates a fresh function-local Ref and records its span.
+func (b *Builder) newRef(span syntax.Span) Ref {
+	ref := Ref(b.fn.NumRefs)
+	b.fn.NumRefs++
+	b.fn.RefSpans = append(b.fn.RefSpans, span)
+	return ref
+}
+
 // emit allocates a fresh Ref, hands it to mkInstr to produce the instruction,
-// then appends to the current block and registers the Def.
+// then appends to the current block.
 func (b *Builder) emit(span syntax.Span, mkInstr func(result Ref) Instruction) Ref {
-	ref := Ref(len(b.fn.Defs))
-	d := &DefInstr{def: def{block: b.cur, span: span}}
-	b.fn.Defs = append(b.fn.Defs, d)
+	ref := b.newRef(span)
 	instance := mkInstr(ref)
-	d.Instr = instance
 	b.fn.Blocks[b.cur].Instrs = append(b.fn.Blocks[b.cur].Instrs, instance)
 	return ref
+}
+
+// emitVoid appends a side-effect-only instruction to the current block
+// without allocating a Ref. The instruction's [Instruction.Result] must be
+// [NoRef]; the evaluator skips the result-slot write for these kinds.
+func (b *Builder) emitVoid(mkInstr func() Instruction) {
+	b.fn.Blocks[b.cur].Instrs = append(b.fn.Blocks[b.cur].Instrs, mkInstr())
 }
 
 // Braun SSA construction //////////////////////////////////////////////////////
@@ -629,11 +697,10 @@ func (b *Builder) readVarRecursive(v Var, block BlockID) Ref {
 	return val
 }
 
-// newPhi creates an empty phi attached to block and registers a Def for it.
+// newPhi creates an empty phi attached to block.
 func (b *Builder) newPhi(block BlockID) *Phi {
-	ref := Ref(len(b.fn.Defs))
-	phi := &Phi{result: ref}
-	b.fn.Defs = append(b.fn.Defs, &DefPhi{Phi: phi, def: def{block: block}})
+	ref := b.newRef(syntax.Span{})
+	phi := &Phi{result: ref, block: block}
 	b.fn.Blocks[block].Phis = append(b.fn.Blocks[block].Phis, phi)
 	return phi
 }
@@ -642,7 +709,7 @@ func (b *Builder) newPhi(block BlockID) *Phi {
 // predecessor, then runs trivial-phi elimination. Returns the Ref that the
 // phi resolved to (which may differ from phi.result if it was trivial).
 func (b *Builder) addPhiOperands(v Var, phi *Phi) Ref {
-	block := b.fn.Defs[phi.result].Block()
+	block := phi.block
 	for _, pred := range b.fn.Blocks[block].Preds {
 		operand := b.ReadVar(v, pred)
 		phi.operands = append(phi.operands, PhiOperand{Pred: pred, Value: operand})
@@ -657,9 +724,11 @@ func (b *Builder) addPhiOperands(v Var, phi *Phi) Ref {
 // removed) phi.
 //
 // Rather than rewriting every instruction operand that references the phi
-// (which would require type-switching every Instruction kind), we install a
-// [DefRedirect] entry pointing the phi's Ref at its single operand. The
-// evaluator and formatter both call [Function.Resolve] to follow these.
+// (which would require type-switching every Instruction kind), we record a
+// rename in [Function.Redirects] pointing the phi's Ref at its single
+// operand. The evaluator and formatter both call [Function.Resolve] to follow
+// these. The map is transitively closed by [Builder.Finish] so resolution at
+// runtime is a single hop.
 func (b *Builder) tryRemoveTrivialPhi(phi *Phi) Ref {
 	same := NoRef
 	for _, op := range phi.operands {
@@ -680,10 +749,10 @@ func (b *Builder) tryRemoveTrivialPhi(phi *Phi) Ref {
 	users := b.phiUsers[phi.result]
 	delete(b.phiUsers, phi.result)
 	b.replaceUses(phi.result, same)
-	// Convert the phi's Def into a redirect to `same` so downstream readers
-	// (eval, format, future passes) follow through transparently. The phi
-	// itself stays in the block list but is no longer a live def.
-	b.fn.Defs[phi.result] = &DefRedirect{Redirect: same, def: def{block: b.fn.Defs[phi.result].Block(), span: b.fn.Defs[phi.result].Span()}}
+	if b.redirects == nil {
+		b.redirects = make(map[Ref]Ref)
+	}
+	b.redirects[phi.result] = same
 	b.removePhi(phi)
 	for user := range users {
 		if user != phi {
@@ -733,7 +802,7 @@ func (b *Builder) replaceUses(old, new Ref) {
 
 // removePhi detaches phi from its block.
 func (b *Builder) removePhi(phi *Phi) {
-	block := b.fn.Defs[phi.result].Block()
+	block := phi.block
 	phis := b.fn.Blocks[block].Phis
 	for i, p := range phis {
 		if p == phi {

@@ -12,6 +12,9 @@ import (
 type Instruction interface {
 	Result() Ref
 	Operands() []Ref
+	// RemapOperands substitutes every Ref-typed operand through rename.
+	// Used by [Builder.Finalize] to inline trivial-phi removals.
+	RemapOperands(rename func(Ref) Ref)
 	Span() syntax.Span
 	aInstruction()
 }
@@ -30,6 +33,8 @@ func (i *instr) aInstruction()     {}
 // Terminator ends a [BasicBlock]. Every block has exactly one.
 type Terminator interface {
 	Successors() []BlockID
+	// RemapOperands substitutes every Ref-typed operand through rename.
+	RemapOperands(rename func(Ref) Ref)
 	Span() syntax.Span
 	aTerminator()
 }
@@ -47,7 +52,8 @@ type Jump struct {
 	Target BlockID
 }
 
-func (t *Jump) Successors() []BlockID { return []BlockID{t.Target} }
+func (t *Jump) Successors() []BlockID            { return []BlockID{t.Target} }
+func (t *Jump) RemapOperands(_ func(Ref) Ref)    {}
 
 // Branch is a two-way branch on a boolean SSA value.
 type Branch struct {
@@ -57,7 +63,8 @@ type Branch struct {
 	Else BlockID
 }
 
-func (t *Branch) Successors() []BlockID { return []BlockID{t.Then, t.Else} }
+func (t *Branch) Successors() []BlockID         { return []BlockID{t.Then, t.Else} }
+func (t *Branch) RemapOperands(f func(Ref) Ref) { t.Cond = f(t.Cond) }
 
 // Return exits the enclosing [Function]. Value is the returned SSA value, or
 // [NoRef] for a bare return (which yields none at runtime).
@@ -67,6 +74,11 @@ type Return struct {
 }
 
 func (t *Return) Successors() []BlockID { return nil }
+func (t *Return) RemapOperands(f func(Ref) Ref) {
+	if t.Value != NoRef {
+		t.Value = f(t.Value)
+	}
+}
 
 // Unreachable marks a control-flow position that the analyzer has proved
 // cannot be reached (e.g. straight-line code after a Return). Evaluating it
@@ -75,7 +87,8 @@ type Unreachable struct {
 	term
 }
 
-func (t *Unreachable) Successors() []BlockID { return nil }
+func (t *Unreachable) Successors() []BlockID         { return nil }
+func (t *Unreachable) RemapOperands(_ func(Ref) Ref) {}
 
 // Instructions ////////////////////////////////////////////////////////////////
 //
@@ -87,7 +100,8 @@ type Const struct {
 	Value value.Value
 }
 
-func (c *Const) Operands() []Ref { return nil }
+func (c *Const) Operands() []Ref               { return nil }
+func (c *Const) RemapOperands(_ func(Ref) Ref) {}
 
 // Unary applies a unary operator to a single operand.
 type Unary struct {
@@ -96,7 +110,8 @@ type Unary struct {
 	X  Ref
 }
 
-func (u *Unary) Operands() []Ref { return []Ref{u.X} }
+func (u *Unary) Operands() []Ref               { return []Ref{u.X} }
+func (u *Unary) RemapOperands(f func(Ref) Ref) { u.X = f(u.X) }
 
 // Binary applies a non-assignment binary operator. Assignment forms
 // (`=`, `+=`, etc.) lower to a write of the LHS, not to Binary.
@@ -107,7 +122,8 @@ type Binary struct {
 	R  Ref
 }
 
-func (b *Binary) Operands() []Ref { return []Ref{b.L, b.R} }
+func (b *Binary) Operands() []Ref               { return []Ref{b.L, b.R} }
+func (b *Binary) RemapOperands(f func(Ref) Ref) { b.L = f(b.L); b.R = f(b.R) }
 
 // MakeArray constructs an array. Items may be plain values or spread sources;
 // the [ArrayItem.Spread] flag distinguishes them.
@@ -122,6 +138,12 @@ func (m *MakeArray) Operands() []Ref {
 		out[i] = it.Value
 	}
 	return out
+}
+
+func (m *MakeArray) RemapOperands(f func(Ref) Ref) {
+	for i := range m.Items {
+		m.Items[i].Value = f(m.Items[i].Value)
+	}
 }
 
 // ArrayItem is one element of a [MakeArray] (plain value or spread source).
@@ -149,6 +171,15 @@ func (m *MakeDict) Operands() []Ref {
 	return out
 }
 
+func (m *MakeDict) RemapOperands(f func(Ref) Ref) {
+	for i := range m.Entries {
+		if m.Entries[i].Key != NoRef {
+			m.Entries[i].Key = f(m.Entries[i].Key)
+		}
+		m.Entries[i].Value = f(m.Entries[i].Value)
+	}
+}
+
 // DictEntry is one entry of a [MakeDict].
 type DictEntry struct {
 	Key    Ref // NoRef when Spread is true
@@ -170,7 +201,8 @@ type FieldRead struct {
 	FieldSpan syntax.Span
 }
 
-func (f *FieldRead) Operands() []Ref { return []Ref{f.Target} }
+func (f *FieldRead) Operands() []Ref                  { return []Ref{f.Target} }
+func (f *FieldRead) RemapOperands(rn func(Ref) Ref)   { f.Target = rn(f.Target) }
 
 // ArgKind discriminates the variants of [CallArg].
 type ArgKind uint8
@@ -218,6 +250,16 @@ func (c *Call) Operands() []Ref {
 	return out
 }
 
+func (c *Call) RemapOperands(f func(Ref) Ref) {
+	c.Callee = f(c.Callee)
+	for i := range c.Args {
+		c.Args[i].Value = f(c.Args[i].Value)
+	}
+	for i := range c.Blocks {
+		c.Blocks[i] = f(c.Blocks[i])
+	}
+}
+
 // CallSet invokes a function whose return is an lvalue (the called function
 // registers a setter via [value.FunctionCallContext.Setter]); the runtime then
 // invokes the setter with the supplied new value. For compound assignments
@@ -244,6 +286,17 @@ func (c *CallSet) Operands() []Ref {
 	return out
 }
 
+func (c *CallSet) RemapOperands(f func(Ref) Ref) {
+	c.Callee = f(c.Callee)
+	for i := range c.Args {
+		c.Args[i].Value = f(c.Args[i].Value)
+	}
+	for i := range c.Blocks {
+		c.Blocks[i] = f(c.Blocks[i])
+	}
+	c.NewVal = f(c.NewVal)
+}
+
 // FieldWrite writes a value into a named field of a target (a dictionary entry,
 // content field, etc.). For compound assignment, Op carries the stripped binary
 // op so the runtime can compute `old op NewVal` before writing.
@@ -256,6 +309,10 @@ type FieldWrite struct {
 }
 
 func (f *FieldWrite) Operands() []Ref { return []Ref{f.Target, f.NewVal} }
+func (f *FieldWrite) RemapOperands(rn func(Ref) Ref) {
+	f.Target = rn(f.Target)
+	f.NewVal = rn(f.NewVal)
+}
 
 // Extract reads a positional element from an indexed source (array or
 // tuple-like value). Used to lower destructuring patterns.
@@ -265,7 +322,8 @@ type Extract struct {
 	Index  int
 }
 
-func (e *Extract) Operands() []Ref { return []Ref{e.Source} }
+func (e *Extract) Operands() []Ref               { return []Ref{e.Source} }
+func (e *Extract) RemapOperands(f func(Ref) Ref) { e.Source = f(e.Source) }
 
 // LengthCheck asserts that Source has at least Want elements (or exactly Want
 // if HasSink is false). Used to lower destructuring patterns; raises a runtime
@@ -277,8 +335,9 @@ type LengthCheck struct {
 	HasSink bool
 }
 
-func (l *LengthCheck) Result() Ref     { return NoRef }
-func (l *LengthCheck) Operands() []Ref { return []Ref{l.Source} }
+func (l *LengthCheck) Result() Ref                   { return NoRef }
+func (l *LengthCheck) Operands() []Ref               { return []Ref{l.Source} }
+func (l *LengthCheck) RemapOperands(f func(Ref) Ref) { l.Source = f(l.Source) }
 
 // IterOpen produces an opaque iterator over an array/dict/string.
 type IterOpen struct {
@@ -286,7 +345,8 @@ type IterOpen struct {
 	Iterable Ref
 }
 
-func (i *IterOpen) Operands() []Ref { return []Ref{i.Iterable} }
+func (i *IterOpen) Operands() []Ref               { return []Ref{i.Iterable} }
+func (i *IterOpen) RemapOperands(f func(Ref) Ref) { i.Iterable = f(i.Iterable) }
 
 // IterHasNext returns a boolean indicating whether the iterator has more
 // elements.
@@ -295,7 +355,8 @@ type IterHasNext struct {
 	Iter Ref
 }
 
-func (i *IterHasNext) Operands() []Ref { return []Ref{i.Iter} }
+func (i *IterHasNext) Operands() []Ref               { return []Ref{i.Iter} }
+func (i *IterHasNext) RemapOperands(f func(Ref) Ref) { i.Iter = f(i.Iter) }
 
 // IterAdvance advances the iterator one step and yields the next element. Must
 // only be evaluated when [IterHasNext] just returned true.
@@ -304,7 +365,8 @@ type IterAdvance struct {
 	Iter Ref
 }
 
-func (i *IterAdvance) Operands() []Ref { return []Ref{i.Iter} }
+func (i *IterAdvance) Operands() []Ref               { return []Ref{i.Iter} }
+func (i *IterAdvance) RemapOperands(f func(Ref) Ref) { i.Iter = f(i.Iter) }
 
 // MakeClosure constructs a closure value pointing at the [Function] with the
 // given FuncID, capturing one outer SSA value per entry in the function's
@@ -316,6 +378,11 @@ type MakeClosure struct {
 }
 
 func (m *MakeClosure) Operands() []Ref { return m.Captures }
+func (m *MakeClosure) RemapOperands(f func(Ref) Ref) {
+	for i := range m.Captures {
+		m.Captures[i] = f(m.Captures[i])
+	}
+}
 
 // Markup instructions ////////////////////////////////////////////////////////
 
@@ -328,6 +395,11 @@ type ContentResult struct {
 }
 
 func (c *ContentResult) Operands() []Ref { return c.Items }
+func (c *ContentResult) RemapOperands(f func(Ref) Ref) {
+	for i := range c.Items {
+		c.Items[i] = f(c.Items[i])
+	}
+}
 
 // Error raises a value error at eval time with the stored message. Used to
 // surface deferred analyzer errors (e.g. "cannot mutate a temporary value").
@@ -348,6 +420,11 @@ type Error struct {
 }
 
 func (r *Error) Operands() []Ref { return nil }
+func (r *Error) RemapOperands(f func(Ref) Ref) {
+	if r.From != NoRef {
+		r.From = f(r.From)
+	}
+}
 
 // AttachLabel binds a label name to the content produced by Content. It also
 // registers the label in the evaluator's label set so subsequent [RefMarkup]
@@ -359,7 +436,8 @@ type AttachLabel struct {
 	Label   name.Name
 }
 
-func (a *AttachLabel) Operands() []Ref { return []Ref{a.Content} }
+func (a *AttachLabel) Operands() []Ref               { return []Ref{a.Content} }
+func (a *AttachLabel) RemapOperands(f func(Ref) Ref) { a.Content = f(a.Content) }
 
 // CodeJoin joins a sequence of value refs using the code-mode joiner. The
 // joiner selects an output type based on the input types (strings concat, ints
@@ -371,6 +449,11 @@ type CodeJoin struct {
 }
 
 func (c *CodeJoin) Operands() []Ref { return c.Items }
+func (c *CodeJoin) RemapOperands(f func(Ref) Ref) {
+	for i := range c.Items {
+		c.Items[i] = f(c.Items[i])
+	}
+}
 
 // LoopAccBegin produces an initial loop-accumulator value (an empty array
 // internally; treated as opaque accumulator state). Each iteration's body
@@ -380,7 +463,8 @@ type LoopAccBegin struct {
 	instr
 }
 
-func (*LoopAccBegin) Operands() []Ref { return nil }
+func (*LoopAccBegin) Operands() []Ref               { return nil }
+func (*LoopAccBegin) RemapOperands(_ func(Ref) Ref) {}
 
 // LoopAccAdd appends item to the accumulator and returns the same accumulator
 // (mutated in place). The mutation is safe under SSA because the previous
@@ -393,6 +477,10 @@ type LoopAccAdd struct {
 }
 
 func (a *LoopAccAdd) Operands() []Ref { return []Ref{a.Acc, a.Item} }
+func (a *LoopAccAdd) RemapOperands(f func(Ref) Ref) {
+	a.Acc = f(a.Acc)
+	a.Item = f(a.Item)
+}
 
 // LoopAccResult joins the accumulated items into a single value using the
 // code-mode joiner (same semantics as [CodeJoin]).
@@ -401,7 +489,8 @@ type LoopAccResult struct {
 	Acc Ref
 }
 
-func (a *LoopAccResult) Operands() []Ref { return []Ref{a.Acc} }
+func (a *LoopAccResult) Operands() []Ref               { return []Ref{a.Acc} }
+func (a *LoopAccResult) RemapOperands(f func(Ref) Ref) { a.Acc = f(a.Acc) }
 
 // Heading represents a `= Title`-style heading at the given level.
 type Heading struct {
@@ -410,7 +499,8 @@ type Heading struct {
 	Body  Ref
 }
 
-func (h *Heading) Operands() []Ref { return []Ref{h.Body} }
+func (h *Heading) Operands() []Ref               { return []Ref{h.Body} }
+func (h *Heading) RemapOperands(f func(Ref) Ref) { h.Body = f(h.Body) }
 
 // Strong wraps content in bold formatting.
 type Strong struct {
@@ -418,7 +508,8 @@ type Strong struct {
 	Body Ref
 }
 
-func (s *Strong) Operands() []Ref { return []Ref{s.Body} }
+func (s *Strong) Operands() []Ref               { return []Ref{s.Body} }
+func (s *Strong) RemapOperands(f func(Ref) Ref) { s.Body = f(s.Body) }
 
 // Emph wraps content in italic formatting.
 type Emph struct {
@@ -426,7 +517,8 @@ type Emph struct {
 	Body Ref
 }
 
-func (e *Emph) Operands() []Ref { return []Ref{e.Body} }
+func (e *Emph) Operands() []Ref               { return []Ref{e.Body} }
+func (e *Emph) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
 // Link is a hyperlink with a destination URL and body content.
 type Link struct {
@@ -435,7 +527,8 @@ type Link struct {
 	Body Ref
 }
 
-func (l *Link) Operands() []Ref { return []Ref{l.Body} }
+func (l *Link) Operands() []Ref               { return []Ref{l.Body} }
+func (l *Link) RemapOperands(f func(Ref) Ref) { l.Body = f(l.Body) }
 
 // RefMarkup is the `@label` reference construct (named with the `Markup`
 // suffix to disambiguate from the SSA-value type [Ref]).
@@ -452,13 +545,20 @@ func (r *RefMarkup) Operands() []Ref {
 	return []Ref{r.Supplement}
 }
 
+func (r *RefMarkup) RemapOperands(f func(Ref) Ref) {
+	if r.Supplement != NoRef {
+		r.Supplement = f(r.Supplement)
+	}
+}
+
 // ListItem represents a bulleted list item.
 type ListItem struct {
 	instr
 	Body Ref
 }
 
-func (l *ListItem) Operands() []Ref { return []Ref{l.Body} }
+func (l *ListItem) Operands() []Ref               { return []Ref{l.Body} }
+func (l *ListItem) RemapOperands(f func(Ref) Ref) { l.Body = f(l.Body) }
 
 // EnumItem represents a numbered list item. Number is -1 for "+" markers.
 type EnumItem struct {
@@ -467,7 +567,8 @@ type EnumItem struct {
 	Body   Ref
 }
 
-func (e *EnumItem) Operands() []Ref { return []Ref{e.Body} }
+func (e *EnumItem) Operands() []Ref               { return []Ref{e.Body} }
+func (e *EnumItem) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
 // TermItem represents a definition-list entry: term / description.
 type TermItem struct {
@@ -477,6 +578,10 @@ type TermItem struct {
 }
 
 func (t *TermItem) Operands() []Ref { return []Ref{t.Term, t.Description} }
+func (t *TermItem) RemapOperands(f func(Ref) Ref) {
+	t.Term = f(t.Term)
+	t.Description = f(t.Description)
+}
 
 // Stub instructions for currently-unimplemented constructs ////////////////////
 //
@@ -503,6 +608,16 @@ func (s *SetRule) Operands() []Ref {
 	return out
 }
 
+func (s *SetRule) RemapOperands(f func(Ref) Ref) {
+	s.Target = f(s.Target)
+	for i := range s.Args {
+		s.Args[i].Value = f(s.Args[i].Value)
+	}
+	if s.Condition != NoRef {
+		s.Condition = f(s.Condition)
+	}
+}
+
 // ShowRule is a `show selector: transform` rule.
 type ShowRule struct {
 	instr
@@ -517,13 +632,21 @@ func (s *ShowRule) Operands() []Ref {
 	return []Ref{s.Selector, s.Transform}
 }
 
+func (s *ShowRule) RemapOperands(f func(Ref) Ref) {
+	if s.Selector != NoRef {
+		s.Selector = f(s.Selector)
+	}
+	s.Transform = f(s.Transform)
+}
+
 // Contextual is a `context expr` construct.
 type Contextual struct {
 	instr
 	Body Ref
 }
 
-func (c *Contextual) Operands() []Ref { return []Ref{c.Body} }
+func (c *Contextual) Operands() []Ref               { return []Ref{c.Body} }
+func (c *Contextual) RemapOperands(f func(Ref) Ref) { c.Body = f(c.Body) }
 
 // ModuleInclude is `include "path"`.
 type ModuleInclude struct {
@@ -531,4 +654,5 @@ type ModuleInclude struct {
 	Source Ref
 }
 
-func (m *ModuleInclude) Operands() []Ref { return []Ref{m.Source} }
+func (m *ModuleInclude) Operands() []Ref               { return []Ref{m.Source} }
+func (m *ModuleInclude) RemapOperands(f func(Ref) Ref) { m.Source = f(m.Source) }

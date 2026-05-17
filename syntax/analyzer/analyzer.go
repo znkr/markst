@@ -108,6 +108,7 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 
 	result := a.lowerMarkup(n)
 	a.b.Return(syntax.Span{}, result)
+	a.b.Finalize()
 	return a.mb.Module()
 }
 
@@ -134,7 +135,7 @@ type frame struct {
 	// as locals once it walks past this scope.
 	scope *scope
 
-	// captures caches the [expr.DefCapture] Ref allocated for each captured
+	// captures caches the capture Ref allocated for each captured
 	// source name in this frame. A name is captured at most once per frame,
 	// even if the body references it many times.
 	captures map[name.Name]expr.Ref
@@ -233,7 +234,7 @@ type binding struct {
 	value value.Value
 
 	// self, when true, means this name refers to the closure-under-construction
-	// itself. Resolution materializes a [expr.DefSelf] on demand via the
+	// itself. Resolution materializes the self Ref on demand via the
 	// frame's [expr.Builder.Self], so no SSA is emitted unless the body
 	// actually mentions the name.
 	self bool

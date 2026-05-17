@@ -259,7 +259,7 @@ func (a *analyzer) lowerIdent(n syntax.Node) expr.Ref {
 
 // resolveName produces the SSA Ref in the current function for source.
 // Walks the scope chain: builtin/user-binding → inline [expr.Const] with the
-// resolved value; self-binding (recursion name) at depth 0 → [expr.DefSelf]
+// resolved value; self-binding (recursion name) at depth 0 → [expr.Builder.Self]
 // in the current builder; local (no boundary crossed) → ReadVar with the
 // SSA variable; outer (one or more boundaries crossed) → allocate a
 // capture in the innermost active closure. Transitive captures (the binding
@@ -300,7 +300,7 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 	return expr.NoRef
 }
 
-// captureRef returns the [expr.DefCapture] Ref for source in the current
+// captureRef returns the capture Ref for source in the current
 // frame, allocating one on first reference. Captures are never reassignable,
 // so no SSA-variable indirection is needed — the returned Ref is the
 // canonical value for source in this frame.
@@ -770,7 +770,7 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		return expr.NoRef
 	}
 	// `let f = (..) => body` form: pass f as the recursion name so the body
-	// can refer to itself via a DefSelf binding.
+	// can refer to itself via a self binding.
 	if patternNode.Kind() == syntax.KindIdent && ns.at(syntax.KindEq) && peekAfterEq(ns) == syntax.KindClosure {
 		recName := name.Make(a.leaf(patternNode, syntax.KindIdent))
 		ns.node() // consume eq
@@ -1256,7 +1256,7 @@ func (a *analyzer) lowerClosure(n syntax.Node) expr.Ref {
 
 // lowerClosureNamed lowers a closure literal. recName, when non-invalid, is
 // the let-binding name wrapping this closure (e.g. `f` in `let f = ...` or
-// `let f(x) = ...`). It is bound inside the closure body to a [expr.DefSelf]
+// `let f(x) = ...`). It is bound inside the closure body to a self-reference Ref
 // reference, so direct recursion needs no capture, and is used as the
 // function's display name.
 func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref {
@@ -1324,7 +1324,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	}
 
 	// Bind the recursion name (if any) as a self-binding. The actual
-	// [expr.DefSelf] is allocated lazily by [resolveName] only if the body
+	// The self Ref is allocated lazily by [resolveName] only if the body
 	// references the name, so non-recursive functions stay capture-free and
 	// preserve their existing SSA shape.
 	if recName != name.Invalid {
@@ -1381,6 +1381,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	a.b.Return(n.Span(), bodyRef)
 
 	// Capture the function and the capture-source list before swapping back.
+	a.b.Finalize()
 	innerFn := a.b.Function()
 	captures := innerFn.Captures
 	a.popFrame()
