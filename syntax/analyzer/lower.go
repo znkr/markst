@@ -443,39 +443,36 @@ func lvalueBase(n syntax.Node) (syntax.Node, bool) {
 func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, rightNode syntax.Node) expr.Ref {
 	switch leftNode.Kind() {
 	case syntax.KindIdent:
+		if op == syntax.Assign {
+			newVal := a.lowerExpr(rightNode)
+			return a.writeLValue(span, leftNode, syntax.Assign, newVal)
+		}
+		// Compound assignment to an ident needs the old value, so it can't go
+		// through writeLValue. Match Typst semantics: RHS is computed first
+		// (may shadow the LHS via side-effects), then the LHS's current value
+		// is read, then combined with the RHS.
+		//
+		// This feels more like an accident than a deliberate design choice,
+		// but here we are. For reference, here is an example that shadows
+		// the LHS via a let binding on the RHS:
+		//
+		//   #{
+		//     let var = "a"
+		//     var += var.at(0, default: let var = "b")
+		//     test(var, "ba")
+		//   }
 		source := name.Make(a.leaf(leftNode, syntax.KindIdent))
 		bnd, ok := a.lookup(source)
 		if !ok {
-			// Either unknown or only known as a builtin. Use checkIdent's
-			// existing message for unknowns; for builtins we need a more
-			// specific error since checkIdent would pass them.
 			return a.checkIdent(source, leftNode.Span())
 		}
-		var newVal expr.Ref
-		if op == syntax.Assign {
-			newVal = a.lowerExpr(rightNode)
-		} else {
-			// Match Typst semantics: RHS is computed first (may shadow the LHS
-			// via side-effects), then the LHS's current value is read, then
-			// combined with the RHS.
-			//
-			// This feels more like an accident than a deliberate design choice,
-			// but here we are. For reference, here is an example that shadows
-			// the LHS via a let binding on the RHS:
-			//
-			//   #{
-			//     let var = "a"
-			//     var += var.at(0, default: let var = "b")
-			//     test(var, "ba")
-			//   }
-			rhs := a.lowerExpr(rightNode)
-			// Re-resolve in case the RHS shadowed the binding via a `let`.
-			if b, ok := a.lookup(source); ok {
-				bnd = b
-			}
-			old := a.b.ReadVar(bnd.(varBinding).v, a.b.CurrentBlock())
-			newVal = a.b.Binary(span, op.StripAssign(), old, rhs)
+		rhs := a.lowerExpr(rightNode)
+		// Re-resolve in case the RHS shadowed the binding via a `let`.
+		if b, ok := a.lookup(source); ok {
+			bnd = b
 		}
+		old := a.b.ReadVar(bnd.(varBinding).v, a.b.CurrentBlock())
+		newVal := a.b.Binary(span, op.StripAssign(), old, rhs)
 		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), newVal)
 		return a.b.Const(span, value.None{})
 	case syntax.KindParenthesized:
@@ -486,8 +483,41 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 			inner = child
 		}
 		return a.lowerAssign(span, op, inner, rightNode)
+	case syntax.KindFieldAccess, syntax.KindFuncCall:
+		// `x.f = v` / `f(args) = v` carry the (stripped) op into FieldWrite /
+		// CallSet, which perform the read-modify-write for compound ops.
+		stripped := op
+		if op != syntax.Assign {
+			stripped = op.StripAssign()
+		}
+		newVal := a.lowerExpr(rightNode)
+		return a.writeLValue(span, leftNode, stripped, newVal)
+	default:
+		// Genuinely-temporary lvalues (e.g. `(1+2) = 3`). writeLValue lowers
+		// the LHS for its side effects and emits the deferred "cannot mutate"
+		// error; the RHS is not evaluated.
+		return a.writeLValue(span, leftNode, op, expr.NoRef)
+	}
+}
+
+// writeLValue stores newVal into the lvalue leftNode, returning the value of
+// the assignment expression (none on success, or an error ref). op is the
+// already-stripped binary op (Assign for a plain store); for field/call
+// lvalues it carries the read-modify-write into FieldWrite/CallSet. This is
+// shared by lowerAssign and destructuring-assignment leaves (see pattern.go),
+// which pass an already-lowered element as newVal. leftNode is never an ident
+// in the destructuring path (those go through bindLeaf).
+func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax.BinaryOp, newVal expr.Ref) expr.Ref {
+	switch leftNode.Kind() {
+	case syntax.KindIdent:
+		source := name.Make(a.leaf(leftNode, syntax.KindIdent))
+		bnd, ok := a.lookup(source)
+		if !ok {
+			return a.checkIdent(source, leftNode.Span())
+		}
+		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), newVal)
+		return a.b.Const(span, value.None{})
 	case syntax.KindFieldAccess:
-		// `x.f = v` → FieldWrite{x, f, v}; `x.f += v` carries op.
 		if baseNode, ok := lvalueBase(leftNode); ok {
 			source := name.Make(baseNode.Text())
 			if a.isCapturedVar(source) {
@@ -498,17 +528,11 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		target := a.lowerExpr(fns.node())
 		fns.take(syntax.KindDot)
 		fieldName := name.Make(a.leaf(fns.node(), syntax.KindIdent))
-		newVal := a.lowerExpr(rightNode)
-		stripped := op
-		if op != syntax.Assign {
-			stripped = op.StripAssign()
-		}
 		// Use the LHS span for the FieldWrite so runtime errors point at the
 		// field-access expression, not the whole assignment.
-		a.b.FieldWrite(leftNode.Span(), target, fieldName, newVal, stripped)
+		a.b.FieldWrite(leftNode.Span(), target, fieldName, newVal, op)
 		return a.b.Const(span, value.None{})
 	case syntax.KindFuncCall:
-		// `f(args) = v` (incl. method-call form like `a.at(i) = v`) → CallSet.
 		if baseNode, ok := lvalueBase(leftNode); ok {
 			source := name.Make(baseNode.Text())
 			if a.isCapturedVar(source) {
@@ -519,20 +543,14 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		calleeNode := fns.node()
 		callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
 		args, blocks := a.lowerArgs(fns.node())
-		newVal := a.lowerExpr(rightNode)
-		stripped := op
-		if op != syntax.Assign {
-			stripped = op.StripAssign()
-		}
 		// Use the LHS span so runtime errors point at the call expression.
-		a.b.CallSet(leftNode.Span(), callee, args, blocks, newVal, stripped)
+		a.b.CallSet(leftNode.Span(), callee, args, blocks, newVal, op)
 		return a.b.Const(span, value.None{})
 	case syntax.KindBinary, syntax.KindUnary:
-		// Genuinely-temporary lvalues (e.g. `(1+2) = 3`). Lower the LHS so
-		// any runtime errors fire first (matching legacy where the eval
-		// error of the LHS supersedes "cannot mutate"); then emit a deferred
-		// Error wired to the LHS so the diagnostic only fires when the LHS
-		// itself didn't already error.
+		// Lower the LHS so any runtime errors fire first (matching legacy where
+		// the eval error of the LHS supersedes "cannot mutate"); then emit a
+		// deferred Error wired to the LHS so the diagnostic only fires when the
+		// LHS itself didn't already error.
 		from := a.lowerExpr(leftNode)
 		a.b.Error(leftNode.Span(), "cannot mutate a temporary value", from)
 		return expr.NoRef
@@ -801,136 +819,21 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 	return expr.NoRef
 }
 
-// lowerDestructPattern binds names from a destructuring pattern to portions
-// of the RHS, emitting Extract / LengthCheck instructions as needed. Each
-// binding allocates a fresh SSA variable in the current scope.
-//
-// Single-ident parenthesised patterns (e.g. `let (a) = ...`) are treated as
-// grouping rather than destructuring: the lone name binds to the whole RHS.
-// This matches the legacy semantics used by the integration tests.
+// lowerDestructPattern binds names from a destructuring pattern to portions of
+// the RHS. Recurses into nested patterns and handles both array-shape
+// (positional) and dict-shape (named) destructuring with optional sinks.
 func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
-	switch n.Kind() {
-	case syntax.KindIdent:
-		source := name.Make(a.leaf(n, syntax.KindIdent))
+	pc := &patternCtx{a: a, seen: make(map[name.Name]struct{})}
+	pc.compile(n, rhs)
+}
 
-		v := a.allocVar(source)
-		a.b.WriteVar(v, a.b.CurrentBlock(), rhs)
-		return
-	case syntax.KindUnderscore:
-		return
-	}
-
-	ns := a.inner(n, syntax.KindDestructuring)
-	type binding struct {
-		variable expr.Var
-		span     syntax.Span
-		idx      int
-	}
-	var bindings []binding
-	hasSink := false
-	idx := 0
-	holes := 0
-	hasComplex := false
-	hasErrors := false
-	seenNames := make(map[name.Name]struct{})
-	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		switch child.Kind() {
-		case syntax.KindComma:
-			continue
-		case syntax.KindError:
-			hasComplex = true
-			hasErrors = true
-			a.emitSyntaxError(child.(*syntax.Error))
-		case syntax.KindUnderscore:
-			holes++
-			idx++
-		case syntax.KindIdent:
-			source := name.Make(a.leaf(child, syntax.KindIdent))
-			if _, dup := seenNames[source]; dup {
-				a.emitError(child.Span(), "duplicate binding: "+source.String())
-			}
-			seenNames[source] = struct{}{}
-
-			v := a.allocVar(source)
-			bindings = append(bindings, binding{variable: v, span: child.Span(), idx: idx})
-			idx++
-		case syntax.KindSpread:
-			hasComplex = true
-			if hasSink {
-				a.emitError(child.Span(), "only one destructuring sink is allowed")
-			}
-			hasSink = true
-			spread := a.inner(child, syntax.KindSpread)
-			spread.take(syntax.KindDots)
-			if !spread.done() {
-				inner := spread.node()
-				switch inner.Kind() {
-				case syntax.KindIdent, syntax.KindUnderscore:
-					// Sink pattern accepted at analyze time; runtime is a
-					// future TODO. Don't emit an analyze-time error.
-				case syntax.KindError:
-					hasErrors = true
-					a.emitSyntaxError(inner.(*syntax.Error))
-				default:
-					hasErrors = true
-					a.emitError(inner.Span(), "expected pattern, found "+inner.Kind().Name())
-				}
-			}
-
-		case syntax.KindNamed:
-			hasComplex = true
-			named := a.inner(child, syntax.KindNamed)
-			keyNode := named.node()
-			keyText := a.leaf(keyNode, syntax.KindIdent)
-			key := name.Make(keyText)
-			named.take(syntax.KindColon)
-			patNode := named.node()
-
-			switch patNode.Kind() {
-			case syntax.KindIdent:
-				field := a.b.FieldRead(patNode.Span(), keyNode.Span(), rhs, key)
-				target := name.Make(a.leaf(patNode, syntax.KindIdent))
-				if _, dup := seenNames[target]; dup {
-					a.emitError(patNode.Span(), "duplicate binding: "+target.String())
-				}
-				seenNames[target] = struct{}{}
-				v := a.allocVar(target)
-				a.b.WriteVar(v, a.b.CurrentBlock(), field)
-			case syntax.KindUnderscore:
-				// Read the field for its side effects (so a missing key still
-				// surfaces an eval-time error) without binding anything.
-				a.b.FieldRead(patNode.Span(), keyNode.Span(), rhs, key)
-			case syntax.KindError:
-				hasErrors = true
-				a.emitSyntaxError(patNode.(*syntax.Error))
-			default:
-				hasErrors = true
-				a.emitError(patNode.Span(), "expected pattern, found "+patNode.Kind().Name())
-			}
-		}
-	}
-	// `let (a) = rhs` (one ident, no holes, no sink/named): treat parens as
-	// grouping and bind a to the whole RHS — matches legacy semantics.
-	if !hasComplex && holes == 0 && len(bindings) == 1 && idx == 1 {
-		a.b.WriteVar(bindings[0].variable, a.b.CurrentBlock(), rhs)
-		return
-	}
-	// Pattern already contains errors; skip the runtime LengthCheck/Extract
-	// emissions to avoid cascading "cannot destructure" diagnostics on top
-	// of the underlying problem.
-	if hasErrors {
-		return
-	}
-	// Only emit the array-shape LengthCheck when the pattern actually has
-	// positional slots; an all-named pattern destructures a dictionary, not
-	// a sequence, and a LengthCheck would mis-type-check it.
-	if idx > 0 || hasSink {
-		a.b.LengthCheck(n.Span(), rhs, idx, hasSink)
-	}
-	for _, b := range bindings {
-		ref := a.b.Extract(b.span, rhs, b.idx)
-		a.b.WriteVar(b.variable, a.b.CurrentBlock(), ref)
-	}
+// assignDestructPattern is the assignment counterpart of
+// [analyzer.lowerDestructPattern]: each pattern leaf is an existing binding (or
+// an arbitrary lvalue expression) that the runtime should overwrite, not a
+// fresh binding to allocate.
+func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
+	pc := &patternCtx{a: a, assign: true}
+	pc.compile(n, rhs)
 }
 
 // Code blocks ////////////////////////////////////////////////////////////////
@@ -1182,8 +1085,12 @@ func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 
 	iterable := a.lowerExpr(iterableNode)
 	// Use the iterable expression's span so "cannot loop over X" errors
-	// point at the iterable, not the whole `for` statement.
-	iter := a.b.IterOpen(iterableNode.Span(), iterable)
+	// point at the iterable, not the whole `for` statement. When the
+	// pattern is a destructuring pattern, IterOpen also refuses to iterate
+	// strings (yielding "cannot destructure values of string" at the
+	// pattern span instead).
+	destructuring := patternNode.Kind() == syntax.KindDestructuring
+	iter := a.b.IterOpen(iterableNode.Span(), iterable, destructuring, patternNode.Span())
 
 	accName := a.b.NewVar(name.Make("$acc"))
 	accInit := a.b.LoopAccBegin(n.Span())
@@ -1368,12 +1275,16 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		}
 		switch p.kind {
 		case expr.ParamPositional:
-			if p.name != name.Invalid {
+			switch {
+			case p.destructure != nil:
+				paramRef := a.b.AddParam(underscore, expr.ParamPositional, expr.NoRef, p.span)
+				a.lowerDestructPattern(p.destructure, paramRef)
+			case p.name != name.Invalid:
 
 				v := a.allocVar(p.name)
 				paramRef := a.b.AddParam(p.name, expr.ParamPositional, expr.NoRef, p.span)
 				a.b.WriteVar(v, expr.BlockID(0), paramRef)
-			} else {
+			default:
 				a.b.AddParam(underscore, expr.ParamPositional, expr.NoRef, p.span)
 			}
 		case expr.ParamNamed:
@@ -1425,6 +1336,10 @@ type closureParamSpec struct {
 	defaultNode syntax.Node // valid for ParamNamed
 	span        syntax.Span // span of the parameter declaration (including default)
 	nameSpan    syntax.Span // span of just the name; used for duplicate-name errors
+	// destructure, when non-nil, is a destructuring pattern (KindDestructuring)
+	// that should bind names from the positional argument bound to this
+	// param. The param itself is anonymous from the caller's perspective.
+	destructure syntax.Node
 }
 
 // collectClosureParamSpecs walks a Params (or single-ident) node and returns
@@ -1519,6 +1434,11 @@ func (a *analyzer) collectClosureParamChild(child syntax.Node, add func(closureP
 		add(closureParamSpec{name: sinkName, kind: expr.ParamSink, span: child.Span(), nameSpan: sinkSpan})
 	case syntax.KindError:
 		a.emitSyntaxError(child.(*syntax.Error))
+	case syntax.KindDestructuring, syntax.KindParenthesized:
+		// Destructuring parameter: bind names from the destructure pattern
+		// against the corresponding positional arg. The caller-visible
+		// param itself is anonymous.
+		add(closureParamSpec{kind: expr.ParamPositional, span: child.Span(), destructure: child})
 	default:
 		a.emitError(child.Span(), "unexpected parameter: "+child.Kind().Name())
 	}
@@ -1727,69 +1647,10 @@ func (a *analyzer) lowerDestructAssignment(n syntax.Node) expr.Ref {
 	ns.take(syntax.KindEq)
 	rhs := a.lowerExpr(ns.node())
 	a.assignDestructPattern(patternNode, rhs)
-	return a.b.Const(n.Span(), value.None{})
-}
-
-// assignDestructPattern is the assignment counterpart of
-// [lowerDestructPattern]: each pattern leaf is an existing binding that
-// the runtime should overwrite, not a fresh binding to allocate.
-func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
-	switch n.Kind() {
-	case syntax.KindIdent:
-		source := name.Make(a.leaf(n, syntax.KindIdent))
-		bnd, ok := a.lookup(source)
-		if !ok {
-			a.checkIdent(source, n.Span())
-			return
-		}
-		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), rhs)
-		return
-	case syntax.KindUnderscore:
-		return
-	}
-
-	ns := a.inner(n, syntax.KindDestructuring)
-	type slot struct {
-		ssaVar expr.Var
-		span   syntax.Span
-		idx    int
-	}
-	var bindings []slot
-	idx := 0
-	holes := 0
-	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
-		switch child.Kind() {
-		case syntax.KindComma:
-			continue
-		case syntax.KindError:
-			a.emitSyntaxError(child.(*syntax.Error))
-		case syntax.KindUnderscore:
-			holes++
-			idx++
-		case syntax.KindIdent:
-			source := name.Make(a.leaf(child, syntax.KindIdent))
-			b, ok := a.lookup(source)
-			if !ok {
-				a.checkIdent(source, child.Span())
-				idx++
-				continue
-			}
-			bindings = append(bindings, slot{ssaVar: b.(varBinding).v, span: child.Span(), idx: idx})
-			idx++
-		case syntax.KindNamed, syntax.KindSpread:
-			// Named and sink patterns are accepted at analyze time but not
-			// yet runtime-supported; the SSA simply skips them.
-		}
-	}
-	if holes == 0 && len(bindings) == 1 && idx == 1 {
-		a.b.WriteVar(bindings[0].ssaVar, a.b.CurrentBlock(), rhs)
-		return
-	}
-	a.b.LengthCheck(n.Span(), rhs, idx, false)
-	for _, b := range bindings {
-		ref := a.b.Extract(b.span, rhs, b.idx)
-		a.b.WriteVar(b.ssaVar, a.b.CurrentBlock(), ref)
-	}
+	// Destructuring assignment is a statement: it produces no value and
+	// no surrounding content (parbreaks etc. should not be emitted for
+	// it). Returning NoRef matches lowerLetBinding's behaviour.
+	return expr.NoRef
 }
 
 func (a *analyzer) lowerModuleInclude(n syntax.Node) expr.Ref {

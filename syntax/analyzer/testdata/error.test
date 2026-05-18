@@ -227,7 +227,8 @@ v in iter {}
 │ fn $top:
 │   b0:
 │     v0 = error msg="only one destructuring sink is allowed"
-│     length_check none, want=0, has_sink
+│     v1 = destruct_array none, before=0, after=0, has_sink
+│     v2 = array_slice v1[0:len-0]
 │     return none
 
 --- plain-value-in-dict ---
@@ -289,10 +290,9 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = error msg="duplicate binding: a"
-│     length_check none, want=2
-│     v1 = extract none[0]
-│     v2 = extract none[1]
+│     v0 = destruct_array none, before=2, after=0
+│     v1 = array_elem v0[0]
+│     v2 = error msg="duplicate binding: a"
 │     return none
 
 --- duplicate-param ---
@@ -372,3 +372,27 @@ v in iter {}
 │   b0:
 │     v0 = error msg="continue outside of loop"
 │     return v0
+
+--- destructuring-assign-invalid-lvalue ---
+#{
+  let a = 1
+  let b = 2
+  (a + b, c) = (1, 2)
+}
+│ fn $top:
+│   b0:
+│     v0 = error msg="unexpected plus"
+│     return none
+
+--- destructuring-assign-literal-lvalue ---
+#{
+  let c = 1
+  (1, c) = (1, 2)
+}
+│ fn $top:
+│   b0:
+│     v0 = make_array [1, 2]
+│     v1 = destruct_array v0, before=2, after=0
+│     v2 = error msg="cannot mutate a temporary value"
+│     v3 = array_elem v1[1]
+│     return none

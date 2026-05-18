@@ -192,13 +192,42 @@ func (f *formatter) formatInst(inst Instruction) {
 		if i.AllowSetter {
 			sb.WriteString(" lvalue")
 		}
-	case *Extract:
-		fmt.Fprintf(sb, "extract %s[%d]", f.ref(i.Source), i.Index)
-	case *LengthCheck:
-		fmt.Fprintf(sb, "length_check %s, want=%d", f.ref(i.Source), i.Want)
+	case *DestructArray:
+		fmt.Fprintf(sb, "destruct_array %s, before=%d, after=%d", f.ref(i.Source), i.Before, i.After)
 		if i.HasSink {
 			sb.WriteString(", has_sink")
 		}
+	case *ArrayElem:
+		if i.FromEnd {
+			fmt.Fprintf(sb, "array_elem %s[-%d]", f.ref(i.Source), i.Index+1)
+		} else {
+			fmt.Fprintf(sb, "array_elem %s[%d]", f.ref(i.Source), i.Index)
+		}
+	case *ArraySlice:
+		fmt.Fprintf(sb, "array_slice %s[%d:len-%d]", f.ref(i.Source), i.Before, i.After)
+	case *DestructDict:
+		fmt.Fprintf(sb, "destruct_dict %s, consumed=[", f.ref(i.Source))
+		for j, k := range i.Consumed {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(k.String())
+		}
+		sb.WriteString("]")
+		if i.HasSink {
+			sb.WriteString(", has_sink")
+		}
+	case *DictField:
+		fmt.Fprintf(sb, "dict_field %s.%s", f.ref(i.Source), i.Field.String())
+	case *DictRest:
+		fmt.Fprintf(sb, "dict_rest %s, consumed=[", f.ref(i.Source))
+		for j, k := range i.Consumed {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(k.String())
+		}
+		sb.WriteString("]")
 	case *IterOpen:
 		fmt.Fprintf(sb, "iter_open %s", f.ref(i.Iterable))
 	case *IterHasNext:

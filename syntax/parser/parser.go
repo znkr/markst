@@ -933,7 +933,11 @@ func (p *parser) parsePattern(reassignment bool) {
 	case syntax.KindUnderscore:
 		p.consume()
 	case syntax.KindLeftParen:
-		p.parseDestructuringOrParenthesized(reassignment, true)
+		// isDestruct=false: a lone parenthesised ident in a pattern position
+		// (e.g. the key in `((x): v)` or the inner of `((a, b))`) is a
+		// grouping, not a destructure. The outer caller already wraps real
+		// destructures via parseLetBinding / destructure-assignment recovery.
+		p.parseDestructuringOrParenthesized(reassignment, false)
 	default:
 		p.parsePatternLeaf(reassignment)
 	}

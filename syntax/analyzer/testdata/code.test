@@ -510,9 +510,9 @@
 #{ let (a, b) = pair }
 │ fn $top:
 │   b0:
-│     length_check none, want=2
-│     v0 = extract none[0]
-│     v1 = extract none[1]
+│     v0 = destruct_array none, before=2, after=0
+│     v1 = array_elem v0[0]
+│     v2 = array_elem v0[1]
 │     return none
 
 --- let-binding-without-assignment ---
@@ -676,19 +676,19 @@
 │     v0 = iter_open none
 │     v1 = loop_acc_begin
 │     jump b1(v1)
-│   b1(v6):
+│   b1(v7):
 │     v2 = iter_has_next v0
 │     branch v2, b2, b3
 │   b2:
 │     v3 = iter_advance v0
-│     length_check v3, want=2
-│     v4 = extract v3[0]
-│     v5 = extract v3[1]
-│     v7 = loop_acc_add v6, v4
-│     jump b1(v7)
+│     v4 = destruct_array v3, before=2, after=0
+│     v5 = array_elem v4[0]
+│     v6 = array_elem v4[1]
+│     v8 = loop_acc_add v7, v5
+│     jump b1(v8)
 │   b3:
-│     v8 = loop_acc_result v6
-│     return v8
+│     v9 = loop_acc_result v7
+│     return v9
 
 --- break ---
 #{ while true { break } }
@@ -780,9 +780,9 @@
 #{ (x, y) = point }
 │ fn $top:
 │   b0:
-│     length_check none, want=2
-│     v0 = extract none[0]
-│     v1 = extract none[1]
+│     v0 = destruct_array none, before=2, after=0
+│     v1 = array_elem v0[0]
+│     v2 = array_elem v0[1]
 │     return none
 
 --- spread-in-destructuring ---
@@ -792,6 +792,9 @@
 #{ (first, ..rest) = arr }
 │ fn $top:
 │   b0:
+│     v0 = destruct_array none, before=1, after=0, has_sink
+│     v1 = array_elem v0[0]
+│     v2 = array_slice v0[1:len-0]
 │     return none
 
 --- named-in-destructuring ---
@@ -801,7 +804,9 @@
 #{ (x: a, y: b) = point }
 │ fn $top:
 │   b0:
-│     length_check none, want=0
+│     v0 = destruct_dict none, consumed=[x, y]
+│     v1 = dict_field v0.x
+│     v2 = dict_field v0.y
 │     return none
 
 --- literals-none-auto-bool ---

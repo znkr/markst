@@ -1,0 +1,16 @@
+--- destructuring-let-array-single-element-too-many ---
+// Error: 6-10 too many elements to destructure
+// Hint: 6-10 the provided array has a length of 2, but the pattern expects a single element
+#let (a,) = (1, 2)
+
+--- destructuring-let-array-single-element-too-few ---
+// Error: 6-10 not enough elements to destructure
+// Hint: 6-10 the provided array has a length of 0, but the pattern expects a single element
+#let (a,) = ()
+
+--- destructuring-let-dict-positional-invalid ---
+// A positional pattern with a hole has no key names to look up, so it cannot
+// destructure a dictionary.
+// Error: 6-12 cannot destructure a dictionary using a positional pattern
+// Hint: 6-12 use named fields like `(key: binding)`, or plain identifiers for shorthand
+#let (a, _) = (a: 1, b: 2)

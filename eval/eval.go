@@ -75,10 +75,10 @@ type session struct {
 //
 //   - Exact duplicates: a comparator or predicate firing repeatedly on a
 //     poisoned value produces the same (span, msg) over and over.
-//   - Narrower restatements: destructure lowering emits a LengthCheck (span
-//     over the whole pattern) and per-Extract instructions (narrower spans
-//     inside the pattern). When the value isn't destructurable, all fire
-//     with the same message; only the outer one is kept.
+//   - Narrower restatements: destructure lowering emits a DestructArray
+//     (span over the whole pattern) and per-ArrayElem reads (narrower
+//     spans inside the pattern). When the value isn't destructurable,
+//     all fire with the same message; only the outer one is kept.
 //
 // Implementation: errors is sorted by (Span.Start asc, Span.End desc). Binary
 // search locates the insertion point in O(log n); the cover check then
@@ -422,33 +422,48 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.evalFieldWrite(i)
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
-	case *expr.Extract:
+	case *expr.DestructArray:
+		fr.vals[r] = fr.evalDestructArray(i, fr.span(r))
+	case *expr.ArrayElem:
+		fr.vals[r] = fr.evalArrayElem(fr.get(i.Source), i.Index, i.FromEnd, i.Key, fr.span(r))
+	case *expr.ArraySlice:
 		src := fr.get(i.Source)
-		arr, ok := src.(*value.Array)
-		if !ok {
-			fr.vals[r] = fr.error(fr.span(r), fmt.Sprintf("cannot destructure values of %s", src.Type()))
+		if arr, ok := src.(*value.Array); ok {
+			end := len(arr.Elems) - i.After
+			if i.Before > end {
+				fr.vals[r] = &value.Array{}
+				return
+			}
+			out := make([]value.Value, end-i.Before)
+			copy(out, arr.Elems[i.Before:end])
+			fr.vals[r] = &value.Array{Elems: out}
 			return
 		}
-		if i.Index >= len(arr.Elems) {
+		if d, ok := src.(*value.Dict); ok && i.Hybrid {
+			fr.vals[r] = dictExcluding(d, i.ExcludeKeys)
+			return
+		}
+		fr.vals[r] = fr.error(fr.span(r), "destructure index out of range")
+	case *expr.DestructDict:
+		fr.vals[r] = fr.evalDestructDict(i, fr.span(r))
+	case *expr.DictField:
+		src := fr.get(i.Source)
+		d, _ := src.(*value.Dict)
+		if d == nil {
 			fr.vals[r] = fr.error(fr.span(r), "destructure index out of range")
 			return
 		}
-		fr.vals[r] = arr.Elems[i.Index]
-	case *expr.LengthCheck:
+		fr.vals[r] = fr.destructDictKey(d, i.Field, i.FieldSpan)
+	case *expr.DictRest:
 		src := fr.get(i.Source)
-		arr, ok := src.(*value.Array)
-		if !ok {
-			fr.error(i.Span(), fmt.Sprintf("cannot destructure values of %s", src.Type()))
+		d, _ := src.(*value.Dict)
+		if d == nil {
+			fr.vals[r] = fr.error(fr.span(r), "destructure index out of range")
 			return
 		}
-		switch {
-		case i.HasSink && len(arr.Elems) < i.Want:
-			fr.error(i.Span(), fmt.Sprintf("need at least %d elements, got %d", i.Want, len(arr.Elems)))
-		case !i.HasSink && len(arr.Elems) != i.Want:
-			fr.error(i.Span(), fmt.Sprintf("need exactly %d elements, got %d", i.Want, len(arr.Elems)))
-		}
+		fr.vals[r] = dictExcluding(d, i.Consumed)
 	case *expr.IterOpen:
-		state, e := fr.newIterator(fr.get(i.Iterable), fr.span(r))
+		state, e := fr.newIterator(fr.get(i.Iterable), fr.span(r), i.Destructuring, i.PatternSpan)
 		if e != nil {
 			fr.vals[r] = e
 			return
@@ -748,6 +763,124 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		return ret[0]
 	}
 	return &value.Sequence{Children: ret}
+}
+
+// evalDestructArray validates that the destructuring source is an array of
+// the right shape (or, when Hybrid is set, a dict that can be destructured
+// via ident shorthand). Returns the validated source on success, or a
+// *value.Error on failure.
+func (fr *frame) evalDestructArray(i *expr.DestructArray, span syntax.Span) value.Value {
+	src := fr.get(i.Source)
+	if arr, ok := src.(*value.Array); ok {
+		need := i.Before + i.After
+		got := len(arr.Elems)
+		// With a sink, any length >= need is fine; without one, the length
+		// must match exactly.
+		if (i.HasSink && got < need) || (!i.HasSink && got != need) {
+			quantifier := "not enough"
+			if got > need {
+				quantifier = "too many"
+			}
+			hint := fmt.Sprintf("the provided array has a length of %d, but the pattern expects %s",
+				got, expectedElems(need, i.HasSink))
+			return fr.error(span, quantifier+" elements to destructure", hint)
+		}
+		return arr
+	}
+	if d, ok := src.(*value.Dict); ok {
+		if i.Hybrid {
+			// Dict shorthand: each non-sink slot's Key must be present.
+			// Per-key "does not contain" errors are surfaced by the
+			// individual ArrayElem reads.
+			return d
+		}
+		// A positional pattern with holes or nested sub-patterns has no key
+		// names to look up, so it cannot destructure a dict.
+		return fr.error(span, "cannot destructure a dictionary using a positional pattern",
+			"use named fields like `(key: binding)`, or plain identifiers for shorthand")
+	}
+	return fr.errorf(span, "cannot destructure %s", src.Type())
+}
+
+// expectedElems describes how many elements a destructuring pattern expects,
+// for the "the pattern expects ..." hint on a length mismatch.
+func expectedElems(need int, hasSink bool) string {
+	switch {
+	case hasSink && need == 1:
+		return "at least 1 element"
+	case hasSink:
+		return fmt.Sprintf("at least %d elements", need)
+	case need == 0:
+		return "an empty array"
+	case need == 1:
+		return "a single element"
+	default:
+		return fmt.Sprintf("%d elements", need)
+	}
+}
+
+// evalDestructDict validates that the destructuring source is a dict. An
+// array source raises the named-from-array error at the first named-pair
+// span (i.FirstNamedSpan).
+func (fr *frame) evalDestructDict(i *expr.DestructDict, span syntax.Span) value.Value {
+	src := fr.get(i.Source)
+	if _, ok := src.(*value.Array); ok {
+		return fr.error(i.FirstNamedSpan, "cannot destructure named pattern from an array")
+	}
+	d, ok := src.(*value.Dict)
+	if !ok {
+		return fr.errorf(span, "cannot destructure %s", src.Type())
+	}
+	return d
+}
+
+// evalArrayElem reads a single element from an array (from the front, or from
+// the back when fromEnd is set), or — when the source is a dict and key is
+// non-zero — looks up the key.
+func (fr *frame) evalArrayElem(src value.Value, index int, fromEnd bool, key name.Name, span syntax.Span) value.Value {
+	if arr, ok := src.(*value.Array); ok {
+		if index >= len(arr.Elems) {
+			return fr.error(span, "destructure index out of range")
+		}
+		if fromEnd {
+			return arr.Elems[len(arr.Elems)-1-index]
+		}
+		return arr.Elems[index]
+	}
+	if d, ok := src.(*value.Dict); ok && key != (name.Name{}) {
+		return fr.destructDictKey(d, key, span)
+	}
+	return fr.error(span, "destructure index out of range")
+}
+
+// destructDictKey looks up key in d, returning a "dictionary does not contain
+// key" error at span when absent. Shared by hybrid array reads and DictField.
+func (fr *frame) destructDictKey(d *value.Dict, key name.Name, span syntax.Span) value.Value {
+	v, found := d.Elems.Get(value.Str(key.String()))
+	if !found {
+		return fr.errorf(span, "dictionary does not contain key %q", key.String())
+	}
+	return v
+}
+
+// dictExcluding returns a new dict containing every entry of d whose key
+// is not in exclude.
+func dictExcluding(d *value.Dict, exclude []name.Name) *value.Dict {
+	skip := make(map[value.Str]struct{}, len(exclude))
+	for _, k := range exclude {
+		// Sink/hole slots contribute an invalid (zero) name with no key to
+		// exclude; skip it (and avoid panicking on String()).
+		if k != (name.Name{}) {
+			skip[value.Str(k.String())] = struct{}{}
+		}
+	}
+	out := &value.Dict{}
+	for k, v := range d.Elems.All() {
+		if _, drop := skip[k]; !drop {
+			out.Elems.Put(k, v)
+		}
+	}
+	return out
 }
 
 // evalFieldRead replicates the legacy FieldAccess.eval logic for SSA: type
@@ -1131,9 +1264,17 @@ type iteratorState struct {
 // and strings are supported; any other type yields an error. For dicts the
 // key slice is snapshotted at open time so concurrent mutations don't affect
 // iteration order.
-func (fr *frame) newIterator(v value.Value, span syntax.Span) (*iteratorState, *value.Error) {
+func (fr *frame) newIterator(v value.Value, span syntax.Span, destructuring bool, patternSpan syntax.Span) (*iteratorState, *value.Error) {
 	if v == nil {
 		return nil, fr.error(span, "cannot loop over uninitialised value")
+	}
+	if destructuring {
+		switch v.(type) {
+		case value.Str:
+			return nil, fr.errorf(patternSpan, "cannot destructure values of string")
+		case value.Bytes:
+			return nil, fr.errorf(patternSpan, "cannot destructure values of bytes")
+		}
 	}
 	s := &iteratorState{}
 	switch val := v.(type) {
@@ -1163,6 +1304,15 @@ func (fr *frame) newIterator(v value.Value, span syntax.Span) (*iteratorState, *
 			r, size := graphemes.Decode(str[i:])
 			i = min(i+size, len(str))
 			return value.Str(r), i < len(str)
+		}
+	case value.Bytes:
+		i := 0
+		b := string(val)
+		s.hasNext = i < len(b)
+		s.next = func() (value.Value, bool) {
+			v := value.Int(b[i])
+			i = min(i+1, len(b))
+			return v, i < len(b)
 		}
 	default:
 		return nil, fr.errorf(span, "cannot loop over %s", val.Type())

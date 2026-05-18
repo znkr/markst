@@ -864,7 +864,7 @@ _hello
 │       LetBinding
 │         Let: "let"
 │         Space: " "
-│         Destructuring
+│         Parenthesized
 │           LeftParen: "("
 │           Ident: "a"
 │           RightParen: ")"

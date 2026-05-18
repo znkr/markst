@@ -33,7 +33,9 @@ type Instruction interface {
 func IsPure(instr Instruction) bool {
 	switch instr.(type) {
 	case *Const, *Unary, *Binary,
-		*MakeArray, *MakeDict, *FieldRead, *Extract,
+		*MakeArray, *MakeDict, *FieldRead,
+		*ArrayElem, *ArraySlice,
+		*DictField, *DictRest,
 		*MakeClosure,
 		*Heading, *Strong, *Emph, *Link, *RefMarkup,
 		*ListItem, *EnumItem, *TermItem,
@@ -424,34 +426,115 @@ func (f *FieldWrite) RemapOperands(rn func(Ref) Ref) {
 	f.NewVal = rn(f.NewVal)
 }
 
-// Extract reads a positional element from an indexed source (array or
-// tuple-like value). Used to lower destructuring patterns.
-type Extract struct {
+// DestructArray validates Source for a destructuring pattern with positional
+// items (possibly with a sink).
+//
+// Before is the number of fixed positions before the sink (or before the
+// end if no sink); After is the number after the sink. HasSink reports
+// whether the pattern includes a `..rest` sink.
+//
+// Hybrid is true when every positional item is a simple identifier (so the
+// pattern can also destructure a dict via shorthand semantics, where each
+// ident names a key).
+//
+// On success, the result carries the validated source (array or, in
+// Hybrid mode, dict) so downstream readers can dispatch by type. On
+// failure the result is a *value.Error.
+type DestructArray struct {
 	instr
-	Source Ref
-	Index  int
-}
-
-func (e *Extract) Operands() []Ref               { return []Ref{e.Source} }
-func (e *Extract) RemapOperands(f func(Ref) Ref) { e.Source = f(e.Source) }
-
-// LengthCheck asserts that Source has at least Want elements (or exactly Want
-// if HasSink is false). Used to lower destructuring patterns; raises a runtime
-// error if the assertion fails. Side-effect-only — no SSA result.
-type LengthCheck struct {
-	voidInstr
 	Source  Ref
-	Want    int
+	Before  int
+	After   int
 	HasSink bool
+	Hybrid  bool
 }
 
-func (l *LengthCheck) Operands() []Ref               { return []Ref{l.Source} }
-func (l *LengthCheck) RemapOperands(f func(Ref) Ref) { l.Source = f(l.Source) }
+func (d *DestructArray) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DestructArray) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
+
+// ArrayElem reads a single element from Source. When FromEnd is false the
+// element is Index counted from the front; when FromEnd is true it is Index
+// counted from the back (0 = last element). When Source is a dict and Key is
+// non-zero, the lookup uses Key instead (hybrid dict shorthand).
+type ArrayElem struct {
+	instr
+	Source  Ref
+	Index   int
+	FromEnd bool
+	Key     name.Name
+}
+
+func (a *ArrayElem) Operands() []Ref               { return []Ref{a.Source} }
+func (a *ArrayElem) RemapOperands(f func(Ref) Ref) { a.Source = f(a.Source) }
+
+// ArraySlice produces a sub-array Source[Before:len-After] — i.e. the
+// "rest" of a destructuring pattern with a sink. When Source is a dict
+// and Hybrid is true, the result is a dict containing every entry whose
+// key is not in ExcludeKeys.
+type ArraySlice struct {
+	instr
+	Source      Ref
+	Before      int
+	After       int
+	Hybrid      bool
+	ExcludeKeys []name.Name
+}
+
+func (a *ArraySlice) Operands() []Ref               { return []Ref{a.Source} }
+func (a *ArraySlice) RemapOperands(f func(Ref) Ref) { a.Source = f(a.Source) }
+
+// DestructDict validates Source for a dict-shape destructuring pattern.
+// FirstNamedSpan is the span of the first named pair in the pattern; it
+// is used as the error span when Source turns out to be an array
+// ("cannot destructure named pattern from an array"). Consumed lists the
+// keys consumed by named/shorthand items.
+type DestructDict struct {
+	instr
+	Source         Ref
+	Consumed       []name.Name
+	HasSink        bool
+	FirstNamedSpan syntax.Span
+}
+
+func (d *DestructDict) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DestructDict) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
+
+// DictField reads a key from Source for a destructuring pattern. Unlike
+// [FieldRead], the error message uses the destructure phrasing
+// "dictionary does not contain key %q".
+type DictField struct {
+	instr
+	Source    Ref
+	Field     name.Name
+	FieldSpan syntax.Span
+}
+
+func (d *DictField) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DictField) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
+
+// DictRest produces a dictionary containing all entries of Source whose
+// keys are not in Consumed.
+type DictRest struct {
+	instr
+	Source   Ref
+	Consumed []name.Name
+}
+
+func (d *DictRest) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DictRest) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
 
 // IterOpen produces an opaque iterator over an array/dict/string.
+//
+// Destructuring is true when the enclosing for-loop's pattern is a
+// destructuring pattern (e.g. `for (x, y) in iterable`). It only affects
+// the runtime check for string iterables: with Destructuring set, opening
+// an iterator over a string raises "cannot destructure values of string"
+// at PatternSpan instead of producing characters.
 type IterOpen struct {
 	instr
-	Iterable Ref
+	Iterable      Ref
+	Destructuring bool
+	PatternSpan   syntax.Span
 }
 
 func (i *IterOpen) Operands() []Ref               { return []Ref{i.Iterable} }

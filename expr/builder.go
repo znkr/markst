@@ -466,25 +466,85 @@ func (b *Builder) FieldWrite(span syntax.Span, target Ref, field name.Name, newV
 	})
 }
 
-// Extract emits a positional-extraction instruction (destructuring).
-func (b *Builder) Extract(span syntax.Span, source Ref, index int) Ref {
+// DestructArray emits an array-shape validation for a destructuring pattern.
+// Returns an SSA Ref that holds the validated source on success (or a
+// *value.Error on failure), so downstream element reads can short-circuit
+// on operand errors. When hybrid is true, the result may be a dict (the
+// pattern is positional-ident-only and so doubles as a dict shorthand).
+func (b *Builder) DestructArray(span syntax.Span, source Ref, before, after int, hasSink, hybrid bool) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &Extract{instr: instr{result: ref}, Source: source, Index: index}
+		return &DestructArray{
+			instr:   instr{result: ref},
+			Source:  source,
+			Before:  before,
+			After:   after,
+			HasSink: hasSink,
+			Hybrid:  hybrid,
+		}
 	})
 }
 
-// LengthCheck emits a runtime length-assertion instruction for destructuring.
-// It produces no SSA value, so no Ref is allocated.
-func (b *Builder) LengthCheck(span syntax.Span, source Ref, want int, hasSink bool) {
-	b.emitVoid(func() Instruction {
-		return &LengthCheck{voidInstr: voidInstr{span: span}, Source: source, Want: want, HasSink: hasSink}
+// ArrayElem emits a single-element array read. When fromEnd is false index
+// counts from the front; when true it counts from the back (0 = last element).
+// key is non-zero when the pattern allows dict shorthand for this slot.
+func (b *Builder) ArrayElem(span syntax.Span, source Ref, index int, fromEnd bool, key name.Name) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &ArrayElem{instr: instr{result: ref}, Source: source, Index: index, FromEnd: fromEnd, Key: key}
+	})
+}
+
+// ArraySlice emits a slice instruction for the sink of a destructuring
+// pattern: yields Source[before:len-after]. When hybrid is true and the
+// source is a dict, the result is the dict minus excludeKeys instead.
+func (b *Builder) ArraySlice(span syntax.Span, source Ref, before, after int, hybrid bool, excludeKeys []name.Name) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &ArraySlice{instr: instr{result: ref}, Source: source, Before: before, After: after, Hybrid: hybrid, ExcludeKeys: excludeKeys}
+	})
+}
+
+// DestructDict emits a dict-shape validation for a destructuring pattern.
+// firstNamedSpan is used when source turns out to be an array (the error
+// then reads "cannot destructure named pattern from an array" at that
+// span).
+func (b *Builder) DestructDict(span, firstNamedSpan syntax.Span, source Ref, consumed []name.Name, hasSink bool) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &DestructDict{
+			instr:          instr{result: ref},
+			Source:         source,
+			Consumed:       consumed,
+			HasSink:        hasSink,
+			FirstNamedSpan: firstNamedSpan,
+		}
+	})
+}
+
+// DictField emits a dictionary-key read scoped to destructuring (error
+// message: "dictionary does not contain key %q").
+func (b *Builder) DictField(span, fieldSpan syntax.Span, source Ref, field name.Name) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &DictField{instr: instr{result: ref}, Source: source, Field: field, FieldSpan: fieldSpan}
+	})
+}
+
+// DictRest emits a "rest of dict" instruction, producing a dict of every
+// entry whose key is not in consumed.
+func (b *Builder) DictRest(span syntax.Span, source Ref, consumed []name.Name) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &DictRest{instr: instr{result: ref}, Source: source, Consumed: consumed}
 	})
 }
 
 // IterOpen emits an iterator-opening instruction for the given iterable.
-func (b *Builder) IterOpen(span syntax.Span, iterable Ref) Ref {
+// If destructuring is true, opening over a string raises a destructuring
+// error at patternSpan rather than yielding characters.
+func (b *Builder) IterOpen(span syntax.Span, iterable Ref, destructuring bool, patternSpan syntax.Span) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &IterOpen{instr: instr{result: ref}, Iterable: iterable}
+		return &IterOpen{
+			instr:         instr{result: ref},
+			Iterable:      iterable,
+			Destructuring: destructuring,
+			PatternSpan:   patternSpan,
+		}
 	})
 }
 
