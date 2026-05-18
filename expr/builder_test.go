@@ -262,3 +262,36 @@ func TestBuilderTrivialPhiElim(t *testing.T) {
 		t.Errorf("join should have no params after Finalize, got %d", len(params))
 	}
 }
+
+func TestBuilderCallPurityDCE(t *testing.T) {
+	// A Call whose Callee is a ModConst *value.Function with Impure=false is
+	// droppable when its result has no uses; an Impure callee is kept.
+	pure := &value.Function{Name: "pure_test"}
+	impure := &value.Function{Name: "impure_test", Impure: true}
+
+	mb := NewModuleBuilder()
+	b := mb.NewBuilder()
+	span := syntax.Span{}
+
+	pureCallee := b.Const(span, pure)
+	impureCallee := b.Const(span, impure)
+	b.Call(span, pureCallee, nil, nil, false)     // result unused
+	keptRef := b.Call(span, impureCallee, nil, nil, false) // result also unused, but impure
+	// Pin the impure call's result to confirm it's not getting dropped by the
+	// (unrelated) regular DCE path — the impurity check is what should save it.
+	_ = keptRef
+	b.Return(span, NoRef)
+
+	b.Finalize()
+
+	var got []string
+	for _, inst := range b.Function().Blocks[0].Instrs {
+		if c, ok := inst.(*Call); ok {
+			callee := mb.mod.Constants[c.Callee.ModConstID()].(*value.Function)
+			got = append(got, callee.Name)
+		}
+	}
+	if len(got) != 1 || got[0] != "impure_test" {
+		t.Fatalf("after Finalize: got Calls=%v, want only [impure_test]", got)
+	}
+}

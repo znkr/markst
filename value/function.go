@@ -39,6 +39,11 @@ type Function struct {
 	// fully merged arguments (pre-bound + call-site) and returns the result or
 	// an error.
 	F func(call *FunctionCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
+
+	// Impure marks the function as having observable side effects beyond its
+	// return value (mutating an operand, touching session-global state, etc.).
+	// The default — false — means the function is pure.
+	Impure bool
 }
 
 // NamedParams maps interned parameter names to their definitions.
@@ -97,6 +102,7 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 		Named:      n.Named,
 		WithArgs:   merged,
 		F:          n.F,
+		Impure:     n.Impure,
 	}, nil
 }
 

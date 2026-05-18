@@ -30,8 +30,8 @@ type Instruction interface {
 //
 // Block params are always pure; this predicate is only consulted for
 // instructions.
-func IsPure(inst Instruction) bool {
-	switch inst.(type) {
+func IsPure(instr Instruction) bool {
+	switch instr.(type) {
 	case *Const, *Unary, *Binary,
 		*MakeArray, *MakeDict, *FieldRead, *Extract,
 		*MakeClosure,

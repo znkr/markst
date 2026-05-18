@@ -157,7 +157,7 @@ func (mb *ModuleBuilder) NewBuilder() *Builder {
 // resulting [ModConstRef]. Comparable values are deduplicated; non-comparable
 // values are appended each call.
 func (mb *ModuleBuilder) addConstant(v value.Value) Ref {
-	key := indexKey(v)
+	key := internKey(v)
 	if key == nil {
 		return NoRef
 	}
@@ -175,7 +175,7 @@ func (mb *ModuleBuilder) addConstant(v value.Value) Ref {
 
 type float64key uint64
 
-func indexKey(v value.Value) any {
+func internKey(v value.Value) any {
 	switch v := v.(type) {
 	case value.None, value.Bool, value.Int, value.Decimal, value.Str, value.Bytes, value.Ratio, value.Fraction, value.Length, value.Relative, value.Angle:
 		return v
@@ -184,6 +184,12 @@ func indexKey(v value.Value) any {
 		// float values that compare equal (e.g. +0.0 and -0.0) get different
 		// keys, and that NaNs work as expected.
 		return float64key(math.Float64bits(float64(v)))
+	case *value.Function, *value.Type:
+		// Universe builtins and reflected types are global singletons, so
+		// pointer identity is a sound intern key. User-defined closures and
+		// partial applications (Function.With) only materialize at runtime and
+		// never reach the pool.
+		return v
 	default:
 		return nil
 	}

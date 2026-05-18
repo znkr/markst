@@ -1,6 +1,9 @@
 package expr
 
-import "znkr.io/writst/syntax"
+import (
+	"znkr.io/writst/syntax"
+	"znkr.io/writst/value"
+)
 
 // resultSetter is implemented by every value-producing IR node (instructions
 // embedding [instr], and [*BlockParam]). Void instructions (those embedding
@@ -344,7 +347,18 @@ func (b *Builder) droppable(prods []producer, r Ref) bool {
 		return true
 	}
 	inst := b.fn.Blocks[p.block].Instrs[p.idx]
-	return inst.Result() == r && IsPure(inst)
+	if inst.Result() != r {
+		return false
+	}
+	if IsPure(inst) {
+		return true
+	}
+	// A Call to a function not marked as impure is droppable.
+	if call, ok := inst.(*Call); ok {
+		fn, ok := b.mb.mod.Constants[call.Callee.ModConstID()].(*value.Function)
+		return ok && !fn.Impure
+	}
+	return false
 }
 
 // filterNone drops items equal to the `none` module constant.

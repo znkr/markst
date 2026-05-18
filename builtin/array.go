@@ -90,7 +90,8 @@ var (
 			{Name: "index", Type: types.SetOf(types.Int)},
 			{Name: "value", Type: types.Any},
 		},
-		F: arrayInsertImpl,
+		F:      arrayInsertImpl,
+		Impure: true,
 	}
 
 	ArrayPush = &value.Function{
@@ -99,7 +100,8 @@ var (
 			{Name: "self", Type: types.SetOf(types.Array)},
 			{Name: "value", Type: types.Any},
 		},
-		F: arrayPushImpl,
+		F:      arrayPushImpl,
+		Impure: true,
 	}
 
 	ArrayRemove = &value.Function{
@@ -111,7 +113,8 @@ var (
 		Named: value.NamedParams{
 			names.Default: value.Param{Name: "default", Type: types.Any},
 		},
-		F: arrayRemoveImpl,
+		F:      arrayRemoveImpl,
+		Impure: true,
 	}
 
 	ArrayPop = &value.Function{
@@ -119,7 +122,8 @@ var (
 		Positional: []value.Param{
 			{Name: "self", Type: types.SetOf(types.Array)},
 		},
-		F: arrayPopImpl,
+		F:      arrayPopImpl,
+		Impure: true,
 	}
 
 	ArrayJoin = &value.Function{
