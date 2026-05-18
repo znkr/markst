@@ -90,7 +90,7 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 	a := &analyzer{source: n.Source}
 	bindings := make(map[name.Name]binding, len(builtin.Universe))
 	for name, val := range builtin.Universe {
-		bindings[name] = binding{value: val}
+		bindings[name] = valueBinding{val: val}
 	}
 	a.scope = &scope{bindings: bindings}
 
@@ -226,19 +226,27 @@ type scope struct {
 	bindings map[name.Name]binding
 }
 
-type binding struct {
-	// The SSA variable backing this binding; zero for value/self bindings
-	variable expr.Var
+// binding is the kind of in-scope association recorded for a source name. The
+// three concrete kinds are mutually exclusive; the type split lets resolution
+// switch on them directly instead of inspecting sentinel-valued fields.
+type binding interface{ aBinding() }
 
-	// Optional value-binding (builtin, WithBindings)
-	value value.Value
+// varBinding names an SSA variable allocated by the current function's
+// Builder. Plain `let x = ...` and reassignments both produce these.
+type varBinding struct{ v expr.Var }
 
-	// self, when true, means this name refers to the closure-under-construction
-	// itself. Resolution materializes the self Ref on demand via the
-	// frame's [expr.Builder.Self], so no SSA is emitted unless the body
-	// actually mentions the name.
-	self bool
-}
+// valueBinding names a constant value resolved at analysis time (the built-in
+// universe, or values pre-bound via [WithBindings]).
+type valueBinding struct{ val value.Value }
+
+// selfBinding marks a closure's recursion name. Resolution materializes the
+// self Ref on demand via [expr.Builder.Self], so no SSA is emitted unless the
+// body actually mentions the name.
+type selfBinding struct{}
+
+func (varBinding) aBinding()   {}
+func (valueBinding) aBinding() {}
+func (selfBinding) aBinding()  {}
 
 func (a *analyzer) openScope() *scope {
 	a.scope = &scope{parent: a.scope}
@@ -278,7 +286,7 @@ func (a *analyzer) checkIdent(n name.Name, span syntax.Span) expr.Ref {
 // name. Scopes track only the Var currently visible for each source name;
 // closing a scope drops its mappings. Assignments without a `let` walk the
 // scope chain and rebind the existing Var, which is exactly what we want
-// for Braun's phi insertion.
+// for Braun's block-param insertion.
 
 // allocVar allocates a fresh versioned [expr.Var] for source and binds it in
 // the current scope.
@@ -287,7 +295,7 @@ func (a *analyzer) allocVar(source name.Name) expr.Var {
 	if a.scope.bindings == nil {
 		a.scope.bindings = make(map[name.Name]binding)
 	}
-	a.scope.bindings[source] = binding{variable: v}
+	a.scope.bindings[source] = varBinding{v: v}
 	return v
 }
 
@@ -299,7 +307,7 @@ func (a *analyzer) bind(source name.Name, val value.Value) {
 	if a.scope.bindings == nil {
 		a.scope.bindings = make(map[name.Name]binding)
 	}
-	a.scope.bindings[source] = binding{value: val}
+	a.scope.bindings[source] = valueBinding{val: val}
 }
 
 // lookup walks the scope chain for source's current mangled name.
@@ -309,5 +317,5 @@ func (a *analyzer) lookup(source name.Name) (binding, bool) {
 			return m, true
 		}
 	}
-	return binding{}, false
+	return nil, false
 }

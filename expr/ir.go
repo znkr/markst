@@ -13,19 +13,23 @@ import (
 // (also [Function]s). Each function is a CFG of [BasicBlock]s in SSA form,
 // terminated by a [Terminator]. SSA values are referenced by [Ref], a
 // function-local handle that indexes the runtime value table. Producers
-// carry their own Ref: instructions via embedded [instr], phis via [Phi.Result],
-// parameters via [Param.Ref], captures via [Function.CaptureRefs], and the
-// closure self-reference via [Function.SelfRef].
+// carry their own Ref: instructions via embedded [instr], block parameters
+// via [BlockParam.Result], parameters via [Param.Ref], captures via
+// [Function.Captures], and the closure self-reference via [Function.SelfRef].
 //
-// Phi nodes live on the block, separately from straight-line instructions,
-// because they are conceptually evaluated as a parallel copy on block entry
-// rather than sequentially.
+// Join values are encoded as block parameters: each [BasicBlock] carries
+// zero or more [BlockParam]s and the value flowing into each parameter is
+// carried by the predecessor terminator's args (see [Jump.Args],
+// [Branch.ThenArgs], [Branch.ElseArgs]). The evaluator binds the args
+// directly when dispatching the terminator, so block entry has no extra
+// per-edge bookkeeping.
 //
-// Trivial-phi elimination is handled inside the builder: when a phi is
-// found to be trivial, its Ref is recorded in a builder-local rename map.
-// [Builder.Finalize] transitively closes the map and then rewrites every
-// Ref-typed operand in the IR through it, so by the time the function
-// reaches the evaluator, no live Ref refers to a removed phi.
+// Trivial-param elimination is handled inside the builder: when a param's
+// incoming args are all the same value, its Ref is recorded in a
+// builder-local rename map. [Builder.Finalize] transitively closes the
+// map, rewrites every Ref-typed operand through it, and physically splices
+// the dead parameter slot from both the block's [BasicBlock.Params] and
+// every incoming terminator's args list.
 //
 // The construction algorithm is Braun, Buchwald & Hack (2013), "Simple and
 // Efficient Construction of Static Single Assignment Form".
@@ -45,16 +49,17 @@ type FuncID int32
 
 // Function is a CFG in SSA form.
 type Function struct {
-	Name        string
-	Params      []Param
-	Captures    []Var         // free-variable identifiers; values arrive at MakeClosure
-	CaptureRefs []Ref         // parallel to Captures; the Ref bound at frame entry
-	SelfRef     Ref           // the Ref bound to the running closure value; NoRef if unused
-	Blocks      []*BasicBlock // Blocks[0] is the entry block
-	NumRefs     int32         // size of the per-frame value table; one slot per allocated Ref
-	RefSpans    []syntax.Span // RefSpans[r] is the source span attached to the producer of r
-	Span        syntax.Span
+	Name     string
+	Params   []Param
+	Captures []Ref         // one Ref per free variable; runtime values arrive at MakeClosure
+	SelfRef  Ref           // the Ref bound to the running closure value; NoRef if unused
+	Blocks   []*BasicBlock // Blocks[0] is the entry block
+	RefSpans []syntax.Span // RefSpans[r] is the source span attached to the producer of r; len is the size of the per-frame value table
 }
+
+// NumRefs returns the size of the per-frame value table — one slot per
+// allocated [Ref].
+func (fn *Function) NumRefs() int { return len(fn.RefSpans) }
 
 // Param describes a formal parameter of a [Function].
 type Param struct {
@@ -62,7 +67,6 @@ type Param struct {
 	Kind    ParamKind
 	Default Ref // for Named: the SSA value of the default; NoRef when none
 	Ref     Ref // the SSA Ref bound to this parameter inside the body
-	Span    syntax.Span
 }
 
 // ParamKind distinguishes positional, named, and sink (..rest) parameters.
@@ -78,12 +82,19 @@ const (
 type BlockID int32
 
 // BasicBlock is a maximal straight-line sequence of instructions terminated
-// by a [Terminator]. Phi nodes at the top are evaluated in parallel on
-// block entry; their operands are looked up by predecessor block ID.
+// by a [Terminator]. Block parameters at the head receive their values from
+// the predecessor terminator's args ([Jump.Args], [Branch.ThenArgs],
+// [Branch.ElseArgs]); the i-th param is bound from the i-th arg of the
+// incoming edge.
+//
+// Preds lists one entry per incoming edge. The analyzer guarantees that
+// every [Branch] has distinct Then and Else targets, so a predecessor
+// appears in Preds at most once per (predecessor, slot) pair and edge
+// slots are unambiguous given the predecessor's terminator type.
 type BasicBlock struct {
 	ID     BlockID
 	Preds  []BlockID
-	Phis   []*Phi
+	Params []*BlockParam
 	Instrs []Instruction
 	Term   Terminator
 }
@@ -107,36 +118,28 @@ func ModConstRef(id int32) Ref { return Ref(-2 - id) }
 // IsModConst reports whether r refers to a module-level constant.
 func (r Ref) IsModConst() bool { return r < NoRef }
 
+// IsLocal reports whether r is a function-local Ref.
+func (r Ref) IsLocal() bool { return r >= 0 }
+
 // ModConstID returns the [Module.Constants] index for a module-constant ref.
 // Result is undefined if [Ref.IsModConst] returns false.
 func (r Ref) ModConstID() int32 { return -2 - int32(r) }
 
-// Phi is a phi node sitting at the head of a [BasicBlock]. Its [Result] is
-// the SSA value produced; Operands map each predecessor block to the Ref
-// flowing in along that edge.
-type Phi struct {
-	result   Ref
-	block    BlockID
-	operands []PhiOperand
-	span     syntax.Span
+// BlockParam is a value defined at the head of a [BasicBlock]. The SSA Ref
+// it produces is bound at runtime from the corresponding arg slot of the
+// predecessor terminator: [Jump.Args]`[i]`, [Branch.ThenArgs]`[i]`, or
+// [Branch.ElseArgs]`[i]`, depending on which edge fired.
+//
+// The struct contains only IR-facing state. The [Var] each param joins
+// during Braun construction and the trivial-elim "already processed" flag
+// live in builder-side sidecar maps so they don't leak past [Builder.Finalize].
+// Per-Ref source spans live in [Function.RefSpans] keyed by Result, so the
+// param doesn't carry its own span.
+type BlockParam struct {
+	result Ref
+	block  BlockID
 }
 
-func (p *Phi) Result() Ref            { return p.result }
-func (p *Phi) Block() BlockID         { return p.block }
-func (p *Phi) Operands() []PhiOperand { return p.operands }
-func (p *Phi) Span() syntax.Span      { return p.span }
-func (p *Phi) setResult(r Ref)        { p.result = r }
-
-// RemapOperands substitutes every operand Ref through rename. Used by
-// [Builder.Finalize] to inline trivial-phi removals.
-func (p *Phi) RemapOperands(rename func(Ref) Ref) {
-	for i := range p.operands {
-		p.operands[i].Value = rename(p.operands[i].Value)
-	}
-}
-
-// PhiOperand pairs a predecessor block with the SSA value that flows from it.
-type PhiOperand struct {
-	Pred  BlockID
-	Value Ref
-}
+func (p *BlockParam) Result() Ref     { return p.result }
+func (p *BlockParam) Block() BlockID  { return p.block }
+func (p *BlockParam) setResult(r Ref) { p.result = r }

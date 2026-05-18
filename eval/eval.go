@@ -154,9 +154,6 @@ type frame struct {
 	fn   *expr.Function
 	vals []value.Value
 
-	// pred is the ID of the predecessor block, used to resolve phi nodes.
-	pred expr.BlockID
-
 	// iters holds the runtime state for iterator-producing instructions
 	// (IterOpen). Keyed by the Ref of the IterOpen, since *iteratorState can't
 	// satisfy [value.Value]'s unexported aValue() method.
@@ -165,7 +162,7 @@ type frame struct {
 
 // get returns the value stored for ref. Module-constant refs are looked up
 // in the session's [expr.Module.Constants] pool. The builder rewrites every
-// operand through the trivial-phi rename map at [expr.Builder.Finalize]
+// operand through the trivial-param rename map at [expr.Builder.Finalize]
 // time, so no further resolution is needed here.
 func (fr *frame) get(ref expr.Ref) value.Value {
 	if ref.IsModConst() {
@@ -176,6 +173,12 @@ func (fr *frame) get(ref expr.Ref) value.Value {
 	}
 	return fr.vals[ref]
 }
+
+// span returns the source span recorded for a value-producing producer of r.
+// r must be a function-local Ref (not [expr.NoRef] or a module-constant).
+// Used by handlers that need to attach errors to an instruction by its
+// Result Ref now that [expr.instr] no longer carries the span.
+func (fr *frame) span(r expr.Ref) syntax.Span { return fr.fn.RefSpans[r] }
 
 // error constructs a [*value.Error] for msg at span, records it on the
 // session, and returns it. Instruction handlers assign the returned error
@@ -236,12 +239,12 @@ type functionCall struct {
 func runFunction(s *session, call functionCall) value.Value {
 	fn := call.fn
 	args, captures, self := call.args, call.captures, call.self
-	fr := &frame{s: s, fn: fn, vals: make([]value.Value, fn.NumRefs)}
+	fr := &frame{s: s, fn: fn, vals: make([]value.Value, fn.NumRefs())}
 	// Pre-fill parameter, capture, and self slots.
 	for i, p := range fn.Params {
 		fr.vals[p.Ref] = args[i]
 	}
-	for i, r := range fn.CaptureRefs {
+	for i, r := range fn.Captures {
 		fr.vals[r] = captures[i]
 	}
 	if fn.SelfRef != expr.NoRef {
@@ -251,23 +254,18 @@ func runFunction(s *session, call functionCall) value.Value {
 	bb := expr.BlockID(0)
 	for {
 		block := fn.Blocks[bb]
-		// Resolve phis from the predecessor edge.
-		for _, phi := range block.Phis {
-			for _, op := range phi.Operands() {
-				if op.Pred == fr.pred {
-					fr.vals[phi.Result()] = fr.get(op.Value)
-					break
-				}
-			}
-		}
 		// Straight-line instructions.
 		for _, inst := range block.Instrs {
 			evalInst(fr, inst)
 		}
-		// Terminator.
+		// Terminator: bind args directly into the successor's BlockParam
+		// slots before transferring control. RHS values are resolved
+		// against the current (predecessor) frame; LHS slots belong to
+		// the successor's params and are not read again until after the
+		// jump completes, so there is no parallel-copy hazard.
 		switch t := block.Term.(type) {
 		case *expr.Jump:
-			fr.pred = bb
+			bindArgs(fr, fn.Blocks[t.Target].Params, t.Args)
 			bb = t.Target
 		case *expr.Branch:
 			cond := fr.get(t.Cond)
@@ -276,11 +274,9 @@ func runFunction(s *session, call functionCall) value.Value {
 			// evaluation can continue *and* loops terminate (while/for
 			// lower with the exit block as Else, so this drops out of the
 			// loop instead of re-evaluating the failing condition every
-			// iteration). The surrounding expression's result will reflect
-			// the Else arm; routing Error through the join phi properly
-			// requires a follow-up analyzer change.
+			// iteration).
 			if _, ok := value.IsError(cond); ok {
-				fr.pred = bb
+				bindArgs(fr, fn.Blocks[t.Else].Params, t.ElseArgs)
 				bb = t.Else
 				break
 			}
@@ -290,14 +286,15 @@ func runFunction(s *session, call functionCall) value.Value {
 				// to the Else arm. This terminates loops (their exit edge
 				// is Else) and skips the Then arm of conditionals.
 				fr.errorf(t.Span(), "expected boolean, found %s", cond.Type())
-				fr.pred = bb
+				bindArgs(fr, fn.Blocks[t.Else].Params, t.ElseArgs)
 				bb = t.Else
 				break
 			}
-			fr.pred = bb
 			if bool(cb) {
+				bindArgs(fr, fn.Blocks[t.Then].Params, t.ThenArgs)
 				bb = t.Then
 			} else {
+				bindArgs(fr, fn.Blocks[t.Else].Params, t.ElseArgs)
 				bb = t.Else
 			}
 		case *expr.Return:
@@ -310,6 +307,14 @@ func runFunction(s *session, call functionCall) value.Value {
 		default:
 			panic(fmt.Sprintf("unknown terminator: %T", t))
 		}
+	}
+}
+
+// bindArgs writes each arg into the corresponding successor block param's
+// slot in the frame's value table.
+func bindArgs(fr *frame, params []*expr.BlockParam, args []expr.Ref) {
+	for i, a := range args {
+		fr.vals[params[i].Result()] = fr.get(a)
 	}
 }
 
@@ -343,7 +348,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.Unary:
 		v, err := value.UnaryOp(i.Op, fr.get(i.X))
 		if err != nil {
-			fr.vals[r] = fr.error(i.Span(), err.Error())
+			fr.vals[r] = fr.error(fr.span(r), err.Error())
 			return
 		}
 		fr.vals[r] = v
@@ -362,7 +367,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		right := fr.get(i.R)
 		v, err := value.BinaryOp(i.Op, left, right)
 		if err != nil {
-			fr.vals[r] = fr.error(i.Span(), err.Error())
+			fr.vals[r] = fr.error(fr.span(r), err.Error())
 			return
 		}
 		fr.vals[r] = v
@@ -395,21 +400,21 @@ func evalInst(fr *frame, inst expr.Instruction) {
 					}
 				case value.None:
 				default:
-					fr.vals[r] = fr.error(i.Span(), fmt.Sprintf("cannot spread %s into dictionary", s.Type()))
+					fr.vals[r] = fr.error(fr.span(r), fmt.Sprintf("cannot spread %s into dictionary", s.Type()))
 					return
 				}
 				continue
 			}
 			keyStr, ok := fr.get(e.Key).(value.Str)
 			if !ok {
-				fr.vals[r] = fr.error(i.Span(), "dictionary key must be a string")
+				fr.vals[r] = fr.error(fr.span(r), "dictionary key must be a string")
 				return
 			}
 			dict.Elems.Put(keyStr, fr.get(e.Value))
 		}
 		fr.vals[r] = dict
 	case *expr.FieldRead:
-		fr.vals[r] = fr.evalFieldRead(fr.get(i.Target), i.Field, i.Span(), i.FieldSpan)
+		fr.vals[r] = fr.evalFieldRead(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan)
 	case *expr.Call:
 		fr.vals[r] = fr.evalCall(i)
 	case *expr.CallSet:
@@ -422,11 +427,11 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		src := fr.get(i.Source)
 		arr, ok := src.(*value.Array)
 		if !ok {
-			fr.vals[r] = fr.error(i.Span(), fmt.Sprintf("cannot destructure values of %s", src.Type()))
+			fr.vals[r] = fr.error(fr.span(r), fmt.Sprintf("cannot destructure values of %s", src.Type()))
 			return
 		}
 		if i.Index >= len(arr.Elems) {
-			fr.vals[r] = fr.error(i.Span(), "destructure index out of range")
+			fr.vals[r] = fr.error(fr.span(r), "destructure index out of range")
 			return
 		}
 		fr.vals[r] = arr.Elems[i.Index]
@@ -444,7 +449,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			fr.error(i.Span(), fmt.Sprintf("need exactly %d elements, got %d", i.Want, len(arr.Elems)))
 		}
 	case *expr.IterOpen:
-		state, e := fr.newIterator(fr.get(i.Iterable), i.Span())
+		state, e := fr.newIterator(fr.get(i.Iterable), fr.span(r))
 		if e != nil {
 			fr.vals[r] = e
 			return
@@ -469,7 +474,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		// error short-circuit at the top of evalInst; by the time we reach
 		// here, From is known to be non-error (or absent), so we always
 		// record the Msg.
-		fr.vals[r] = fr.error(i.Span(), i.Msg, i.Hints...)
+		fr.vals[r] = fr.error(fr.span(r), i.Msg, i.Hints...)
 	case *expr.AttachLabel:
 		// Coerce the prior content to value.Content, attach the label, emit
 		// a warning if overwriting, and register the label.
@@ -487,13 +492,13 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		// (the pool is shared across uses and must stay immutable; the label is
 		// still registered on the session).
 		var attachSpan syntax.Span
-		if i.Content >= 0 && int32(i.Content) < fr.fn.NumRefs {
+		if i.Content.IsLocal() {
 			attachSpan = fr.fn.RefSpans[i.Content]
 		} else {
-			attachSpan = i.Span()
+			attachSpan = fr.span(r)
 		}
 		fr.attachLabel(c, &value.Label{Name: i.Label}, attachSpan)
-		if i.Content >= 0 && int32(i.Content) < fr.fn.NumRefs {
+		if i.Content.IsLocal() {
 			fr.vals[i.Content] = c
 		}
 		fr.vals[r] = value.None{}
@@ -513,39 +518,39 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		if !ok {
 			panic("loop_acc_result: accumulator is not an array")
 		}
-		fr.vals[r] = fr.joinValues(arr.Elems, i.Span())
+		fr.vals[r] = fr.joinValues(arr.Elems, fr.span(r))
 	case *expr.Heading:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.Heading{Depth: i.Level, Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.Strong:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.Strong{Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.Emph:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.Emph{Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.Link:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.Link{Dest: i.Dest, Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.RefMarkup:
 		if _, ok := fr.s.labels[i.Target]; !ok {
-			fr.vals[r] = fr.errorf(i.Span(), "label `<%s>` does not exist in the document", i.Target.String())
+			fr.vals[r] = fr.errorf(fr.span(r), "label `<%s>` does not exist in the document", i.Target.String())
 			return
 		}
 		v := &value.Ref{Target: i.Target}
 		if i.Supplement != expr.NoRef {
-			body, e := fr.contentOf(fr.get(i.Supplement), i.Span())
+			body, e := fr.contentOf(fr.get(i.Supplement), fr.span(r))
 			if e != nil {
 				fr.vals[r] = e
 				return
@@ -554,24 +559,24 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		}
 		fr.vals[r] = v
 	case *expr.ListItem:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.ListItem{Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.EnumItem:
-		if body, e := fr.contentOf(fr.get(i.Body), i.Span()); e == nil {
+		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
 			fr.vals[r] = &value.EnumItem{Number: i.Number, Body: body}
 		} else {
 			fr.vals[r] = e
 		}
 	case *expr.TermItem:
-		term, e := fr.contentOf(fr.get(i.Term), i.Span())
+		term, e := fr.contentOf(fr.get(i.Term), fr.span(r))
 		if e != nil {
 			fr.vals[r] = e
 			return
 		}
-		desc, e := fr.contentOf(fr.get(i.Description), i.Span())
+		desc, e := fr.contentOf(fr.get(i.Description), fr.span(r))
 		if e != nil {
 			fr.vals[r] = e
 			return
@@ -627,7 +632,7 @@ func (fr *frame) evalCodeJoin(c *expr.CodeJoin) value.Value {
 			dropped = true
 			continue
 		}
-		sp := c.Span()
+		sp := fr.span(c.Result())
 		if i < len(c.ItemSpans) {
 			sp = c.ItemSpans[i]
 		}
@@ -723,7 +728,7 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		}
 		cv, err := value.ToContent(v)
 		if err != nil {
-			fr.error(c.Span(), err.Error())
+			fr.error(fr.span(c.Result()), err.Error())
 			continue
 		}
 		if cv == nil {
@@ -734,10 +739,10 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		// the most-recent content point at the right source location.
 		// Module-const refs have no per-function span — fall back to the
 		// consuming instruction's span.
-		if r >= 0 && int32(r) < fr.fn.NumRefs {
+		if r.IsLocal() {
 			lastSpan = fr.fn.RefSpans[r]
 		} else {
-			lastSpan = c.Span()
+			lastSpan = fr.span(c.Result())
 		}
 	}
 	if len(ret) == 1 {
@@ -900,11 +905,11 @@ func (fr *frame) applyErr(fn *value.Function, callSpan syntax.Span, callArgs []e
 // Returns (nil, err) when the callee can't be resolved, an argument spread
 // fails, or the call itself reports an error.
 func (fr *frame) evalCall(c *expr.Call) value.Value {
-	fn, e := fr.resolveCallee(fr.get(c.Callee), c.Span())
+	fn, e := fr.resolveCallee(fr.get(c.Callee), fr.span(c.Result()))
 	if e != nil {
 		return e
 	}
-	args, e := fr.buildCallArgs(c.Span(), c.Args, c.Blocks)
+	args, e := fr.buildCallArgs(fr.span(c.Result()), c.Args, c.Blocks)
 	if e != nil {
 		return e
 	}
@@ -920,10 +925,10 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		}
 	}
 
-	fcc := value.FunctionCallContext{Span: c.Span()}
+	fcc := value.FunctionCallContext{Span: fr.span(c.Result())}
 	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
-		return fr.applyErr(fn, c.Span(), c.Args, err)
+		return fr.applyErr(fn, fr.span(c.Result()), c.Args, err)
 	}
 	return v
 }
@@ -1079,7 +1084,7 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 				out.Named = make(map[name.Name]value.Param)
 			}
 			// Defaults are captured from the outer scope at MakeClosure time
-			// and arrive in fn.CaptureRefs — or, for constant defaults, as
+			// and arrive in fn.Captures — or, for constant defaults, as
 			// module-const refs that resolve directly from the pool.
 			var defaultVal value.Value
 			switch {
@@ -1087,7 +1092,7 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 			case p.Default.IsModConst():
 				defaultVal = s.mod.Constants[p.Default.ModConstID()]
 			default:
-				for idx, r := range fn.CaptureRefs {
+				for idx, r := range fn.Captures {
 					if r == p.Default {
 						defaultVal = caps[idx]
 						break

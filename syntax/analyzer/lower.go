@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -270,24 +271,28 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 	frameIdx := len(a.frames) - 1
 	inCurrent := true
 	for s := a.scope; s != nil; s = s.parent {
-		if binding, ok := s.bindings[source]; ok {
-			switch {
-			case binding.value != nil:
-				return a.b.Const(span, binding.value)
-			case binding.self && inCurrent:
-				return a.b.Self(span)
-			case inCurrent:
-				return a.b.ReadVar(binding.variable, a.b.CurrentBlock())
-			default:
+		if bnd, ok := s.bindings[source]; ok {
+			switch b := bnd.(type) {
+			case valueBinding:
+				return a.b.Const(span, b.val)
+			case selfBinding:
+				if inCurrent {
+					return a.b.Self(span)
+				}
+				return a.captureRef(source, span)
+			case varBinding:
+				if inCurrent {
+					return a.b.ReadVar(b.v, a.b.CurrentBlock())
+				}
 				// Found the name outside the current closure.
 				f := a.frames[frameIdx]
-				if ref, ok := f.b.PeekVar(binding.variable); ok && ref.IsModConst() {
-					// Reference is a module-constant, which is immutable which
-					// doesn't require a capture.
+				if ref, ok := f.b.PeekVar(b.v); ok && ref.IsModConst() {
+					// Module constants are immutable, no capture needed.
 					return ref
 				}
-				// Fall back to capturing the variable in the current closure.
 				return a.captureRef(source, span)
+			default:
+				panic(fmt.Sprintf("unknown binding kind: %T", b))
 			}
 		}
 		if s == a.frames[frameIdx].scope {
@@ -309,7 +314,7 @@ func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
 	if ref, ok := f.captures[source]; ok {
 		return ref
 	}
-	ref := a.b.AddCapture(expr.Var{Name: source}, span)
+	ref := a.b.AddCapture(source, span)
 	if f.captures == nil {
 		f.captures = make(map[name.Name]expr.Ref)
 	}
@@ -439,7 +444,7 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 	switch leftNode.Kind() {
 	case syntax.KindIdent:
 		source := name.Make(a.leaf(leftNode, syntax.KindIdent))
-		binding, ok := a.lookup(source)
+		bnd, ok := a.lookup(source)
 		if !ok {
 			// Either unknown or only known as a builtin. Use checkIdent's
 			// existing message for unknowns; for builtins we need a more
@@ -466,12 +471,12 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 			rhs := a.lowerExpr(rightNode)
 			// Re-resolve in case the RHS shadowed the binding via a `let`.
 			if b, ok := a.lookup(source); ok {
-				binding = b
+				bnd = b
 			}
-			old := a.b.ReadVar(binding.variable, a.b.CurrentBlock())
+			old := a.b.ReadVar(bnd.(varBinding).v, a.b.CurrentBlock())
 			newVal = a.b.Binary(span, op.StripAssign(), old, rhs)
 		}
-		a.b.WriteVar(binding.variable, a.b.CurrentBlock(), newVal)
+		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), newVal)
 		return a.b.Const(span, value.None{})
 	case syntax.KindParenthesized:
 		// Unwrap and recurse.
@@ -582,7 +587,7 @@ func (a *analyzer) lowerSpread(n syntax.Node) expr.Ref {
 func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindDict)
 	var entries []expr.DictEntry
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind() {
 		case syntax.KindComma, syntax.KindColon:
@@ -594,10 +599,10 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 				continue
 			}
 			entry.take(syntax.KindColon)
-			if seen[key] {
+			if _, dup := seen[key]; dup {
 				a.emitError(child.Span(), "duplicate key: "+key)
 			}
-			seen[key] = true
+			seen[key] = struct{}{}
 			keyRef := a.b.Const(child.Span(), value.Str(key))
 			val := a.lowerExpr(entry.node())
 
@@ -621,10 +626,10 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 				continue
 			}
 			if keyStr != "" {
-				if seen[keyStr] {
+				if _, dup := seen[keyStr]; dup {
 					a.emitError(child.Span(), "duplicate key: "+keyStr)
 				}
-				seen[keyStr] = true
+				seen[keyStr] = struct{}{}
 			}
 			entries = append(entries, expr.DictEntry{Key: keyRef, Value: val})
 		case syntax.KindSpread:
@@ -689,7 +694,7 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 	ns := a.inner(n, syntax.KindArgs)
 
 	var args []expr.CallArg
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	if ns.at(syntax.KindLeftParen) {
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 			switch child.Kind() {
@@ -708,10 +713,10 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 				valNode := named.node()
 				val := a.lowerExpr(valNode)
 
-				if seen[key.String()] {
+				if _, dup := seen[key.String()]; dup {
 					a.emitError(child.Span(), "duplicate argument: "+key.String())
 				}
-				seen[key.String()] = true
+				seen[key.String()] = struct{}{}
 				args = append(args, expr.CallArg{Kind: expr.ArgNamed, Name: key, Value: val, Span: valNode.Span(), PairSpan: child.Span()})
 			default:
 				val := a.lowerExpr(child)
@@ -827,7 +832,7 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 	holes := 0
 	hasComplex := false
 	hasErrors := false
-	seenNames := make(map[name.Name]bool)
+	seenNames := make(map[name.Name]struct{})
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 		switch child.Kind() {
 		case syntax.KindComma:
@@ -841,10 +846,10 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 			idx++
 		case syntax.KindIdent:
 			source := name.Make(a.leaf(child, syntax.KindIdent))
-			if seenNames[source] {
+			if _, dup := seenNames[source]; dup {
 				a.emitError(child.Span(), "duplicate binding: "+source.String())
 			}
-			seenNames[source] = true
+			seenNames[source] = struct{}{}
 
 			v := a.allocVar(source)
 			bindings = append(bindings, binding{variable: v, span: child.Span(), idx: idx})
@@ -971,8 +976,8 @@ func (a *analyzer) lowerCodeInto(n syntax.Node, items []expr.Ref, spans []syntax
 
 // lowerConditional lowers `if cond { ... } else if cond { ... } else { ... }`
 // into a chain of basic blocks. Each arm writes a synthetic result
-// variable; the join block reads it back, which inserts a phi automatically
-// via the Builder's Braun construction.
+// variable; the join block reads it back, which inserts a block parameter
+// automatically via the Builder's Braun construction.
 //
 // Whenever a sub-lowering (cond, body, or else-body) hands back [expr.NoRef]
 // — typically because the parser substituted an [*syntax.Error] for that
@@ -1318,7 +1323,6 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	// Begin nested function: push a frame with its own builder and boundary
 	// scope. [a.b] and [a.scope] now refer to the new frame.
 	a.pushFrame()
-	a.b.Function().Span = n.Span()
 	if closureName != name.Invalid {
 		a.b.Function().Name = closureName.String()
 	}
@@ -1331,7 +1335,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		if a.scope.bindings == nil {
 			a.scope.bindings = make(map[name.Name]binding)
 		}
-		a.scope.bindings[recName] = binding{self: true}
+		a.scope.bindings[recName] = selfBinding{}
 	}
 
 	// Register parameters, capturing outer-scope default values. Defaults
@@ -1342,11 +1346,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	for i, p := range paramSpecs {
 		innerDefault := expr.NoRef
 		if p.kind == expr.ParamNamed && defaultRefs[i] != expr.NoRef {
-			// Display the capture as e.g. `default(b)` so the SSA dump shows
-			// which param the captured default belongs to. Param names are
-			// unique within a function, so Version 0 is fine.
-			capVar := expr.Var{Name: name.Make("$default$" + p.name.String())}
-			innerDefault = a.b.AddCapture(capVar, p.span)
+			innerDefault = a.b.AddCapture(name.Make("$default"), p.span)
 			defaultOuterRefs = append(defaultOuterRefs, defaultRefs[i])
 		}
 		switch p.kind {
@@ -1379,16 +1379,15 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	// Lower the body.
 	bodyRef := a.lowerBlockOrExpr(bodyNode)
 	a.b.Return(n.Span(), bodyRef)
-
-	// Capture the function and the capture-source list before swapping back.
 	a.b.Finalize()
+
+	// Snapshot the inner builder's ordered list of capture source names
+	// before tearing it down; the IR doesn't carry names, so the analyzer
+	// queries the builder directly.
+	captures := a.b.Captures()
 	innerFn := a.b.Function()
-	captures := innerFn.Captures
 	a.popFrame()
-	// Register the function in the module.
-	mod := a.mb.Module()
-	funcID := expr.FuncID(len(mod.Functions))
-	mod.Functions = append(mod.Functions, innerFn)
+	funcID := a.mb.RegisterFunction(innerFn)
 
 	// Build the capture Ref list in outer scope. The first
 	// len(defaultOuterRefs) entries are the default-value captures (in
@@ -1397,7 +1396,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	captureRefs := make([]expr.Ref, len(captures))
 	copy(captureRefs, defaultOuterRefs)
 	for i := len(defaultOuterRefs); i < len(captures); i++ {
-		captureRefs[i] = a.resolveName(captures[i].Name, n.Span())
+		captureRefs[i] = a.resolveName(captures[i], n.Span())
 	}
 	return a.b.MakeClosure(n.Span(), funcID, captureRefs)
 }
@@ -1416,15 +1415,15 @@ type closureParamSpec struct {
 // later by the caller (in whatever scope makes sense).
 func (a *analyzer) collectClosureParamSpecs(n syntax.Node) []closureParamSpec {
 	var out []closureParamSpec
-	seen := make(map[name.Name]bool)
+	seen := make(map[name.Name]struct{})
 	addName := func(n name.Name, span syntax.Span) {
 		if n == name.Invalid {
 			return
 		}
-		if seen[n] {
+		if _, dup := seen[n]; dup {
 			a.emitError(span, "duplicate parameter: "+n.String())
 		}
-		seen[n] = true
+		seen[n] = struct{}{}
 	}
 	sawSink := false
 	add := func(s closureParamSpec) {
@@ -1716,24 +1715,24 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 	switch n.Kind() {
 	case syntax.KindIdent:
 		source := name.Make(a.leaf(n, syntax.KindIdent))
-		binding, ok := a.lookup(source)
+		bnd, ok := a.lookup(source)
 		if !ok {
 			a.checkIdent(source, n.Span())
 			return
 		}
-		a.b.WriteVar(binding.variable, a.b.CurrentBlock(), rhs)
+		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), rhs)
 		return
 	case syntax.KindUnderscore:
 		return
 	}
 
 	ns := a.inner(n, syntax.KindDestructuring)
-	type binding struct {
+	type slot struct {
 		ssaVar expr.Var
 		span   syntax.Span
 		idx    int
 	}
-	var bindings []binding
+	var bindings []slot
 	idx := 0
 	holes := 0
 	for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
@@ -1753,7 +1752,7 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 				idx++
 				continue
 			}
-			bindings = append(bindings, binding{ssaVar: b.variable, span: child.Span(), idx: idx})
+			bindings = append(bindings, slot{ssaVar: b.(varBinding).v, span: child.Span(), idx: idx})
 			idx++
 		case syntax.KindNamed, syntax.KindSpread:
 			// Named and sink patterns are accepted at analyze time but not

@@ -322,9 +322,8 @@ v in iter {}
 │     v0 = make_array [1, 2, 3]
 │     v1 = iter_open v0
 │     v2 = loop_acc_begin
-│     jump b1
-│   b1:
-│     v7 = phi [b0 v2, b2 v8]
+│     jump b1(v2)
+│   b1(v7):
 │     v3 = iter_has_next v1
 │     branch v3, b2, b3
 │   b2:
@@ -332,7 +331,7 @@ v in iter {}
 │     v5 = make_closure $fn_0
 │     v6 = call v5()
 │     v8 = loop_acc_add v7, v6
-│     jump b1
+│     jump b1(v8)
 │   b3:
 │     v9 = loop_acc_result v7
 │     return v9
@@ -355,9 +354,8 @@ v in iter {}
 │     v0 = make_array [1, 2, 3]
 │     v1 = iter_open v0
 │     v2 = loop_acc_begin
-│     jump b1
-│   b1:
-│     v7 = phi [b0 v2, b2 v8]
+│     jump b1(v2)
+│   b1(v7):
 │     v3 = iter_has_next v1
 │     branch v3, b2, b3
 │   b2:
@@ -365,7 +363,7 @@ v in iter {}
 │     v5 = make_closure $fn_0
 │     v6 = call v5()
 │     v8 = loop_acc_add v7, v6
-│     jump b1
+│     jump b1(v8)
 │   b3:
 │     v9 = loop_acc_result v7
 │     return v9

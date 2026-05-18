@@ -10,8 +10,10 @@ import (
 
 // FormatModule returns a textual SSA dump of mod. The format is informally
 // modelled on LLVM IR / Cranelift CLIF: each [Function] becomes a labelled
-// block, with one [BasicBlock] per `bN:` section. Instructions print as
-// `vN = <opcode> <operands…>`; phi nodes appear at the top of their block.
+// block, with one [BasicBlock] per `bN:` (or `bN(vX, vY):`) section.
+// Instructions print as `vN = <opcode> <operands…>`. Block parameters
+// appear in the header; terminators carry args targeting the successor's
+// parameters (e.g. `jump b1(v0)`, `branch v, b1(v2), b2(v3, v4)`).
 //
 // This is the format consumed by analyzer golden tests under the new IR. It
 // is not pretty-printed writst source — see the migration plan for why.
@@ -52,11 +54,11 @@ func (f *formatter) formatFunction(label string, fn *Function) {
 	}
 	if len(fn.Captures) > 0 {
 		sb.WriteString(" captures=[")
-		for i, c := range fn.Captures {
+		for i, r := range fn.Captures {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			fmt.Fprintf(sb, "%s=%s", f.ref(fn.CaptureRefs[i]), c.String())
+			sb.WriteString(f.ref(r))
 		}
 		sb.WriteString("]")
 	}
@@ -93,21 +95,17 @@ func (f *formatter) formatBlock(block *BasicBlock) {
 	sb := &f.sb
 	sb.WriteString("  ")
 	sb.WriteString(formatBlockID(block.ID))
-	sb.WriteString(":\n")
-	for _, phi := range block.Phis {
-		sb.WriteString("    ")
-		sb.WriteString(f.ref(phi.result))
-		sb.WriteString(" = phi [")
-		for i, op := range phi.operands {
+	if len(block.Params) > 0 {
+		sb.WriteString("(")
+		for i, p := range block.Params {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(formatBlockID(op.Pred))
-			sb.WriteString(" ")
-			sb.WriteString(f.ref(op.Value))
+			sb.WriteString(f.ref(p.Result()))
 		}
-		sb.WriteString("]\n")
+		sb.WriteString(")")
 	}
+	sb.WriteString(":\n")
 	for _, inst := range block.Instrs {
 		sb.WriteString("    ")
 		f.formatInst(inst)
@@ -299,13 +297,16 @@ func (f *formatter) formatTerm(t Terminator) {
 	case *Jump:
 		sb.WriteString("jump ")
 		sb.WriteString(formatBlockID(t.Target))
+		f.formatArgs(t.Args)
 	case *Branch:
 		sb.WriteString("branch ")
 		sb.WriteString(f.ref(t.Cond))
 		sb.WriteString(", ")
 		sb.WriteString(formatBlockID(t.Then))
+		f.formatArgs(t.ThenArgs)
 		sb.WriteString(", ")
 		sb.WriteString(formatBlockID(t.Else))
+		f.formatArgs(t.ElseArgs)
 	case *Return:
 		sb.WriteString("return")
 		if t.Value != NoRef {
@@ -317,6 +318,23 @@ func (f *formatter) formatTerm(t Terminator) {
 	default:
 		fmt.Fprintf(sb, "%T", t)
 	}
+}
+
+// formatArgs appends a parenthesized arg list to sb. Emits nothing when
+// args is empty, so blocks with no params stay readable.
+func (f *formatter) formatArgs(args []Ref) {
+	if len(args) == 0 {
+		return
+	}
+	sb := &f.sb
+	sb.WriteString("(")
+	for i, a := range args {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(f.ref(a))
+	}
+	sb.WriteString(")")
 }
 
 // ref renders r as an SSA-ref string. Module-constant refs render as the

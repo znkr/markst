@@ -3,7 +3,7 @@ package expr
 import "znkr.io/writst/syntax"
 
 // resultSetter is implemented by every value-producing IR node (instructions
-// embedding [instr], and [*Phi]). Void instructions (those embedding
+// embedding [instr], and [*BlockParam]). Void instructions (those embedding
 // [voidInstr]) do not implement it, so the finalize loop naturally skips them
 // via a type assertion.
 type resultSetter interface {
@@ -11,42 +11,43 @@ type resultSetter interface {
 }
 
 // producer indexes the in-block def of a function-local Ref. Only set for
-// surviving in-block producers (phis and instructions still present after
-// trivial-phi removal). Params, captures, self, and trivially-removed phis
-// never get an entry — their `exists` flag stays false, so [Builder.droppable]
-// refuses to mark them dead.
+// in-block producers — block params and instructions. Function params,
+// captures, and self never get an entry — their `exists` flag stays false,
+// so [Builder.droppable] refuses to mark them dead.
 type producer struct {
-	block  BlockID
-	idx    int // index into block.Phis (isPhi) or block.Instrs
-	isPhi  bool
-	exists bool
+	block   BlockID
+	idx     int // index into block.Params (isParam) or block.Instrs
+	isParam bool
+	exists  bool
 }
 
 // Finalize seals the function for consumption in a single combined pass:
 //
-//  1. Trivial-phi rewrite: a reference to a phi removed by
-//     [tryRemoveTrivialPhi] follows the rename map to the phi's single
-//     operand.
-//  2. Dead-code elimination: pure instructions and phis whose result Ref
-//     has no uses are dropped. Constant-`none` items are stripped from
-//     [ContentResult]/[CodeJoin] joiners. Cascades to fixed point.
+//  1. Trivial-param rewrite: a reference to a param removed by
+//     [tryRemoveTrivialParam] follows the rename map to the param's single
+//     incoming value.
+//  2. Dead-code elimination: pure instructions and block params whose result
+//     Ref has no uses are dropped. When a param is dropped its slot is
+//     spliced from every incoming terminator's arg list in lock-step. Cascades
+//     to fixed point. Constant-`none` items are stripped from
+//     [ContentResult]/[CodeJoin] joiners.
 //  3. Ref compaction: surviving Refs are renumbered into a dense
 //     `[0, NumRefs)` range; [Function.RefSpans] shrinks to match.
 //
 // The three intents share one walker: a single `rename` function combines the
-// trivial-phi redirect with the dense-Ref remap. After Finalize, every operand
-// in the IR points at the dense Ref of a surviving producer, the runtime `vals`
-// table has no holes, and `b.redirects` is empty.
+// trivial-param redirect with the dense-Ref remap. After Finalize, every
+// operand in the IR points at the dense Ref of a surviving producer, the
+// runtime `vals` table has no holes, and `b.redirects` is empty.
 //
 // Must be called once construction is complete, before the function is handed
 // to the evaluator or formatter.
 func (b *Builder) Finalize() {
-	if b.fn.NumRefs == 0 {
+	if b.fn.NumRefs() == 0 {
 		b.redirects = nil
 		return
 	}
 
-	// Transitively close the trivial-phi rename map so a single lookup
+	// Transitively close the trivial-param rename map so a single lookup
 	// resolves to the terminal target.
 	for ref, target := range b.redirects {
 		seen := target
@@ -62,10 +63,10 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// redirect follows the trivial-phi rename for a function-local Ref;
-	// pass-through for NoRef and ModConstRef. Use counts and worklist DCE both
-	// consult this so a dead phi's operands attribute uses to the trivial
-	// target, not the phi itself.
+	// redirect follows the trivial-param rename for a function-local Ref;
+	// pass-through for NoRef and ModConstRef. Use counts and worklist DCE
+	// both consult this so a dead param's incoming args attribute uses to
+	// the trivial target, not the param itself.
 	redirect := func(r Ref) Ref {
 		if r < 0 {
 			return r
@@ -78,8 +79,8 @@ func (b *Builder) Finalize() {
 
 	// Walk 1: count uses (redirect-aware), index producers, strip `none` items
 	// from joiners.
-	uses := make([]int32, b.fn.NumRefs)
-	prods := make([]producer, b.fn.NumRefs)
+	uses := make([]int32, b.fn.NumRefs())
+	prods := make([]producer, b.fn.NumRefs())
 	bumpUse := func(r Ref) {
 		r = redirect(r)
 		if r >= 0 {
@@ -95,17 +96,14 @@ func (b *Builder) Finalize() {
 		bumpUse(r)
 	}
 	for _, block := range b.fn.Blocks {
-		for i, phi := range block.Phis {
-			if r := phi.Result(); r != NoRef {
-				prods[r] = producer{block: block.ID, idx: i, isPhi: true, exists: true}
-			}
-			for _, op := range phi.Operands() {
-				bumpUse(op.Value)
+		for i, p := range block.Params {
+			if r := p.Result(); r != NoRef {
+				prods[r] = producer{block: block.ID, idx: i, isParam: true, exists: true}
 			}
 		}
 		for i, inst := range block.Instrs {
 			if r := inst.Result(); r != NoRef {
-				prods[r] = producer{block: block.ID, idx: i, isPhi: false, exists: true}
+				prods[r] = producer{block: block.ID, idx: i, isParam: false, exists: true}
 			}
 			for _, op := range inst.Operands() {
 				bumpUse(op)
@@ -130,11 +128,15 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// Worklist DCE. Drops cascade: when an instruction is dropped, its operands
-	// lose a use and may themselves become droppable.
+	// Worklist DCE. Drops cascade: when an instruction or param is dropped,
+	// its operands (instruction operands, or for params the incoming arg
+	// slot from every predecessor) lose a use and may themselves become
+	// droppable. Trivially-removed params (BlockParam.dead) arrive with
+	// uses[result] == 0 (every direct use was rewritten through redirects)
+	// and enter the worklist via the same condition as DCE.
 	dropped := make(map[Ref]struct{})
 	var worklist []Ref
-	for r := Ref(0); int32(r) < b.fn.NumRefs; r++ {
+	for r := Ref(0); int(r) < b.fn.NumRefs(); r++ {
 		if uses[r] == 0 && b.droppable(prods, r) {
 			worklist = append(worklist, r)
 		}
@@ -157,9 +159,17 @@ func (b *Builder) Finalize() {
 		}
 		dropped[r] = struct{}{}
 		p := prods[r]
-		if p.isPhi {
-			for _, op := range b.fn.Blocks[p.block].Phis[p.idx].Operands() {
-				visitDrop(op.Value)
+		if p.isParam {
+			blk := b.fn.Blocks[p.block]
+			for _, predID := range blk.Preds {
+				predTerm := b.fn.Blocks[predID].Term
+				if predTerm == nil {
+					continue
+				}
+				args := *edgeArgs(predTerm, blk.ID)
+				if p.idx < len(args) {
+					visitDrop(args[p.idx])
+				}
 			}
 		} else {
 			for _, op := range b.fn.Blocks[p.block].Instrs[p.idx].Operands() {
@@ -168,16 +178,39 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// Walk 2a: filter dropped phis/instrs out of each block.
+	// Walk 2a: filter dropped params/instrs out of each block. For params,
+	// the splice is synchronized with every incoming terminator's arg slot
+	// for that block: the i-th param and the i-th arg are dropped together.
 	for _, block := range b.fn.Blocks {
-		if len(block.Phis) > 0 {
-			out := block.Phis[:0]
-			for _, phi := range block.Phis {
-				if _, dead := dropped[phi.Result()]; !dead {
-					out = append(out, phi)
+		if len(block.Params) > 0 {
+			keep := make([]bool, len(block.Params))
+			anyDrop := false
+			out := block.Params[:0]
+			for i, p := range block.Params {
+				if _, dead := dropped[p.Result()]; dead {
+					anyDrop = true
+					continue
+				}
+				keep[i] = true
+				out = append(out, p)
+			}
+			block.Params = out
+			if anyDrop {
+				for _, predID := range block.Preds {
+					predTerm := b.fn.Blocks[predID].Term
+					if predTerm == nil {
+						continue
+					}
+					args := edgeArgs(predTerm, block.ID)
+					filtered := (*args)[:0]
+					for i, a := range *args {
+						if i < len(keep) && keep[i] {
+							filtered = append(filtered, a)
+						}
+					}
+					*args = filtered
 				}
 			}
-			block.Phis = out
 		}
 		if len(block.Instrs) > 0 {
 			out := block.Instrs[:0]
@@ -200,23 +233,21 @@ func (b *Builder) Finalize() {
 	// preserves the construction-time ordering so a fully-dense IR comes
 	// out unchanged and SSA dumps stay close to what they would have been
 	// without compaction.
-	isLive := make([]bool, b.fn.NumRefs)
+	isLive := make([]bool, b.fn.NumRefs())
 	for _, p := range b.fn.Params {
 		if p.Ref != NoRef {
 			isLive[p.Ref] = true
 		}
 	}
-	for _, r := range b.fn.CaptureRefs {
-		if r != NoRef {
-			isLive[r] = true
-		}
+	for _, r := range b.fn.Captures {
+		isLive[r] = true
 	}
 	if b.fn.SelfRef != NoRef {
 		isLive[b.fn.SelfRef] = true
 	}
 	for _, block := range b.fn.Blocks {
-		for _, phi := range block.Phis {
-			isLive[phi.Result()] = true
+		for _, p := range block.Params {
+			isLive[p.Result()] = true
 		}
 		for _, inst := range block.Instrs {
 			if r := inst.Result(); r != NoRef {
@@ -224,9 +255,9 @@ func (b *Builder) Finalize() {
 			}
 		}
 	}
-	remap := make([]Ref, b.fn.NumRefs)
+	remap := make([]Ref, b.fn.NumRefs())
 	var next Ref
-	for r := Ref(0); int32(r) < b.fn.NumRefs; r++ {
+	for r := Ref(0); int(r) < b.fn.NumRefs(); r++ {
 		if isLive[r] {
 			remap[r] = next
 			next++
@@ -235,16 +266,16 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// Combined rename: trivial-phi redirect followed by dense remap. A
-	// reference to a trivially-removed phi lands directly on the dense Ref of
-	// its terminal target.
+	// Combined rename: trivial-param redirect followed by dense remap. A
+	// reference to a trivially-removed param lands directly on the dense
+	// Ref of its terminal target.
 	rename := func(r Ref) Ref {
 		if r < 0 {
 			return r
 		}
 		if t, ok := b.redirects[r]; ok {
-			// Trivial-phi target may itself be a ModConstRef (e.g. a phi whose
-			// only operand was the module `none` constant).
+			// Trivial-param target may itself be a ModConstRef (e.g. a param
+			// whose only incoming arg was the module `none` constant).
 			if t < 0 {
 				return t
 			}
@@ -264,18 +295,15 @@ func (b *Builder) Finalize() {
 			b.fn.Params[i].Ref = rename(b.fn.Params[i].Ref)
 		}
 	}
-	for i, r := range b.fn.CaptureRefs {
-		if r != NoRef {
-			b.fn.CaptureRefs[i] = rename(r)
-		}
+	for i, r := range b.fn.Captures {
+		b.fn.Captures[i] = rename(r)
 	}
 	if b.fn.SelfRef != NoRef {
 		b.fn.SelfRef = rename(b.fn.SelfRef)
 	}
 	for _, block := range b.fn.Blocks {
-		for _, phi := range block.Phis {
-			phi.setResult(rename(phi.Result()))
-			phi.RemapOperands(rename)
+		for _, p := range block.Params {
+			p.setResult(rename(p.Result()))
 		}
 		for _, inst := range block.Instrs {
 			if s, ok := inst.(resultSetter); ok {
@@ -288,7 +316,8 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// Rebuild RefSpans through the remap; resize NumRefs.
+	// Rebuild RefSpans through the remap; its new length is the post-compaction
+	// per-frame value-table size.
 	newSpans := make([]syntax.Span, next)
 	for old, new := range remap {
 		if new == NoRef {
@@ -297,7 +326,6 @@ func (b *Builder) Finalize() {
 		newSpans[new] = b.fn.RefSpans[old]
 	}
 	b.fn.RefSpans = newSpans
-	b.fn.NumRefs = int32(next)
 	b.redirects = nil
 }
 
@@ -305,14 +333,14 @@ func (b *Builder) Finalize() {
 // remove. Params, captures, self, and impure instructions return false;
 // phis are always droppable when unused.
 func (b *Builder) droppable(prods []producer, r Ref) bool {
-	if r < 0 || int32(r) >= b.fn.NumRefs {
+	if !r.IsLocal() {
 		return false
 	}
 	p := prods[r]
 	if !p.exists {
 		return false
 	}
-	if p.isPhi {
+	if p.isParam {
 		return true
 	}
 	inst := b.fn.Blocks[p.block].Instrs[p.idx]

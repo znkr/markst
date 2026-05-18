@@ -9,13 +9,17 @@ import (
 // Instruction is a single SSA operation. Instructions live inside
 // [BasicBlock.Instrs] in program order; each produces a single SSA value (its
 // [Result]) or [NoRef] for void operations.
+//
+// Per-Ref source spans for value-producing kinds live in [Function.RefSpans]
+// keyed by [Result]; the [instr] base therefore carries no span field.
+// Void-instruction kinds (which have no Result) keep their span on the
+// [voidInstr] base.
 type Instruction interface {
 	Result() Ref
 	Operands() []Ref
 	// RemapOperands substitutes every Ref-typed operand through rename.
-	// Used by [Builder.Finalize] to inline trivial-phi removals.
+	// Used by [Builder.Finalize] to inline trivial-param removals.
 	RemapOperands(rename func(Ref) Ref)
-	Span() syntax.Span
 	aInstruction()
 }
 
@@ -24,7 +28,8 @@ type Instruction interface {
 // their result; impure ones (calls, error-recording, iterator mutation,
 // stub TODO instructions) must be kept regardless of use count.
 //
-// Phis are always pure; this predicate is only consulted for instructions.
+// Block params are always pure; this predicate is only consulted for
+// instructions.
 func IsPure(inst Instruction) bool {
 	switch inst.(type) {
 	case *Const, *Unary, *Binary,
@@ -41,17 +46,16 @@ func IsPure(inst Instruction) bool {
 
 // instr is the base for value-producing instruction kinds: those that
 // publish their result as an SSA value via [Result]. Concrete kinds embed
-// *instr to inherit Result/Span/aInstruction (and setResult, which is used
-// by [Builder.Finalize]'s Ref-compaction pass).
+// *instr to inherit Result/aInstruction (and setResult, which is used by
+// [Builder.Finalize]'s Ref-compaction pass). The source span lives in
+// [Function.RefSpans] indexed by [Result], not on the instruction.
 type instr struct {
 	result Ref
-	span   syntax.Span
 }
 
-func (i *instr) Result() Ref       { return i.result }
-func (i *instr) Span() syntax.Span { return i.span }
-func (i *instr) aInstruction()     {}
-func (i *instr) setResult(r Ref)   { i.result = r }
+func (i *instr) Result() Ref     { return i.result }
+func (i *instr) aInstruction()   {}
+func (i *instr) setResult(r Ref) { i.result = r }
 
 // voidInstr is the base for side-effect-only instruction kinds: those that
 // have no SSA result. Embedding voidInstr instead of [instr] is what makes
@@ -70,10 +74,11 @@ func (i *voidInstr) aInstruction()     {}
 // Terminator ends a [BasicBlock]. Every block has exactly one.
 type Terminator interface {
 	Successors() []BlockID
-	// Operands returns the Ref-typed operands of the terminator. Empty for
-	// control-only terminators ([Jump], [Unreachable]).
+	// Operands returns the Ref-typed operands of the terminator, including
+	// every arg flowing to a successor's [BlockParam] slot.
 	Operands() []Ref
-	// RemapOperands substitutes every Ref-typed operand through rename.
+	// RemapOperands substitutes every Ref-typed operand through rename,
+	// including args.
 	RemapOperands(rename func(Ref) Ref)
 	Span() syntax.Span
 	aTerminator()
@@ -86,27 +91,53 @@ type term struct {
 func (t *term) Span() syntax.Span { return t.span }
 func (t *term) aTerminator()      {}
 
-// Jump unconditionally transfers control to Target.
+// Jump unconditionally transfers control to Target, carrying Args into
+// Target's [BlockParam]s in declaration order. `len(Args)` always equals
+// `len(Blocks[Target].Params)`.
 type Jump struct {
 	term
 	Target BlockID
+	Args   []Ref
 }
 
-func (t *Jump) Successors() []BlockID         { return []BlockID{t.Target} }
-func (t *Jump) Operands() []Ref               { return nil }
-func (t *Jump) RemapOperands(_ func(Ref) Ref) {}
+func (t *Jump) Successors() []BlockID { return []BlockID{t.Target} }
+func (t *Jump) Operands() []Ref       { return t.Args }
+func (t *Jump) RemapOperands(f func(Ref) Ref) {
+	for i := range t.Args {
+		t.Args[i] = f(t.Args[i])
+	}
+}
 
-// Branch is a two-way branch on a boolean SSA value.
+// Branch is a two-way branch on a boolean SSA value. ThenArgs flow to
+// Blocks[Then].Params on the true edge; ElseArgs flow to
+// Blocks[Else].Params on the false edge. Then and Else are distinct
+// blocks (analyzer-enforced).
 type Branch struct {
 	term
-	Cond Ref
-	Then BlockID
-	Else BlockID
+	Cond     Ref
+	Then     BlockID
+	ThenArgs []Ref
+	Else     BlockID
+	ElseArgs []Ref
 }
 
-func (t *Branch) Successors() []BlockID         { return []BlockID{t.Then, t.Else} }
-func (t *Branch) Operands() []Ref               { return []Ref{t.Cond} }
-func (t *Branch) RemapOperands(f func(Ref) Ref) { t.Cond = f(t.Cond) }
+func (t *Branch) Successors() []BlockID { return []BlockID{t.Then, t.Else} }
+func (t *Branch) Operands() []Ref {
+	out := make([]Ref, 0, 1+len(t.ThenArgs)+len(t.ElseArgs))
+	out = append(out, t.Cond)
+	out = append(out, t.ThenArgs...)
+	out = append(out, t.ElseArgs...)
+	return out
+}
+func (t *Branch) RemapOperands(f func(Ref) Ref) {
+	t.Cond = f(t.Cond)
+	for i := range t.ThenArgs {
+		t.ThenArgs[i] = f(t.ThenArgs[i])
+	}
+	for i := range t.ElseArgs {
+		t.ElseArgs[i] = f(t.ElseArgs[i])
+	}
+}
 
 // Return exits the enclosing [Function]. Value is the returned SSA value, or
 // [NoRef] for a bare return (which yields none at runtime).
@@ -138,6 +169,27 @@ type Unreachable struct {
 func (t *Unreachable) Successors() []BlockID         { return nil }
 func (t *Unreachable) Operands() []Ref               { return nil }
 func (t *Unreachable) RemapOperands(_ func(Ref) Ref) {}
+
+// edgeArgs returns a pointer to the args slice on pred's terminator that
+// flows into target. The pointer remains valid for the lifetime of the
+// terminator and is the canonical handle for appending or splicing args.
+// Panics if pred does not branch to target.
+func edgeArgs(pred Terminator, target BlockID) *[]Ref {
+	switch t := pred.(type) {
+	case *Jump:
+		if t.Target == target {
+			return &t.Args
+		}
+	case *Branch:
+		if t.Then == target {
+			return &t.ThenArgs
+		}
+		if t.Else == target {
+			return &t.ElseArgs
+		}
+	}
+	panic("edgeArgs: predecessor does not target block")
+}
 
 // Instructions ////////////////////////////////////////////////////////////////
 //

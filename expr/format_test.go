@@ -44,11 +44,10 @@ func TestFormatFunctionIfElseJoin(t *testing.T) {
   b0:
     branch c1, b1, b2
   b1:
-    jump b3
+    jump b3(c2)
   b2:
-    jump b3
-  b3:
-    v0 = phi [b1 c2, b2 c3]
+    jump b3(c3)
+  b3(v0):
     return v0
 `
 	got := FormatFunction("$top", b.Function())

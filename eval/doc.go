@@ -13,14 +13,16 @@
 //   - [session] holds the module-wide state: the module being evaluated, the
 //     accumulated error and warning lists, and the document-level label
 //     registry. One session is created per [Eval] call.
-//   - [frame] is the per-function-call state: the current [expr.Function], the
-//     SSA value table, and the predecessor block ID used to resolve phi nodes.
-//     Nested function calls each get their own frame; the session is shared.
+//   - [frame] is the per-function-call state: the current [expr.Function] and
+//     the SSA value table. Nested function calls each get their own frame; the
+//     session is shared.
 //
 // The block-dispatch loop in runFunction drives each function's CFG: it
-// resolves phi nodes from the predecessor edge, executes straight-line
-// [expr.Instruction]s via evalInst, and follows terminators ([expr.Jump],
-// [expr.Branch], [expr.Return]).
+// executes straight-line [expr.Instruction]s via evalInst, then dispatches the
+// terminator ([expr.Jump], [expr.Branch], [expr.Return]). Jump and Branch
+// also bind the successor block's [expr.BlockParam] slots from the arg list
+// carried on the terminator, replacing the predecessor-tracking and phi-
+// resolution loop that the old IR shape required.
 //
 // # Error handling
 //
