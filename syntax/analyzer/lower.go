@@ -1144,7 +1144,7 @@ func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
 	a.b.Jump(n.Span(), header)
 	a.b.SetBlock(header)
 	cond := a.lowerExpr(condNode)
-	a.b.Branch(n.Span(), cond, body, exit)
+	a.b.Branch(condNode.Span(), cond, body, exit)
 
 	a.b.SetBlock(body)
 	a.b.SealBlock(body)
