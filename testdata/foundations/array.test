@@ -217,7 +217,7 @@
   test(tasks.at("b"), (4, 5, 6, 7))
 }
 
---- array-insert-and-remove (skip: destruct assignment not implemented yet) ---
+--- array-insert-and-remove ---
 // Test the `insert` and `remove` methods.
 #{
   let array = (0, 1, 2, 4, 5)

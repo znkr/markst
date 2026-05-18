@@ -1,0 +1,9 @@
+--- call-args-duplicate ---
+#let f = (font: none) => font
+// Error: 19-23 duplicate argument: font
+#f(font: "Arial", font: "Helvetica")
+
+--- call-args-bad-positional-as-named ---
+// Error: 19-20 the argument `value` is positional
+// Hint: 19-20 try removing `value:`
+#calc.even(value: 1)

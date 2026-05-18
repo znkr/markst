@@ -43,6 +43,8 @@ func ToContent(v Value) (Content, error) {
 		return &Raw{Lines: []string{FormatValue(v)}}, nil
 	case *Dict:
 		return &Raw{Lines: []string{FormatValue(v)}}, nil
+	case *Function:
+		return &Raw{Lines: []string{v.Name}}, nil
 	default:
 		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
 	}

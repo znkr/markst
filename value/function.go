@@ -66,16 +66,15 @@ type NamedArgsWithDefaults struct {
 
 // IsSet reports whether the named argument was explicitly provided at the call site.
 func (n *NamedArgsWithDefaults) IsSet(name name.Name) bool {
-	_, ok := n.Args[name]
+	_, ok := n.Args.Get(name)
 	return ok
 }
 
 // Get returns the value of a named argument, falling back to its default
 // value if not explicitly provided, or [None] if there is no default.
 func (n *NamedArgsWithDefaults) Get(name name.Name) Value {
-	v := n.Args[name]
-	if v == nil {
-		var ok bool
+	v, ok := n.Args.Get(name)
+	if !ok {
 		def, ok := n.Defaults[name]
 		if ok {
 			v = def.Default
@@ -224,15 +223,22 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	}
 
 	// Validate named args.
-	for name := range merged.Named {
+	for name, val := range merged.Named.All() {
 		if _, ok := n.Named[name]; !ok {
 			if sinkIdx < 0 {
+				for _, p := range n.Positional {
+					if p.Name == name.String() {
+						err := ArgErrorNamedf(name, "the argument `%s` is positional", name)
+						err.Hint(fmt.Sprintf("try removing `%s:`", name))
+						return nil, nil, err
+					}
+				}
 				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name)
 			}
 			// When a sink exists, unknown named args go to the sink.
 			continue
 		}
-		if typ := merged.Named[name].Type(); !n.Named[name].Type.Contains(typ) {
+		if typ := val.Type(); !n.Named[name].Type.Contains(typ) {
 			return nil, nil, ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
 		}
 	}
@@ -294,16 +300,12 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 		}
 
 		// Unmatched named args go to the sink.
-		var sinkNamed NamedArgs
-		matchedNamed := make(NamedArgs)
-		for k, v := range merged.Named {
+		var sinkNamed, matchedNamed NamedArgs
+		for k, v := range merged.Named.All() {
 			if _, ok := n.Named[k]; ok {
-				matchedNamed[k] = v
+				matchedNamed.Put(k, v)
 			} else {
-				if sinkNamed == nil {
-					sinkNamed = make(NamedArgs)
-				}
-				sinkNamed[k] = v
+				sinkNamed.Put(k, v)
 			}
 		}
 		namedArgs = matchedNamed

@@ -518,7 +518,7 @@ Apply arguments to an argument sink.
 // Error: 4-5 unknown variable: x
 #((x) = "")
 
---- ops-assign-destructuring-unknown-variable (skip: destructuring not implemented yet) ---
+--- ops-assign-destructuring-unknown-variable ---
 // Error: 4-5 unknown variable: x
 #((x,) = (1,))
 

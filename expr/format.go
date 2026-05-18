@@ -165,7 +165,7 @@ func (f *formatter) formatInst(inst Instruction) {
 		fmt.Fprintf(sb, "field_read %s.%s", f.ref(i.Target), i.Field.String())
 	case *Call:
 		sb.WriteString("call ")
-		sb.WriteString(f.ref(i.Callee))
+		sb.WriteString(f.ref(i.Callee.Ref))
 		sb.WriteString("(")
 		for j, a := range i.Args {
 			if j > 0 {

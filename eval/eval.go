@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"znkr.io/writst/builtin"
@@ -815,7 +814,7 @@ func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Fun
 		}
 		return cc.Constructor, nil
 	default:
-		return nil, fr.errorf(span, "attempted to call a non-function value of type %s", callee.Type())
+		return nil, fr.errorf(span, "expected function, found %s", callee.Type())
 	}
 }
 
@@ -832,33 +831,24 @@ func (fr *frame) buildCallArgs(callSpan syntax.Span, callArgs []expr.CallArg, bl
 		case expr.ArgPositional:
 			args.Positional = append(args.Positional, fr.get(a.Value))
 		case expr.ArgNamed:
-			if args.Named == nil {
-				args.Named = make(map[name.Name]value.Value)
-			}
-			args.Named[a.Name] = fr.get(a.Value)
+			args.Named.Put(a.Name, fr.get(a.Value))
 		case expr.ArgSpread:
 			v := fr.get(a.Value)
 			switch sv := v.(type) {
 			case *value.Array:
 				args.Positional = append(args.Positional, sv.Elems...)
 			case *value.Dict:
-				if args.Named == nil {
-					args.Named = make(map[name.Name]value.Value)
-				}
 				for k, vv := range sv.Elems.All() {
-					args.Named[name.Make(string(k))] = vv
+					args.Named.Put(name.Make(string(k)), vv)
 				}
 			case *value.Arguments:
 				args.Positional = append(args.Positional, sv.Positional...)
-				if len(sv.Named) > 0 {
-					if args.Named == nil {
-						args.Named = make(map[name.Name]value.Value)
-					}
-					maps.Copy(args.Named, sv.Named)
+				for k, vv := range sv.Named.All() {
+					args.Named.Put(k, vv)
 				}
 			case value.None:
 			default:
-				return args, fr.errorf(callSpan, "cannot spread %s", v.Type())
+				return args, fr.errorf(a.Span, "cannot spread %s", v.Type())
 			}
 		}
 	}
@@ -905,7 +895,7 @@ func (fr *frame) applyErr(fn *value.Function, callSpan syntax.Span, callArgs []e
 // Returns (nil, err) when the callee can't be resolved, an argument spread
 // fails, or the call itself reports an error.
 func (fr *frame) evalCall(c *expr.Call) value.Value {
-	fn, e := fr.resolveCallee(fr.get(c.Callee), fr.span(c.Result()))
+	fn, e := fr.resolveCallee(fr.get(c.Callee.Ref), c.Callee.Span)
 	if e != nil {
 		return e
 	}
@@ -935,14 +925,13 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 
 // evalCallSet implements lvalue-style assignment to a function call (e.g.
 // `arr.at(i) = v`, `dict.at("k") += 1`). The callee is invoked with a
-// [FunctionCallContext.Setter] pointer; if the function registers a setter,
-// it is invoked with the (possibly op-combined) new value. Returns the
-// first error encountered, or none on success.
-// evalCallSet implements `f(args) = v` (and compound forms). Side-effect
-// only: all error paths record on the session, and the instruction has no
-// SSA result.
+// [FunctionCallContext.Setter] pointer; if the function registers a setter, it
+// is invoked with the (possibly op-combined) new value. Returns the first error
+// encountered, or none on success. evalCallSet implements `f(args) = v` (and
+// compound forms). Side-effect only: all error paths record on the session, and
+// the instruction has no SSA result.
 func (fr *frame) evalCallSet(c *expr.CallSet) {
-	fn, e := fr.resolveCallee(fr.get(c.Callee), c.Span())
+	fn, e := fr.resolveCallee(fr.get(c.Callee.Ref), c.Callee.Span)
 	if e != nil {
 		return
 	}

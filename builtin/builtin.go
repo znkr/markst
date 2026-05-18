@@ -95,6 +95,23 @@ func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.Name
 			parts = append(parts, fmt.Sprintf("%q: %s", string(k), string(r.(value.Str))))
 		}
 		return value.Str("(" + strings.Join(parts, ", ") + ")"), nil
+	case *value.Arguments:
+		var parts []string
+		for _, e := range v.Positional {
+			r, err := reprImpl(nil, []value.Value{e}, named)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, string(r.(value.Str)))
+		}
+		for k, val := range v.Named.All() {
+			r, err := reprImpl(nil, []value.Value{val}, named)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s", k, string(r.(value.Str))))
+		}
+		return value.Str("arguments(" + strings.Join(parts, ", ") + ")"), nil
 	default:
 		panic(fmt.Sprintf("repr() not implemented for type %s", args[0].Type()))
 	}

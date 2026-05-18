@@ -328,6 +328,14 @@ type CallArg struct {
 	DirectFloatLit bool
 }
 
+// Callee bundles the SSA Ref of a call's callee with the source span of the
+// callee expression itself (as opposed to the whole call). Mirrors
+// [CallArg]'s (Value, Span) pairing.
+type Callee struct {
+	Ref  Ref
+	Span syntax.Span
+}
+
 // Call invokes a function value. Args carry the positional, named, and spread
 // arguments in source order; Blocks holds the Refs of any trailing content
 // blocks (markup form: `f[...]`). AllowSetter is true when this call is the LHS
@@ -335,7 +343,7 @@ type CallArg struct {
 // setter via FunctionCallContext.
 type Call struct {
 	instr
-	Callee      Ref
+	Callee      Callee
 	Args        []CallArg
 	Blocks      []Ref
 	AllowSetter bool
@@ -343,7 +351,7 @@ type Call struct {
 
 func (c *Call) Operands() []Ref {
 	out := make([]Ref, 0, 1+len(c.Args)+len(c.Blocks))
-	out = append(out, c.Callee)
+	out = append(out, c.Callee.Ref)
 	for _, a := range c.Args {
 		out = append(out, a.Value)
 	}
@@ -352,7 +360,7 @@ func (c *Call) Operands() []Ref {
 }
 
 func (c *Call) RemapOperands(f func(Ref) Ref) {
-	c.Callee = f(c.Callee)
+	c.Callee.Ref = f(c.Callee.Ref)
 	for i := range c.Args {
 		c.Args[i].Value = f(c.Args[i].Value)
 	}
@@ -369,7 +377,7 @@ func (c *Call) RemapOperands(f func(Ref) Ref) {
 // NewVal is written directly. Side-effect-only — no SSA result.
 type CallSet struct {
 	voidInstr
-	Callee Ref
+	Callee Callee
 	Args   []CallArg
 	Blocks []Ref
 	NewVal Ref
@@ -378,7 +386,7 @@ type CallSet struct {
 
 func (c *CallSet) Operands() []Ref {
 	out := make([]Ref, 0, 2+len(c.Args)+len(c.Blocks))
-	out = append(out, c.Callee)
+	out = append(out, c.Callee.Ref)
 	for _, a := range c.Args {
 		out = append(out, a.Value)
 	}
@@ -388,7 +396,7 @@ func (c *CallSet) Operands() []Ref {
 }
 
 func (c *CallSet) RemapOperands(f func(Ref) Ref) {
-	c.Callee = f(c.Callee)
+	c.Callee.Ref = f(c.Callee.Ref)
 	for i := range c.Args {
 		c.Args[i].Value = f(c.Args[i].Value)
 	}

@@ -1,9 +1,9 @@
 package value
 
 import (
-	"maps"
 	"slices"
 
+	"znkr.io/writst/internal/ordered"
 	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 )
@@ -14,8 +14,10 @@ type Arguments struct {
 	Named      NamedArgs
 }
 
-// NamedArgs maps argument names to their values at a call site.
-type NamedArgs map[name.Name]Value
+// NamedArgs maps argument names to their values at a call site, preserving
+// insertion order (named args are emitted in source order, with dict-spread
+// entries inserted in dict order at the spread position).
+type NamedArgs = ordered.Map[name.Name, Value]
 
 func (n *Arguments) Merge(args *Arguments) *Arguments {
 	if args == nil {
@@ -35,13 +37,18 @@ func (n *Arguments) Merge(args *Arguments) *Arguments {
 	}
 
 	var named NamedArgs
-	if len(n.Named) == 0 {
+	switch {
+	case n.Named.Len() == 0:
 		named = args.Named
-	} else if len(args.Named) == 0 {
+	case args.Named.Len() == 0:
 		named = n.Named
-	} else {
-		named = maps.Clone(n.Named)
-		maps.Copy(named, args.Named)
+	default:
+		for k, v := range n.Named.All() {
+			named.Put(k, v)
+		}
+		for k, v := range args.Named.All() {
+			named.Put(k, v)
+		}
 	}
 	return &Arguments{
 		Positional: pos,

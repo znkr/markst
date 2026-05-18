@@ -77,7 +77,7 @@ func argumentsImpl(_ *value.FunctionCallContext, args []value.Value, named value
 
 func argumentsLenImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	v := args[0].(*value.Arguments)
-	return value.Int(len(v.Positional) + len(v.Named)), nil
+	return value.Int(len(v.Positional) + v.Named.Len()), nil
 }
 
 func argumentsAtImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -89,7 +89,7 @@ func argumentsAtImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		}
 		return v.Positional[key], nil
 	case value.Str:
-		val, ok := v.Named[name.Make(string(key))]
+		val, ok := v.Named.Get(name.Make(string(key)))
 		if !ok {
 			return nil, value.ArgErrorPosf(1, "arguments do not contain key %q and no default value was specified", key)
 		}
@@ -107,7 +107,7 @@ func argumentsPosImpl(_ *value.FunctionCallContext, args []value.Value, named va
 func argumentsNamedImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	v := args[0].(*value.Arguments)
 	dict := new(value.Dict)
-	for k, val := range v.Named {
+	for k, val := range v.Named.All() {
 		dict.Elems.Put(value.Str(k.String()), val)
 	}
 	return dict, nil
@@ -129,16 +129,13 @@ func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named
 	}
 
 	var filteredNamed value.NamedArgs
-	for k, elem := range v.Named {
+	for k, elem := range v.Named.All() {
 		include, err := applyPredicate(test, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
 		}
 		if include {
-			if filteredNamed == nil {
-				filteredNamed = make(value.NamedArgs)
-			}
-			filteredNamed[k] = elem
+			filteredNamed.Put(k, elem)
 		}
 	}
 
@@ -159,15 +156,12 @@ func argumentsMapImpl(_ *value.FunctionCallContext, args []value.Value, named va
 	}
 
 	var mappedNamed value.NamedArgs
-	if len(v.Named) > 0 {
-		mappedNamed = make(value.NamedArgs, len(v.Named))
-		for k, elem := range v.Named {
-			res, err := applyMapper(mapper, elem)
-			if err != nil {
-				return nil, fmt.Errorf("error calling mapper function: %w", err)
-			}
-			mappedNamed[k] = res
+	for k, elem := range v.Named.All() {
+		res, err := applyMapper(mapper, elem)
+		if err != nil {
+			return nil, fmt.Errorf("error calling mapper function: %w", err)
 		}
+		mappedNamed.Put(k, res)
 	}
 
 	return &value.Arguments{Positional: mappedPos, Named: mappedNamed}, nil

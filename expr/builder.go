@@ -423,7 +423,7 @@ func (b *Builder) FieldRead(span, fieldSpan syntax.Span, target Ref, field name.
 }
 
 // Call emits a function-call instruction.
-func (b *Builder) Call(span syntax.Span, callee Ref, args []CallArg, blocks []Ref, allowSetter bool) Ref {
+func (b *Builder) Call(span syntax.Span, callee Callee, args []CallArg, blocks []Ref, allowSetter bool) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Call{
 			instr:       instr{result: ref},
@@ -438,7 +438,7 @@ func (b *Builder) Call(span syntax.Span, callee Ref, args []CallArg, blocks []Re
 // CallSet emits a function-call lvalue assignment. The instruction is
 // side-effect-only: it has no SSA result. Errors during the call flow
 // through the session, not through a value Ref.
-func (b *Builder) CallSet(span syntax.Span, callee Ref, args []CallArg, blocks []Ref, newVal Ref, op syntax.BinaryOp) {
+func (b *Builder) CallSet(span syntax.Span, callee Callee, args []CallArg, blocks []Ref, newVal Ref, op syntax.BinaryOp) {
 	b.emitVoid(func() Instruction {
 		return &CallSet{
 			voidInstr: voidInstr{span: span},

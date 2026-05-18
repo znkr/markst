@@ -1,14 +1,10 @@
 package value
 
 import (
-	"maps"
-	"slices"
-	"strings"
 	"unicode"
 
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 )
 
@@ -186,7 +182,7 @@ func (n *Function) Format(f *formatter.Formatter) {
 func (n *Arguments) Format(f *formatter.Formatter) {
 	f.Prefix()
 	f.Str("arguments")
-	if len(n.Positional) == 0 && len(n.Named) == 0 {
+	if len(n.Positional) == 0 && n.Named.Len() == 0 {
 		f.Str("()")
 		return
 	}
@@ -197,15 +193,15 @@ func (n *Arguments) Format(f *formatter.Formatter) {
 		}
 		v.Format(f)
 	}
-	keys := slices.SortedFunc(maps.Keys(n.Named), func(a, b name.Name) int { return strings.Compare(a.String(), b.String()) })
-	for i, name := range keys {
-		value := n.Named[name]
+	i := 0
+	for k, v := range n.Named.All() {
 		if len(n.Positional) > 0 || i > 0 {
 			f.Str(", ")
 		}
-		f.Str(name.String())
+		f.Str(k.String())
 		f.Str(": ")
-		value.Format(f)
+		v.Format(f)
+		i++
 	}
 	f.Str(")")
 }

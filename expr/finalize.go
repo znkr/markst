@@ -355,7 +355,10 @@ func (b *Builder) droppable(prods []producer, r Ref) bool {
 	}
 	// A Call to a function not marked as impure is droppable.
 	if call, ok := inst.(*Call); ok {
-		fn, ok := b.mb.mod.Constants[call.Callee.ModConstID()].(*value.Function)
+		if !call.Callee.Ref.IsModConst() {
+			return false
+		}
+		fn, ok := b.mb.mod.Constants[call.Callee.Ref.ModConstID()].(*value.Function)
 		return ok && !fn.Impure
 	}
 	return false

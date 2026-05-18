@@ -516,7 +516,8 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 			}
 		}
 		fns := a.inner(leftNode, syntax.KindFuncCall)
-		callee := a.lowerExpr(fns.node())
+		calleeNode := fns.node()
+		callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
 		args, blocks := a.lowerArgs(fns.node())
 		newVal := a.lowerExpr(rightNode)
 		stripped := op
@@ -685,7 +686,8 @@ func (a *analyzer) lowerFieldAccess(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerFuncCall(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindFuncCall)
-	callee := a.lowerExpr(ns.node())
+	calleeNode := ns.node()
+	callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
 	args, blocks := a.lowerArgs(ns.node())
 	return a.b.Call(n.Span(), callee, args, blocks, false)
 }
@@ -695,7 +697,7 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 
 	var args []expr.CallArg
 	seen := make(map[string]struct{})
-	if ns.at(syntax.KindLeftParen) {
+	if ns.at(syntax.KindLeftParen) || ns.at(syntax.KindError) {
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 			switch child.Kind() {
 			case syntax.KindComma:
@@ -704,17 +706,15 @@ func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {
 				args = append(args, expr.CallArg{Kind: expr.ArgSpread, Value: a.lowerSpread(child), Span: child.Span()})
 			case syntax.KindNamed:
 				named := a.inner(child, syntax.KindNamed)
-				keyText, ok := named.take(syntax.KindIdent)
-				if !ok {
-					continue
-				}
+				keyNode := named.node()
+				keyText := a.leaf(keyNode, syntax.KindIdent)
 				key := name.Make(keyText)
 				named.take(syntax.KindColon)
 				valNode := named.node()
 				val := a.lowerExpr(valNode)
 
 				if _, dup := seen[key.String()]; dup {
-					a.emitError(child.Span(), "duplicate argument: "+key.String())
+					a.emitError(keyNode.Span(), "duplicate argument: "+key.String())
 				}
 				seen[key.String()] = struct{}{}
 				args = append(args, expr.CallArg{Kind: expr.ArgNamed, Name: key, Value: val, Span: valNode.Span(), PairSpan: child.Span()})
@@ -880,14 +880,26 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 		case syntax.KindNamed:
 			hasComplex = true
 			named := a.inner(child, syntax.KindNamed)
-			named.node() // name
+			keyNode := named.node()
+			keyText := a.leaf(keyNode, syntax.KindIdent)
+			key := name.Make(keyText)
 			named.take(syntax.KindColon)
 			patNode := named.node()
 
 			switch patNode.Kind() {
-			case syntax.KindIdent, syntax.KindUnderscore:
-				hasErrors = true
-				a.emitError(child.Span(), "ssa lowering of named destructuring patterns not yet implemented")
+			case syntax.KindIdent:
+				field := a.b.FieldRead(patNode.Span(), keyNode.Span(), rhs, key)
+				target := name.Make(a.leaf(patNode, syntax.KindIdent))
+				if _, dup := seenNames[target]; dup {
+					a.emitError(patNode.Span(), "duplicate binding: "+target.String())
+				}
+				seenNames[target] = struct{}{}
+				v := a.allocVar(target)
+				a.b.WriteVar(v, a.b.CurrentBlock(), field)
+			case syntax.KindUnderscore:
+				// Read the field for its side effects (so a missing key still
+				// surfaces an eval-time error) without binding anything.
+				a.b.FieldRead(patNode.Span(), keyNode.Span(), rhs, key)
 			case syntax.KindError:
 				hasErrors = true
 				a.emitSyntaxError(patNode.(*syntax.Error))
@@ -909,7 +921,12 @@ func (a *analyzer) lowerDestructPattern(n syntax.Node, rhs expr.Ref) {
 	if hasErrors {
 		return
 	}
-	a.b.LengthCheck(n.Span(), rhs, idx, hasSink)
+	// Only emit the array-shape LengthCheck when the pattern actually has
+	// positional slots; an all-named pattern destructures a dictionary, not
+	// a sequence, and a LengthCheck would mis-type-check it.
+	if idx > 0 || hasSink {
+		a.b.LengthCheck(n.Span(), rhs, idx, hasSink)
+	}
 	for _, b := range bindings {
 		ref := a.b.Extract(b.span, rhs, b.idx)
 		a.b.WriteVar(b.variable, a.b.CurrentBlock(), ref)
@@ -1614,7 +1631,12 @@ func (a *analyzer) lowerContentBlock(n syntax.Node) expr.Ref {
 	defer a.closeScope()
 	ns.take(syntax.KindLeftBracket)
 	bodyNode := ns.node()
-	ns.take(syntax.KindRightBracket)
+	// The closing bracket may be absent when the parser is recovering from
+	// an unclosed delimiter — the "unclosed delimiter" error is already on
+	// the opening `[`, so don't escalate to internal() here.
+	if ns.at(syntax.KindRightBracket) {
+		ns.take(syntax.KindRightBracket)
+	}
 	// A content block always evaluates to Content, even with a single item
 	// (so e.g. `[#str]` yields content, not the raw string). Force a
 	// ContentResult so the type-coercion happens at eval time.

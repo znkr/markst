@@ -162,11 +162,11 @@ func (n *Arguments) Equal(other Value) bool {
 			return false
 		}
 	}
-	if len(n.Named) != len(o.Named) {
+	if n.Named.Len() != o.Named.Len() {
 		return false
 	}
-	for k, v := range n.Named {
-		ov, exists := o.Named[k]
+	for k, v := range n.Named.All() {
+		ov, exists := o.Named.Get(k)
 		if !exists || !v.Equal(ov) {
 			return false
 		}

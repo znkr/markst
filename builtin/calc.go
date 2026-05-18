@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/woodsbury/decimal128"
@@ -19,6 +20,8 @@ var Calc = &value.Module{
 		names.Rem:   CalcRem,
 		names.Round: CalcRound,
 		names.Sin:   CalcSin,
+		names.Min:   CalcMin,
+		names.Max:   CalcMax,
 	},
 }
 
@@ -36,6 +39,24 @@ var CalcOdd = &value.Function{
 		{Name: "value", Type: types.SetOf(types.Int)},
 	},
 	F: calcOddImpl,
+}
+
+var CalcMin = &value.Function{
+	Name: "calc.min",
+	Positional: []value.Param{
+		{Name: "values", Type: types.Any},
+	},
+	Sink: new(0),
+	F:    calcMinImpl,
+}
+
+var CalcMax = &value.Function{
+	Name: "calc.max",
+	Positional: []value.Param{
+		{Name: "values", Type: types.Any},
+	},
+	Sink: new(0),
+	F:    calcMaxImpl,
 }
 
 var CalcRem = &value.Function{
@@ -74,6 +95,44 @@ func calcEvenImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 func calcOddImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	n := args[0].(value.Int)
 	return value.Bool(n%2 != 0), nil
+}
+
+func calcMinImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	vs := args[0].(*value.Arguments)
+	if len(vs.Positional) == 0 {
+		return nil, fmt.Errorf("expected at least one value")
+	}
+
+	min := vs.Positional[0]
+	for i, arg := range vs.Positional[1:] {
+		cmp, err := value.Compare(min, arg)
+		if err != nil {
+			return nil, value.ArgErrorPosf(i+1, "%s", err)
+		}
+		if cmp > 0 {
+			min = arg
+		}
+	}
+	return min, nil
+}
+
+func calcMaxImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	vs := args[0].(*value.Arguments)
+	if len(vs.Positional) == 0 {
+		return nil, fmt.Errorf("expected at least one value")
+	}
+
+	max := vs.Positional[0]
+	for i, arg := range vs.Positional[1:] {
+		cmp, err := value.Compare(max, arg)
+		if err != nil {
+			return nil, value.ArgErrorPosf(i+1, "%s", err)
+		}
+		if cmp < 0 {
+			max = arg
+		}
+	}
+	return max, nil
 }
 
 func calcRemImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {

@@ -273,9 +273,9 @@ func TestBuilderCallPurityDCE(t *testing.T) {
 	b := mb.NewBuilder()
 	span := syntax.Span{}
 
-	pureCallee := b.Const(span, pure)
-	impureCallee := b.Const(span, impure)
-	b.Call(span, pureCallee, nil, nil, false)     // result unused
+	pureCallee := Callee{Ref: b.Const(span, pure)}
+	impureCallee := Callee{Ref: b.Const(span, impure)}
+	b.Call(span, pureCallee, nil, nil, false)              // result unused
 	keptRef := b.Call(span, impureCallee, nil, nil, false) // result also unused, but impure
 	// Pin the impure call's result to confirm it's not getting dropped by the
 	// (unrelated) regular DCE path — the impurity check is what should save it.
@@ -287,7 +287,7 @@ func TestBuilderCallPurityDCE(t *testing.T) {
 	var got []string
 	for _, inst := range b.Function().Blocks[0].Instrs {
 		if c, ok := inst.(*Call); ok {
-			callee := mb.mod.Constants[c.Callee.ModConstID()].(*value.Function)
+			callee := mb.mod.Constants[c.Callee.Ref.ModConstID()].(*value.Function)
 			got = append(got, callee.Name)
 		}
 	}

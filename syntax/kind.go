@@ -280,7 +280,7 @@ var kinds = [...]string{
 	KindStr:                "string",
 	KindCodeBlock:          "code_block",
 	KindContentBlock:       "content_block",
-	KindParenthesized:      "parenthesized",
+	KindParenthesized:      "group",
 	KindArray:              "array",
 	KindDict:               "dict",
 	KindNamed:              "named",

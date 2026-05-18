@@ -678,7 +678,7 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 	exact := named.Get(names.Exact).(value.Bool)
 
 	// Reject unexpected named arguments captured by the sink.
-	for name := range others.Named {
+	for name := range others.Named.All() {
 		return nil, value.ArgErrorNamedPairf(name, "unexpected argument: %s", name.String())
 	}
 
