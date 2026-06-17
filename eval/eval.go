@@ -931,8 +931,22 @@ func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldS
 			return fr.errorf(fieldSpan, "content does not have field %q", fname.String())
 		}
 		return f
+	case *value.Function:
+		if f, ok := t.Scope[fname]; ok {
+			return f
+		}
+		if t.Closure {
+			return fr.errorf(fieldSpan, "cannot access fields on user-defined functions")
+		}
+		return fr.errorf(fieldSpan, "function `%s` does not contain field `%s`", t.Name, fname.String())
 	}
-	return fr.errorf(span, "type %s has no method `%s`", target.Type(), fname.String())
+	// The field is neither a method nor a value-specific field. If the type has
+	// a method table at all, report the miss as an unknown method against the
+	// whole access; otherwise the type has no accessible fields.
+	if len(builtin.TypeFields[target.Type()]) > 0 {
+		return fr.errorf(span, "type %s has no method `%s`", target.Type(), fname.String())
+	}
+	return fr.errorf(fieldSpan, "cannot access fields on type %s", target.Type())
 }
 
 // resolveCallee unwraps a callee value into the underlying function.
@@ -1121,8 +1135,10 @@ func (fr *frame) evalFieldWrite(w *expr.FieldWrite) {
 			newVal = combined
 		}
 		t.Elems.Put(key, newVal)
+	case value.None, value.Int, value.Float, value.Bool, value.Str:
+		fr.errorf(w.Span(), "%s does not have accessible fields", target.Type())
 	default:
-		fr.errorf(w.Span(), "cannot assign to field of %s", target.Type())
+		fr.errorf(w.Span(), "cannot mutate fields on %s", target.Type())
 	}
 }
 
@@ -1182,7 +1198,7 @@ func makeClosureWithFrame(fr *frame, m *expr.MakeClosure) value.Value {
 // build a posToParam mapping so the runtime can route each value.Function arg
 // slot back to the correct fn.Params index.
 func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *value.Function {
-	out := &value.Function{Name: fn.Name}
+	out := &value.Function{Name: fn.Name, Closure: true}
 	posToParam := make([]int, 0, len(fn.Params))
 	var sinkIdx *int
 	for i, p := range fn.Params {

@@ -44,6 +44,15 @@ type Function struct {
 	// return value (mutating an operand, touching session-global state, etc.).
 	// The default — false — means the function is pure.
 	Impure bool
+
+	// Scope holds associated functions reachable via field access on the
+	// function value itself (e.g. assert.eq). Only built-in functions populate
+	// it; it is nil for plain functions and user-defined closures.
+	Scope map[name.Name]Value
+
+	// Closure reports whether this value is a user-defined closure (as opposed
+	// to a built-in function). Field access on closures is always an error.
+	Closure bool
 }
 
 // NamedParams maps interned parameter names to their definitions.
@@ -102,6 +111,8 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 		WithArgs:   merged,
 		F:          n.F,
 		Impure:     n.Impure,
+		Scope:      n.Scope,
+		Closure:    n.Closure,
 	}, nil
 }
 

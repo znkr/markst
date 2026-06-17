@@ -525,12 +525,13 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 			}
 		}
 		fns := a.inner(leftNode, syntax.KindFieldAccess)
-		target := a.lowerExpr(fns.node())
+		targetNode := fns.node()
+		target := a.lowerExpr(targetNode)
 		fns.take(syntax.KindDot)
 		fieldName := name.Make(a.leaf(fns.node(), syntax.KindIdent))
 		// Use the LHS span for the FieldWrite so runtime errors point at the
 		// field-access expression, not the whole assignment.
-		a.b.FieldWrite(leftNode.Span(), target, fieldName, newVal, op)
+		a.b.FieldWrite(targetNode.Span(), target, fieldName, newVal, op)
 		return a.b.Const(span, value.None{})
 	case syntax.KindFuncCall:
 		if baseNode, ok := lvalueBase(leftNode); ok {

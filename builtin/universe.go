@@ -13,6 +13,7 @@ var Universe = map[name.Name]value.Value{
 	names.Angle:     reflectedTypes[types.Angle],
 	names.Arguments: reflectedTypes[types.Arguments],
 	names.Array:     reflectedTypes[types.Array],
+	names.Assert:    Assert,
 	names.Bytes:     reflectedTypes[types.Bytes],
 	names.Calc:      Calc,
 	names.Content:   reflectedTypes[types.Content],
