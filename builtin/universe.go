@@ -1,15 +1,20 @@
 package builtin
 
 import (
+	"maps"
+
 	"znkr.io/writst/internal/names"
 	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 	"znkr.io/writst/value"
 )
 
-// Universe is the top-level scope containing all built-in type constructors
-// and global functions (range, repr, type).
-var Universe = map[name.Name]value.Value{
+var Std = &value.Module{
+	Name: "std",
+	Def:  stdDef,
+}
+
+var stdDef = value.SimpleModuleDef{
 	names.Angle:     reflectedTypes[types.Angle],
 	names.Arguments: reflectedTypes[types.Arguments],
 	names.Array:     reflectedTypes[types.Array],
@@ -18,6 +23,7 @@ var Universe = map[name.Name]value.Value{
 	names.Calc:      Calc,
 	names.Content:   reflectedTypes[types.Content],
 	names.Decimal:   reflectedTypes[types.Decimal],
+	names.Emoji:     Emoji,
 	names.Float:     reflectedTypes[types.Float],
 	names.Fraction:  reflectedTypes[types.Fraction],
 	names.Function:  reflectedTypes[types.Function],
@@ -29,7 +35,19 @@ var Universe = map[name.Name]value.Value{
 	names.Relative:  reflectedTypes[types.Relative],
 	names.Repr:      Repr,
 	names.Str:       reflectedTypes[types.Str],
+	names.Sym:       Sym,
+	names.Symbol:    Symbol,
 	names.Type:      reflectedTypes[types.ReflectedType],
+}
+
+// Universe is the top-level scope containing all built-in type constructors
+// and global functions (range, repr, type).
+var Universe = map[name.Name]value.Value{
+	names.Std: Std,
+}
+
+func init() {
+	maps.Copy(Universe, stdDef)
 }
 
 // reflectedTypes maps each type constant to its reflected Type value,

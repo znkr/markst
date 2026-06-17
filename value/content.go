@@ -53,7 +53,7 @@ type Text struct {
 type Raw struct {
 	Block bool `writst:"required"`
 	Lang  string
-	Lines []string `writst:"required"`
+	Text  string `writst:"required"`
 }
 
 type Linebreak struct{}

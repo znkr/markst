@@ -128,6 +128,13 @@ func (n Bytes) Format(f *formatter.Formatter) {
 	f.Str(")")
 }
 
+// Symbols /////////////////////////////////////////////////////////////////////
+
+func (n *Symbol) Format(f *formatter.Formatter) {
+	f.Prefix()
+	f.Str(n.String())
+}
+
 // Containers //////////////////////////////////////////////////////////////////
 
 func (n *Array) Format(f *formatter.Formatter) {
@@ -263,9 +270,7 @@ func (n *Raw) Format(f *formatter.Formatter) {
 	if n.Lang != "" {
 		args = append(args, formatter.NamedArg("lang", n.Lang))
 	}
-	for _, line := range n.Lines {
-		args = append(args, formatter.PositionalArg(line))
-	}
+	args = append(args, formatter.PositionalArg(n.Text))
 	f.FuncCall("raw", args)
 }
 

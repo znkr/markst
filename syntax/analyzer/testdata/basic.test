@@ -228,7 +228,7 @@ This has `code` in it
 │ fn $top:
 │   b0:
 │     v0 = const text "This has"
-│     v1 = const raw_inline lines=1
+│     v1 = const raw_inline "code"
 │     v2 = const text "in it"
 │     v3 = content_result [v0, v1, v2]
 │     return v3
@@ -239,7 +239,7 @@ spans lines` here
 │ fn $top:
 │   b0:
 │     v0 = const text "Text with"
-│     v1 = const raw_inline lines=2
+│     v1 = const raw_inline "code that\nspans lines"
 │     v2 = const text "here"
 │     v3 = content_result [v0, v1, v2]
 │     return v3
@@ -250,7 +250,7 @@ code block
 ```
 │ fn $top:
 │   b0:
-│     v0 = const raw_block lang="" lines=1
+│     v0 = const raw_block lang="" "code block"
 │     return v0
 
 --- block-raw-with-lang ---
@@ -259,7 +259,7 @@ fn main() {}
 ```
 │ fn $top:
 │   b0:
-│     v0 = const raw_block lang="rust" lines=1
+│     v0 = const raw_block lang="rust" "fn main() {}"
 │     return v0
 
 --- block-raw-multiline ---
@@ -270,7 +270,7 @@ func main() {}
 ```
 │ fn $top:
 │   b0:
-│     v0 = const raw_block lang="go" lines=3
+│     v0 = const raw_block lang="go" "package main\n\nfunc main() {}"
 │     return v0
 
 --- escape-character ---

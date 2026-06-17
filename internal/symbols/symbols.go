@@ -2,6 +2,8 @@
 package symbols
 
 import (
+	"slices"
+
 	"znkr.io/writst/name"
 )
 
@@ -12,21 +14,38 @@ type Module struct {
 	bindings map[name.Name]Binding
 }
 
+func (m Module) Get(n name.Name) (Binding, bool) {
+	b, ok := m.bindings[n]
+	return b, ok
+}
+
+func (m Module) aBinding() {}
+
 type Binding interface {
 	aBinding()
 }
 
 type Variants []Symbol
 
-type Symbol struct {
-	mods  []name.Name
-	value string
+func (v Variants) Resolve(mod name.Name) (Variants, bool) {
+	var result Variants
+	for _, s := range v {
+		if i := slices.Index(s.Mods, mod); i != -1 {
+			result = append(result, Symbol{
+				Mods:  slices.Concat(s.Mods[:i], s.Mods[i+1:]),
+				Value: s.Value,
+			})
+		}
+	}
+	if len(result) == 0 {
+		return nil, false
+	}
+	return result, true
 }
 
 func (v Variants) aBinding() {}
-func (m Module) aBinding()   {}
 
-func (m Module) Get(n name.Name) (Binding, bool) {
-	b, ok := m.bindings[n]
-	return b, ok
+type Symbol struct {
+	Mods  []name.Name
+	Value string
 }

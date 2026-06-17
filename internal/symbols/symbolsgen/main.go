@@ -309,7 +309,7 @@ func (g *generator) module(m *module) {
 			for i, mod := range s.mods {
 				mods[i] = g.id(mod)
 			}
-			fmt.Fprintf(&g.body, "Symbol{mods: []name.Name{%s}, value: %q},\n", strings.Join(mods, ", "), s.value)
+			fmt.Fprintf(&g.body, "Symbol{Mods: []name.Name{%s}, Value: %q},\n", strings.Join(mods, ", "), s.value)
 		}
 		fmt.Fprintf(&g.body, "},\n")
 	}

@@ -1,8 +1,6 @@
 package value
 
 import (
-	"slices"
-
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/syntax"
 )
@@ -208,7 +206,7 @@ func (n *Text) Equal(other Value) bool {
 
 func (n *Raw) Equal(other Value) bool {
 	o, ok := other.(*Raw)
-	return ok && n.Block == o.Block && n.Lang == o.Lang && slices.Equal(n.Lines, o.Lines)
+	return ok && n.Block == o.Block && n.Lang == o.Lang && n.Text == o.Text
 }
 
 func (n *Strong) Equal(other Value) bool {

@@ -354,12 +354,8 @@ func (n *Raw) Field(name name.Name) Value {
 			return nil
 		}
 		return Str(n.Lang)
-	case names.Lines:
-		vs := make([]Value, len(n.Lines))
-		for i, v := range n.Lines {
-			vs[i] = Str(v)
-		}
-		return &Array{Elems: vs}
+	case names.Text:
+		return Str(n.Text)
 	default:
 		return nil
 	}
@@ -371,7 +367,7 @@ func (n *Raw) HasField(name name.Name) bool {
 		return true
 	case names.Lang:
 		return n.Lang != ""
-	case names.Lines:
+	case names.Text:
 		return true
 	default:
 		return false
@@ -384,7 +380,7 @@ func (n *Raw) Fields() *Dict {
 	if f := n.Field(names.Lang); f != nil {
 		fields.Elems.Put(Str(names.Lang.String()), f)
 	}
-	fields.Elems.Put(Str(names.Lines.String()), n.Field(names.Lines))
+	fields.Elems.Put(Str(names.Text.String()), n.Field(names.Text))
 	return fields
 }
 

@@ -6,8 +6,12 @@ import (
 )
 
 type Module struct {
-	Name        string
-	Definitions map[name.Name]Value
+	Name string
+	Def  ModuleDef
+}
+
+type ModuleDef interface {
+	Get(name.Name) Value
 }
 
 func (*Module) aValue()          {}
@@ -20,3 +24,7 @@ func (n *Module) Equal(other Value) bool {
 	}
 	return n == o
 }
+
+type SimpleModuleDef map[name.Name]Value
+
+func (def SimpleModuleDef) Get(name name.Name) Value { return def[name] }

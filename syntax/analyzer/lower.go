@@ -1583,7 +1583,10 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 	if ns.at(syntax.KindRawLang) {
 		lang, _ = ns.take(syntax.KindRawLang)
 	}
-	var lines []string
+
+	block := marker != "`"
+	var sb strings.Builder
+	first := true
 	for child := range ns.all() {
 		switch child.Kind() {
 		case syntax.KindRawDelim:
@@ -1593,10 +1596,18 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 			if child.Kind() != syntax.KindText {
 				panic("invalid node kind in raw: " + child.Kind().String())
 			}
-			lines = append(lines, child.Text())
+			// Each KindText child is a single line; the line breaks
+			// between them are dropped by the scanner (RawTrimmed),
+			// so rejoin lines with a newline separator (no trailing
+			// newline) for both inline and block raw.
+			if !first {
+				sb.WriteByte('\n')
+			}
+			sb.WriteString(child.Text())
+			first = false
 		}
 	}
-	return a.b.Const(n.Span(), &value.Raw{Block: marker != "`", Lang: lang, Lines: lines})
+	return a.b.Const(n.Span(), &value.Raw{Block: block, Lang: lang, Text: sb.String()})
 }
 
 // Set/show/contextual/include stubs //////////////////////////////////////////

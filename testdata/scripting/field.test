@@ -48,7 +48,7 @@
   object.property = "value"
 }
 
---- field-mutable-invalid-symbol (skip: symbol not implemented yet) ---
+--- field-mutable-invalid-symbol ---
 #{
   let object = sym.eq.not
   // Error: 3-9 cannot mutate fields on symbol

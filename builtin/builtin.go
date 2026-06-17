@@ -72,6 +72,38 @@ func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.Name
 		return value.Str(v.String()), nil
 	case value.Str:
 		return value.Str(fmt.Sprintf("%q", string(v))), nil
+	case *value.Symbol:
+		var sb strings.Builder
+		sb.WriteString("symbol(")
+		if len(v.Variants) > 2 {
+			sb.WriteString("\n")
+		}
+		for i, variant := range v.Variants {
+			if len(v.Variants) > 2 {
+				sb.WriteString("  ")
+			}
+			if len(variant.Mods) == 0 {
+				fmt.Fprintf(&sb, "\"%s\"", variant.Value)
+			} else {
+				sb.WriteString("(\"")
+				for i, mod := range variant.Mods {
+					if i > 0 {
+						sb.WriteString(".")
+					}
+					sb.WriteString(mod.String())
+				}
+				sb.WriteString("\", \"")
+				sb.WriteString(variant.Value)
+				sb.WriteString("\")")
+			}
+			if len(v.Variants) > 2 {
+				sb.WriteString(",\n")
+			} else if i < len(v.Variants)-1 {
+				sb.WriteString(", ")
+			}
+		}
+		sb.WriteString(")")
+		return value.Str(sb.String()), nil
 	case value.Decimal:
 		s := v.String()
 		return value.Str(fmt.Sprintf("decimal(\"%s\")", s)), nil

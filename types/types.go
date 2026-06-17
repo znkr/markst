@@ -31,6 +31,7 @@ const (
 	Angle
 	Fraction
 	Str
+	Symbol
 	Bytes
 	Array
 	Dict
@@ -56,6 +57,7 @@ var types = [...]string{
 	Angle:         "angle",
 	Fraction:      "fraction",
 	Str:           "string",
+	Symbol:        "symbol",
 	Bytes:         "bytes",
 	Array:         "array",
 	Dict:          "dictionary",
@@ -94,6 +96,7 @@ var Any = SetOf(
 	Angle,
 	Fraction,
 	Str,
+	Symbol,
 	Bytes,
 	Array,
 	Dict,

@@ -12,20 +12,22 @@ func ToContent(v Value) (Content, error) {
 		return v, nil
 	case Str:
 		return &Text{Text: string(v)}, nil
+	case *Symbol:
+		return &Text{Text: v.String()}, nil
 	case None:
 		return nil, nil
 	case Int:
-		return &Raw{Lines: []string{fmt.Sprintf("%d", v)}}, nil
+		return &Raw{Text: fmt.Sprintf("%d", v)}, nil
 	case Float:
 		s := v.String()
 		if s == "float.nan" {
 			s = "nan"
 		}
-		return &Raw{Lines: []string{s}}, nil
+		return &Raw{Text: s}, nil
 	case Length:
-		return &Raw{Lines: []string{v.String()}}, nil
+		return &Raw{Text: v.String()}, nil
 	case Relative:
-		return &Raw{Lines: []string{v.String()}}, nil
+		return &Raw{Text: v.String()}, nil
 	case Decimal:
 		d := decimal128.Decimal(v)
 		var s string
@@ -38,13 +40,13 @@ func ToContent(v Value) (Content, error) {
 		} else {
 			s = d.String()
 		}
-		return &Raw{Lines: []string{s}}, nil
+		return &Raw{Text: s}, nil
 	case *Array:
-		return &Raw{Lines: []string{FormatValue(v)}}, nil
+		return &Raw{Text: FormatValue(v)}, nil
 	case *Dict:
-		return &Raw{Lines: []string{FormatValue(v)}}, nil
+		return &Raw{Text: FormatValue(v)}, nil
 	case *Function:
-		return &Raw{Lines: []string{v.Name}}, nil
+		return &Raw{Text: v.Name}, nil
 	default:
 		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
 	}

@@ -287,8 +287,8 @@
 #test("Hey" not in "abheyCd", true)
 #test("a" not
 /* fun comment? */ in "abc", false)
-// TODO modules: #test("sys" in std, true)
-// TODO modules: #test("system" in std, false)
+// TODO(sys not implemented yet): #test("sys" in std, true)
+// TODO(system not implemented yet): #test("system" in std, false)
 
 --- ops-not-trailing ---
 // Error: 7-10 expected keyword `in` to follow `not` for `not in` operator

@@ -897,12 +897,18 @@ func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldS
 			return fr.errorf(span, "type %s has no method `%s`", t.Reflected, fname.String())
 		}
 		return f
+	case *value.Symbol:
+		nsym, ok := t.Resolve(fname)
+		if !ok {
+			return fr.errorf(fieldSpan, "unknown symbol modifier")
+		}
+		return nsym
 	case *value.Module:
-		def := t.Definitions[fname]
-		if def == nil {
+		v := t.Def.Get(fname)
+		if v == nil {
 			return fr.errorf(fieldSpan, "module %s has no definition `%s`", t.Name, fname.String())
 		}
-		return def
+		return v
 	}
 	if f := builtin.TypeFields[target.Type()][fname]; f != nil {
 		switch f := f.(type) {

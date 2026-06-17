@@ -402,9 +402,9 @@ func formatConst(v any) string {
 		return fmt.Sprintf("label %q", v.Name.String())
 	case *value.Raw:
 		if v.Block {
-			return fmt.Sprintf("raw_block lang=%q lines=%d", v.Lang, len(v.Lines))
+			return fmt.Sprintf("raw_block lang=%q %q", v.Lang, v.Text)
 		}
-		return fmt.Sprintf("raw_inline lines=%d", len(v.Lines))
+		return fmt.Sprintf("raw_inline %q", v.Text)
 	case *value.Function:
 		if v.Name != "" {
 			return "<function " + v.Name + ">"

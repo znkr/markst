@@ -308,6 +308,6 @@ var kinds = [...]string{
 	KindLoopBreak:          "loop break",
 	KindLoopContinue:       "loop continue",
 	KindFuncReturn:         "function return",
-	KindDestructuring:      "destructuring",
+	KindDestructuring:      "destructuring pattern",
 	KindDestructAssignment: "destructuring assignment",
 }
