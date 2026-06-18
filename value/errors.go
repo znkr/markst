@@ -27,7 +27,7 @@ type Error struct {
 }
 
 func (e *Error) Type() types.Type { return types.Error }
-func (e *Error) aValue()           {}
+func (e *Error) aValue()          {}
 
 func (e *Error) Equal(other Value) bool {
 	o, ok := other.(*Error)

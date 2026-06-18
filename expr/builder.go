@@ -451,6 +451,19 @@ func (b *Builder) CallSet(span syntax.Span, callee Callee, args []CallArg, block
 	})
 }
 
+// DiscardCheck emits a side-effect-only instruction that warns at eval time
+// when value (the join a bare return would have produced) is content discarded
+// by an explicit `return`. No SSA result; the warning flows through the
+// session.
+func (b *Builder) DiscardCheck(span syntax.Span, value Ref) {
+	b.emitVoid(func() Instruction {
+		return &DiscardCheck{
+			voidInstr: voidInstr{span: span},
+			Value:     value,
+		}
+	})
+}
+
 // FieldWrite emits a field-write instruction. The instruction is
 // side-effect-only: it has no SSA result. Errors during the write flow
 // through the session, not through a value Ref.
@@ -645,6 +658,16 @@ func (b *Builder) Error(span syntax.Span, msg string, from Ref, hints ...string)
 	})
 }
 
+// SyntaxError emits an [Error] instruction for a scanner/parser diagnostic the
+// caller has already recorded in [Module.ParseErrors]. At eval time it yields
+// a poison [value.Error] that propagates like any other, but is not reported
+// on the session again.
+func (b *Builder) SyntaxError(span syntax.Span, msg string, hints ...string) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &Error{instr: instr{result: ref}, Msg: msg, Hints: hints, From: NoRef, Reported: true}
+	})
+}
+
 // CodeJoin emits a code-join instruction over items. itemSpans, if non-nil,
 // must be parallel to items and provides per-item spans for error reporting.
 func (b *Builder) CodeJoin(span syntax.Span, items []Ref, itemSpans []syntax.Span) Ref {
@@ -653,24 +676,25 @@ func (b *Builder) CodeJoin(span syntax.Span, items []Ref, itemSpans []syntax.Spa
 	})
 }
 
-// LoopAccBegin emits an instruction starting a loop accumulator.
-func (b *Builder) LoopAccBegin(span syntax.Span) Ref {
+// JoinBegin emits an instruction starting a join accumulator.
+func (b *Builder) JoinBegin(span syntax.Span) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &LoopAccBegin{instr: instr{result: ref}}
+		return &JoinBegin{instr: instr{result: ref}}
 	})
 }
 
-// LoopAccAdd emits an instruction appending item to acc.
-func (b *Builder) LoopAccAdd(span syntax.Span, acc, item Ref) Ref {
+// JoinAdd emits an instruction appending item to acc.
+func (b *Builder) JoinAdd(span syntax.Span, acc, item Ref) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &LoopAccAdd{instr: instr{result: ref}, Acc: acc, Item: item}
+		return &JoinAdd{instr: instr{result: ref}, Acc: acc, Item: item}
 	})
 }
 
-// LoopAccResult emits an instruction finalizing the accumulator.
-func (b *Builder) LoopAccResult(span syntax.Span, acc Ref) Ref {
+// JoinResult emits an instruction finalizing a loop accumulator with the
+// code-mode joiner.
+func (b *Builder) JoinResult(span syntax.Span, acc Ref) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &LoopAccResult{instr: instr{result: ref}, Acc: acc}
+		return &JoinResult{instr: instr{result: ref}, Acc: acc}
 	})
 }
 

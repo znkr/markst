@@ -34,31 +34,51 @@ func (a *analyzer) lowerMarkup(n syntax.Node) expr.Ref {
 // Ref (collected and returned) and emitting [AttachLabel] for each label
 // child against the most recent preceding content item.
 func (a *analyzer) lowerMarkupItems(n syntax.Node) []expr.Ref {
-	ns := a.inner(n, syntax.KindMarkup)
 	var items []expr.Ref
+	a.eachMarkupItem(n, func(ref expr.Ref, _ syntax.Span) {
+		items = append(items, ref)
+	})
+	return items
+}
+
+// eachMarkupItem walks a markup body, invoking emit for each value-producing
+// item in source order and attaching each label to the most recent preceding
+// item via [AttachLabel] (detached labels are dropped). Shared by
+// [lowerMarkupItems] and [lowerJoinedBlock] (content blocks). Once an escape
+// becomes pending, the remaining items can never execute: they are not lowered
+// (Typst stops evaluating the sequence at the same point), only their parse
+// errors are adopted.
+func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span)) {
+	ns := a.inner(n, syntax.KindMarkup)
+	last := expr.NoRef
+	entry := a.frame().pending
 	for child := range ns.all() {
+		if a.frame().pending != entry {
+			a.adoptParseErrors(child)
+			continue
+		}
 		switch child.Kind() {
 		case syntax.KindSemicolon, syntax.KindHash, syntax.KindSpace:
 			continue
 		case syntax.KindError:
-			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
+			last = a.emitSyntaxError(child.(*syntax.Error))
+			emit(last, child.Span())
 		case syntax.KindLabel:
-			if len(items) == 0 {
+			if last == expr.NoRef {
 				// Detached label: drop it. (Matches legacy "no preceding
 				// content" behavior.)
 				continue
 			}
 			label := a.leaf(child, syntax.KindLabel)
 			labelName := name.Make(label[1 : len(label)-1])
-			a.b.AttachLabel(child.Span(), items[len(items)-1], labelName)
+			a.b.AttachLabel(child.Span(), last, labelName)
 		default:
-			ref := a.lowerExpr(child)
-			if ref != expr.NoRef {
-				items = append(items, ref)
+			if ref := a.lowerExpr(child); ref != expr.NoRef {
+				last = ref
+				emit(ref, child.Span())
 			}
 		}
 	}
-	return items
 }
 
 // lowerExpr is the dispatch entry for converting a single code- or markup-
@@ -310,7 +330,7 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 // so no SSA-variable indirection is needed — the returned Ref is the
 // canonical value for source in this frame.
 func (a *analyzer) captureRef(source name.Name, span syntax.Span) expr.Ref {
-	f := a.frames[len(a.frames)-1]
+	f := a.frame()
 	if ref, ok := f.captures[source]; ok {
 		return ref
 	}
@@ -393,7 +413,7 @@ func (a *analyzer) isCapturedVar(source name.Name) bool {
 		// No closures, so no captures.
 		return false
 	}
-	boundary := a.frames[len(a.frames)-1].scope
+	boundary := a.frame().scope
 	inCurrent := true
 	for s := a.scope; s != nil; s = s.parent {
 		if _, ok := s.bindings[source]; ok {
@@ -839,58 +859,73 @@ func (a *analyzer) assignDestructPattern(n syntax.Node, rhs expr.Ref) {
 
 // Code blocks ////////////////////////////////////////////////////////////////
 
-// lowerCodeBlock opens a new scope, lowers all statements inline into the
-// current basic block (code blocks introduce no control flow on their own),
-// and joins their values using the code-mode joiner.
+// lowerCodeBlock opens a new scope and lowers a code block's statements inline
+// into the current basic block (code blocks introduce no control flow on their
+// own), joining their values with the code-mode joiner. Each statement emits its
+// value-producing item in source order; statement-style nodes that yield
+// [expr.NoRef] (let-bindings, assignments, set/show rules) are skipped.
 func (a *analyzer) lowerCodeBlock(n syntax.Node) expr.Ref {
-	ns := a.inner(n, syntax.KindCodeBlock)
 	a.openScope()
 	defer a.closeScope()
-	var items []expr.Ref
-	var spans []syntax.Span
+	return a.lowerJoinedBlock(n, false, func() { a.eachCodeItem(n, a.addJoinItem) })
+}
+
+// eachCodeItem walks a code block's body, invoking emit for each value-producing
+// item in source order. Statement-style nodes that yield [expr.NoRef]
+// (let-bindings, assignments, set/show rules) are skipped. Symmetric to
+// [eachMarkupItem]; shared between [lowerCodeBlock] and any other code-block
+// join scope.
+func (a *analyzer) eachCodeItem(n syntax.Node, emit func(expr.Ref, syntax.Span)) {
+	ns := a.inner(n, syntax.KindCodeBlock)
+	entry := a.frame().pending
 	for child := range ns.inside(syntax.KindLeftBrace, syntax.KindRightBrace) {
-		switch child.Kind() {
-		case syntax.KindCode:
-			items, spans = a.lowerCodeInto(child, items, spans)
-		case syntax.KindError:
-			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
-			spans = append(spans, child.Span())
-		default:
-			ref := a.lowerExpr(child)
-			if ref != expr.NoRef {
-				items = append(items, ref)
-				spans = append(spans, child.Span())
+		if child.Kind() == syntax.KindCode {
+			// A run of semicolon-separated statements; emit each in turn.
+			stmts := a.inner(child, syntax.KindCode)
+			for stmt := range stmts.all() {
+				a.emitCodeItem(stmt, entry, emit)
 			}
+		} else {
+			a.emitCodeItem(child, entry, emit)
 		}
-	}
-	switch len(items) {
-	case 0:
-		return a.b.Const(n.Span(), value.None{})
-	case 1:
-		return items[0]
-	default:
-		return a.b.CodeJoin(n.Span(), items, spans)
 	}
 }
 
-func (a *analyzer) lowerCodeInto(n syntax.Node, items []expr.Ref, spans []syntax.Span) ([]expr.Ref, []syntax.Span) {
-	ns := a.inner(n, syntax.KindCode)
-	for child := range ns.all() {
-		switch child.Kind() {
-		case syntax.KindSemicolon:
-			continue
-		case syntax.KindError:
-			items = append(items, a.emitSyntaxError(child.(*syntax.Error)))
-			spans = append(spans, child.Span())
-		default:
-			ref := a.lowerExpr(child)
-			if ref != expr.NoRef {
-				items = append(items, ref)
-				spans = append(spans, child.Span())
-			}
+// emitCodeItem lowers a single code statement and records its value item, if
+// any. Once an escape is pending (relative to entry, the enclosing sequence's
+// pending state), the statement can never execute: it is not lowered (Typst
+// stops evaluating the sequence at the same point), only its parse errors are
+// adopted.
+func (a *analyzer) emitCodeItem(stmt syntax.Node, entry *pendingEscape, emit func(expr.Ref, syntax.Span)) {
+	if a.frame().pending != entry {
+		a.adoptParseErrors(stmt)
+		return
+	}
+	switch stmt.Kind() {
+	case syntax.KindSemicolon:
+	case syntax.KindError:
+		emit(a.emitSyntaxError(stmt.(*syntax.Error)), stmt.Span())
+	default:
+		if ref := a.lowerExpr(stmt); ref != expr.NoRef {
+			emit(ref, stmt.Span())
 		}
 	}
-	return items, spans
+}
+
+// lowerJoinedBlock lowers a block body as a join scope on the current frame:
+// fill walks the body and records each value-producing item via
+// [analyzer.addJoinItem], and the items are combined into a single value at
+// completion. content selects the finalizer (a content sequence
+// [expr.ContentResult] vs the code-mode joiner). The lexical scope must already
+// be open.
+//
+// The scope exists so that a break/continue/return nested inside fill can join
+// the values produced so far before it jumps. Blocks without an escape produce
+// the same IR they would as a bare collect-and-join.
+func (a *analyzer) lowerJoinedBlock(n syntax.Node, content bool, fill func()) expr.Ref {
+	a.pushJoinScope(content)
+	fill()
+	return a.joinScopeValue(a.popJoinScope(), n.Span())
 }
 
 // Conditionals ///////////////////////////////////////////////////////////////
@@ -969,7 +1004,10 @@ func (a *analyzer) lowerConditional(n syntax.Node) expr.Ref {
 			jumpToJoin(n.Span())
 			return
 		}
-		thenResult := a.lowerBlock(bodyNode)
+		// Escapes fired by the catch transfer control on the branch's own
+		// path, before it merges with the join block; the merge jump below
+		// then lands in dead code.
+		thenResult := a.catchEscapes(false, func() expr.Ref { return a.lowerBlock(bodyNode) })
 		a.b.WriteVar(result, a.b.CurrentBlock(), thenResult)
 		a.b.Jump(n.Span(), join)
 
@@ -994,7 +1032,7 @@ func (a *analyzer) lowerConditional(n syntax.Node) expr.Ref {
 			jumpToJoin(n.Span())
 			return
 		}
-		elseResult := a.lowerBlock(elseBodyNode)
+		elseResult := a.catchEscapes(false, func() expr.Ref { return a.lowerBlock(elseBodyNode) })
 		a.b.WriteVar(result, a.b.CurrentBlock(), elseResult)
 		a.b.Jump(n.Span(), join)
 	}
@@ -1021,10 +1059,7 @@ func (a *analyzer) lowerBlock(n syntax.Node) expr.Ref {
 
 // Loops //////////////////////////////////////////////////////////////////////
 
-// lowerWhileLoop lowers `while cond { body }`. The loop accumulates each
-// iteration's body value into a sentinel accumulator that is finalized
-// (via [expr.Builder.LoopAccResult]) at the exit block to give the loop
-// expression a value.
+// lowerWhileLoop lowers `while cond { body }`.
 func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
 	// Detect error nodes early to avoid creating blocks that would be left
 	// unterminated. Matches the pattern in lowerForLoop.
@@ -1037,41 +1072,12 @@ func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
 	condNode := ns.node()
 	bodyNode := ns.node()
 
-	accName := a.b.NewVar(name.Make("$acc"))
-	accInit := a.b.LoopAccBegin(n.Span())
-	a.b.WriteVar(accName, a.b.CurrentBlock(), accInit)
-
-	header := a.b.NewBlock()
-	body := a.b.NewBlock()
-	exit := a.b.NewBlock()
-
-	a.b.Jump(n.Span(), header)
-	a.b.SetBlock(header)
-	cond := a.lowerExpr(condNode)
-	a.b.Branch(condNode.Span(), cond, body, exit)
-
-	a.b.SetBlock(body)
-	a.b.SealBlock(body)
-	a.pushLoop(header, exit)
-	bodyRef := a.lowerBlock(bodyNode)
-	a.popLoop()
-	prevAcc := a.b.ReadVar(accName, a.b.CurrentBlock())
-	if bodyRef == expr.NoRef {
-		bodyRef = a.b.Const(n.Span(), value.None{})
-	}
-	newAcc := a.b.LoopAccAdd(n.Span(), prevAcc, bodyRef)
-	a.b.WriteVar(accName, a.b.CurrentBlock(), newAcc)
-	a.b.Jump(n.Span(), header)
-
-	a.b.SealBlock(header)
-	a.b.SetBlock(exit)
-	a.b.SealBlock(exit)
-	finalAcc := a.b.ReadVar(accName, exit)
-	return a.b.LoopAccResult(n.Span(), finalAcc)
+	return a.lowerLoop(n,
+		func() (expr.Ref, syntax.Span) { return a.lowerExpr(condNode), condNode.Span() },
+		func() expr.Ref { return a.lowerBlock(bodyNode) })
 }
 
-// lowerForLoop lowers `for pattern in iterable { body }` with accumulator
-// semantics matching [lowerWhileLoop].
+// lowerForLoop lowers `for pattern in iterable { body }`.
 func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 	if a.collectChildErrors(n, false) {
 		return expr.NoRef
@@ -1093,85 +1099,104 @@ func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 	destructuring := patternNode.Kind() == syntax.KindDestructuring
 	iter := a.b.IterOpen(iterableNode.Span(), iterable, destructuring, patternNode.Span())
 
+	return a.lowerLoop(n,
+		func() (expr.Ref, syntax.Span) { return a.b.IterHasNext(n.Span(), iter), n.Span() },
+		func() expr.Ref {
+			a.openScope()
+			defer a.closeScope()
+			elem := a.b.IterAdvance(n.Span(), iter)
+			a.lowerDestructPattern(patternNode, elem)
+			return a.lowerBlock(bodyNode)
+		})
+}
+
+// lowerLoop builds the CFG scaffold shared by while and for loops: the join
+// accumulator, the header/body/exit blocks, the escape catch, the back-edge
+// tail, and the [expr.Builder.JoinResult] finalization that gives the loop
+// expression its value at the exit block. cond emits the header's termination
+// check and returns the branch condition with its span; body emits any
+// per-iteration setup (lexical scope, element binding) and lowers the loop
+// body, returning its value.
+//
+// The catch fires escapes that arose in the body — a break/continue reaching
+// this loop, or a return passing through it; the regular tail then lands in
+// dead code.
+func (a *analyzer) lowerLoop(n syntax.Node, cond func() (expr.Ref, syntax.Span), body func() expr.Ref) expr.Ref {
 	accName := a.b.NewVar(name.Make("$acc"))
-	accInit := a.b.LoopAccBegin(n.Span())
+	accInit := a.b.JoinBegin(n.Span())
 	a.b.WriteVar(accName, a.b.CurrentBlock(), accInit)
 
 	header := a.b.NewBlock()
-	body := a.b.NewBlock()
+	bodyBlk := a.b.NewBlock()
 	exit := a.b.NewBlock()
 
 	a.b.Jump(n.Span(), header)
 	a.b.SetBlock(header)
-	hasNext := a.b.IterHasNext(n.Span(), iter)
-	a.b.Branch(n.Span(), hasNext, body, exit)
+	c, condSpan := cond()
+	a.b.Branch(condSpan, c, bodyBlk, exit)
 
-	a.b.SetBlock(body)
-	a.b.SealBlock(body)
-	a.openScope()
-	elem := a.b.IterAdvance(n.Span(), iter)
-	a.lowerDestructPattern(patternNode, elem)
-	a.pushLoop(header, exit)
-	bodyRef := a.lowerBlock(bodyNode)
+	a.b.SetBlock(bodyBlk)
+	a.b.SealBlock(bodyBlk)
+	a.pushLoop(header, exit, accName)
+	bodyRef := a.catchEscapes(false, func() expr.Ref {
+		ref := body()
+		if ref == expr.NoRef {
+			return a.b.Const(n.Span(), value.None{})
+		}
+		return ref
+	})
 	a.popLoop()
-	if bodyRef == expr.NoRef {
-		bodyRef = a.b.Const(n.Span(), value.None{})
-	}
-	prevAcc := a.b.ReadVar(accName, a.b.CurrentBlock())
-	newAcc := a.b.LoopAccAdd(n.Span(), prevAcc, bodyRef)
-	a.b.WriteVar(accName, a.b.CurrentBlock(), newAcc)
-	a.closeScope()
+	a.appendJoin(accName, n.Span(), bodyRef)
 	a.b.Jump(n.Span(), header)
 
 	a.b.SealBlock(header)
 	a.b.SetBlock(exit)
 	a.b.SealBlock(exit)
 	finalAcc := a.b.ReadVar(accName, exit)
-	return a.b.LoopAccResult(n.Span(), finalAcc)
+	return a.b.JoinResult(n.Span(), finalAcc)
 }
 
-// lowerLoopBreak emits a Jump to the innermost loop's exit block.
+// lowerLoopBreak records a pending break escape (see [pendingEscape]). The
+// control transfer is not emitted here: the statement containing the break is
+// still evaluated to its end, and the escape fires at the innermost enclosing
+// catch point. The break expression itself evaluates to none so enclosing
+// expressions (call args, spreads, ...) have an operand.
 func (a *analyzer) lowerLoopBreak(n syntax.Node) expr.Ref {
-	l, ok := a.currentLoop()
-	if !ok {
-		return a.emitError(n.Span(), "break outside of loop")
+	if len(a.frame().loops) == 0 {
+		return a.emitError(n.Span(), "cannot break outside of loop")
 	}
-	a.b.Jump(n.Span(), l.exit)
-	// Switch to a fresh unreachable block so subsequent emission has somewhere
-	// to land, even though it'll be dead code.
-	dead := a.b.NewBlock()
-	a.b.SetBlock(dead)
-	a.b.SealBlock(dead)
-	return expr.NoRef
+	a.setPending(pendingEscape{kind: escapeBreak, span: n.Span()})
+	return a.b.Const(n.Span(), value.None{})
 }
 
-// lowerLoopContinue emits a Jump to the innermost loop's header.
+// lowerLoopContinue records a pending continue escape; deferred delivery as in
+// [lowerLoopBreak].
 func (a *analyzer) lowerLoopContinue(n syntax.Node) expr.Ref {
-	l, ok := a.currentLoop()
-	if !ok {
-		return a.emitError(n.Span(), "continue outside of loop")
+	if len(a.frame().loops) == 0 {
+		return a.emitError(n.Span(), "cannot continue outside of loop")
 	}
-	a.b.Jump(n.Span(), l.header)
-	dead := a.b.NewBlock()
-	a.b.SetBlock(dead)
-	a.b.SealBlock(dead)
-	return expr.NoRef
+	a.setPending(pendingEscape{kind: escapeContinue, span: n.Span()})
+	return a.b.Const(n.Span(), value.None{})
 }
 
-// lowerFuncReturn emits a Return terminator with the optional value. The
-// resulting block is dead; subsequent emission goes into a fresh block.
+// lowerFuncReturn records a pending return escape; deferred delivery as in
+// [lowerLoopBreak]. `return x` returns x explicitly, discarding the function
+// body's join; a bare `return` returns the body's joined-so-far value, both
+// delivered by [analyzer.firePending]. `return` outside a function is an
+// error.
 func (a *analyzer) lowerFuncReturn(n syntax.Node) expr.Ref {
+	if !a.frame().isFn {
+		return a.emitError(n.Span(), "cannot return outside of function")
+	}
 	ns := a.inner(n, syntax.KindFuncReturn)
 	ns.take(syntax.KindReturn)
-	val := expr.NoRef
+
+	p := pendingEscape{kind: escapeReturn, span: n.Span(), val: expr.NoRef}
 	if !ns.done() {
-		val = a.lowerExpr(ns.node())
+		p.val = a.lowerExpr(ns.node())
 	}
-	a.b.Return(n.Span(), val)
-	dead := a.b.NewBlock()
-	a.b.SetBlock(dead)
-	a.b.SealBlock(dead)
-	return expr.NoRef
+	a.setPending(p)
+	return a.b.Const(n.Span(), value.None{})
 }
 
 // Closures ///////////////////////////////////////////////////////////////////
@@ -1305,8 +1330,18 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		}
 	}
 
-	// Lower the body.
-	bodyRef := a.lowerBlockOrExpr(bodyNode)
+	// Lower the body. The frame's root region (seeded as [regionFnBody] by
+	// pushFrame) is the return target: a nested bare `return` resolves there and
+	// yields the body's partial join (Typst's joining `return` semantics). A
+	// block body opens its join scope on that region; an expression body opens
+	// none, so a bare `return` there yields none.
+	// This frame is the return target, so an escape caught here is
+	// necessarily a return, and this is the one catch where an explicit value
+	// provably discards the body join on every call — hence the discard
+	// warning for code-block bodies (markup bodies join naturally and never
+	// warn). The fallthrough Return lands in dead code when the catch fires.
+	warnDiscard := bodyNode.Kind() == syntax.KindCodeBlock
+	bodyRef := a.catchEscapes(warnDiscard, func() expr.Ref { return a.lowerBlockOrExpr(bodyNode) })
 	a.b.Return(n.Span(), bodyRef)
 	a.b.Finalize()
 
@@ -1558,19 +1593,7 @@ func (a *analyzer) lowerContentBlock(n syntax.Node) expr.Ref {
 	if ns.at(syntax.KindRightBracket) {
 		ns.take(syntax.KindRightBracket)
 	}
-	// A content block always evaluates to Content, even with a single item
-	// (so e.g. `[#str]` yields content, not the raw string). Force a
-	// ContentResult so the type-coercion happens at eval time.
-	return a.lowerMarkupAsContent(bodyNode)
-}
-
-// lowerMarkupAsContent lowers a markup body to a single Ref that is always
-// of content type at runtime — wrapping single items in a unary
-// ContentResult so e.g. `[#42]` evaluates to content (with the int coerced
-// to text) rather than the bare int.
-func (a *analyzer) lowerMarkupAsContent(n syntax.Node) expr.Ref {
-	items := a.lowerMarkupItems(n)
-	return a.b.ContentResult(n.Span(), items)
+	return a.lowerJoinedBlock(bodyNode, true, func() { a.eachMarkupItem(bodyNode, a.addJoinItem) })
 }
 
 func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {

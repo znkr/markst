@@ -23,6 +23,14 @@ import (
 func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	s := &session{mod: mod}
 
+	// Parse errors are diagnostics on the source, reported regardless of
+	// which code paths run — and this is their only reporting channel: the
+	// corresponding IR Error instructions are marked Reported and evaluate to
+	// unrecorded poison values.
+	for _, e := range mod.ParseErrors {
+		s.recordError(e)
+	}
+
 	v := runFunction(s, functionCall{fn: mod.Top})
 	// If the top-level value is itself an Error, the failure was already
 	// recorded on the session; drop it and emit empty content.
@@ -133,14 +141,14 @@ func errCmp(a, b Error) int {
 // propagatesFromOperands reports whether [evalInst]'s pre-dispatch
 // propagation should short-circuit this instruction when any operand is a
 // [*value.Error]. Most value-producing instructions opt in; aggregation
-// constructs ([ContentResult], [CodeJoin], [LoopAccAdd], [MakeArray],
+// constructs ([ContentResult], [CodeJoin], [JoinAdd], [MakeArray],
 // [MakeDict]) opt out because their semantics are to *hold* the operands,
 // errors and all, rather than collapse to a single error. Without this
 // opt-out, `(err, x)` would evaluate to err instead of an array
 // containing err — defeating "continue past errors" for collections.
 func propagatesFromOperands(inst expr.Instruction) bool {
 	switch inst.(type) {
-	case *expr.ContentResult, *expr.CodeJoin, *expr.LoopAccAdd,
+	case *expr.ContentResult, *expr.CodeJoin, *expr.JoinAdd,
 		*expr.MakeArray, *expr.MakeDict:
 		return false
 	}
@@ -325,7 +333,7 @@ func bindArgs(fr *frame, params []*expr.BlockParam, args []expr.Ref) {
 // without re-recording it on the session. Each handler that can fail uses
 // [frame.fail] to record + return a [*value.Error] that gets assigned to
 // the result; downstream instructions then propagate it via the same
-// mechanism. ContentResult, CodeJoin, and LoopAccAdd opt out of operand
+// mechanism. ContentResult, CodeJoin, and JoinAdd opt out of operand
 // propagation so they can produce a partial result instead.
 func evalInst(fr *frame, inst expr.Instruction) {
 	r := inst.Result()
@@ -420,6 +428,11 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.evalCallSet(i)
 	case *expr.FieldWrite:
 		fr.evalFieldWrite(i)
+	case *expr.DiscardCheck:
+		if _, ok := fr.get(i.Value).(value.Content); ok {
+			fr.warn(i.Span(), "this return unconditionally discards the content before it",
+				"try omitting the `return` to automatically join all values")
+		}
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
 	case *expr.DestructArray:
@@ -486,9 +499,14 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		// The cascade-suppression rule (when From is already a *value.Error,
 		// propagate it and suppress Msg) is handled by the generic operand-
 		// error short-circuit at the top of evalInst; by the time we reach
-		// here, From is known to be non-error (or absent), so we always
-		// record the Msg.
-		fr.vals[r] = fr.error(fr.span(r), i.Msg, i.Hints...)
+		// here, From is known to be non-error (or absent).
+		if i.Reported {
+			// Parse errors are already reported via Module.ParseErrors;
+			// yield the poison value without recording again.
+			fr.vals[r] = &value.Error{Span: fr.span(r), Msg: i.Msg, Hints: i.Hints}
+		} else {
+			fr.vals[r] = fr.error(fr.span(r), i.Msg, i.Hints...)
+		}
 	case *expr.AttachLabel:
 		// Coerce the prior content to value.Content, attach the label, emit
 		// a warning if overwriting, and register the label.
@@ -518,19 +536,19 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.vals[r] = value.None{}
 	case *expr.CodeJoin:
 		fr.vals[r] = fr.evalCodeJoin(i)
-	case *expr.LoopAccBegin:
+	case *expr.JoinBegin:
 		fr.vals[r] = &value.Array{}
-	case *expr.LoopAccAdd:
+	case *expr.JoinAdd:
 		arr, ok := fr.get(i.Acc).(*value.Array)
 		if !ok {
-			panic("loop_acc_add: accumulator is not an array")
+			panic("join_add: accumulator is not an array")
 		}
 		arr.Elems = append(arr.Elems, fr.get(i.Item))
 		fr.vals[r] = arr
-	case *expr.LoopAccResult:
+	case *expr.JoinResult:
 		arr, ok := fr.get(i.Acc).(*value.Array)
 		if !ok {
-			panic("loop_acc_result: accumulator is not an array")
+			panic("join_result: accumulator is not an array")
 		}
 		fr.vals[r] = fr.joinValues(arr.Elems, fr.span(r))
 	case *expr.Heading:

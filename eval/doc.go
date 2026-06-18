@@ -33,7 +33,7 @@
 // duplicates from a single cascading failure.
 //
 // A small set of instructions ([expr.ContentResult], [expr.CodeJoin],
-// [expr.LoopAccAdd]) opt out of automatic operand propagation so they can
+// [expr.JoinAdd]) opt out of automatic operand propagation so they can
 // still produce a partial result — e.g. rendering the rest of a document even
 // when one content block failed.
 package eval

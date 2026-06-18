@@ -32,8 +32,9 @@ type producer struct {
 //  2. Dead-code elimination: pure instructions and block params whose result
 //     Ref has no uses are dropped. When a param is dropped its slot is
 //     spliced from every incoming terminator's arg list in lock-step. Cascades
-//     to fixed point. Constant-`none` items are stripped from
-//     [ContentResult]/[CodeJoin] joiners.
+//     to fixed point. A joiner fixup pre-pass strips constant-`none` items
+//     from [ContentResult]/[CodeJoin] and drops [DiscardCheck]s over the
+//     `none` constant (they can never warn).
 //  3. Ref compaction: surviving Refs are renumbered into a dense
 //     `[0, NumRefs)` range; [Function.RefSpans] shrinks to match.
 //
@@ -45,6 +46,37 @@ type producer struct {
 // Must be called once construction is complete, before the function is handed
 // to the evaluator or formatter.
 func (b *Builder) Finalize() {
+	// Joiner fixups first: strip constant-`none` items from
+	// ContentResult/CodeJoin and drop DiscardChecks that can never warn. This
+	// runs before the NumRefs fast path below because a function whose values
+	// are all module constants (no local Refs at all) can still carry a
+	// droppable DiscardCheck. Use counts are unaffected: the removed operands
+	// are ModConstRefs, which are never counted.
+	if noneID, ok := b.mb.noneConstID(); ok {
+		noneRef := ModConstRef(noneID)
+		for _, block := range b.fn.Blocks {
+			out := block.Instrs[:0]
+			for _, inst := range block.Instrs {
+				switch x := inst.(type) {
+				case *ContentResult:
+					x.Items = filterNone(x.Items, noneID)
+				case *CodeJoin:
+					x.Items, x.ItemSpans = filterNoneWithSpans(x.Items, x.ItemSpans, noneID)
+				case *DiscardCheck:
+					// A check over the none constant can never warn (none is
+					// not content); drop it. This is what keeps the common
+					// `{ return x }` body free of a useless check — the body
+					// join of an otherwise empty block is the none constant.
+					if x.Value == noneRef {
+						continue
+					}
+				}
+				out = append(out, inst)
+			}
+			block.Instrs = out
+		}
+	}
+
 	if b.fn.NumRefs() == 0 {
 		b.redirects = nil
 		return
@@ -80,8 +112,7 @@ func (b *Builder) Finalize() {
 		return r
 	}
 
-	// Walk 1: count uses (redirect-aware), index producers, strip `none` items
-	// from joiners.
+	// Walk 1: count uses (redirect-aware) and index producers.
 	uses := make([]int32, b.fn.NumRefs())
 	prods := make([]producer, b.fn.NumRefs())
 	bumpUse := func(r Ref) {
@@ -118,19 +149,6 @@ func (b *Builder) Finalize() {
 			}
 		}
 	}
-	if noneID, ok := b.mb.noneConstID(); ok {
-		for _, block := range b.fn.Blocks {
-			for _, inst := range block.Instrs {
-				switch x := inst.(type) {
-				case *ContentResult:
-					x.Items = filterNone(x.Items, noneID)
-				case *CodeJoin:
-					x.Items, x.ItemSpans = filterNoneWithSpans(x.Items, x.ItemSpans, noneID)
-				}
-			}
-		}
-	}
-
 	// Worklist DCE. Drops cascade: when an instruction or param is dropped,
 	// its operands (instruction operands, or for params the incoming arg
 	// slot from every predecessor) lose a use and may themselves become

@@ -40,7 +40,7 @@ func IsPure(instr Instruction) bool {
 		*Heading, *Strong, *Emph, *Link, *RefMarkup,
 		*ListItem, *EnumItem, *TermItem,
 		*ContentResult, *CodeJoin,
-		*LoopAccBegin, *LoopAccResult:
+		*JoinBegin, *JoinResult:
 		return true
 	}
 	return false
@@ -426,6 +426,19 @@ func (f *FieldWrite) RemapOperands(rn func(Ref) Ref) {
 	f.NewVal = rn(f.NewVal)
 }
 
+// DiscardCheck warns, at eval time, when an explicit `return value` throws away
+// the joined content a bare return would have produced instead. Value is the
+// discarded join; the runtime emits the warning only when it is actually
+// content (non-content prefixes — arrays, strings, none — never warn).
+// Side-effect-only: it records a warning on the session and has no SSA result.
+type DiscardCheck struct {
+	voidInstr
+	Value Ref
+}
+
+func (d *DiscardCheck) Operands() []Ref                { return []Ref{d.Value} }
+func (d *DiscardCheck) RemapOperands(rn func(Ref) Ref) { d.Value = rn(d.Value) }
+
 // DestructArray validates Source for a destructuring pattern with positional
 // items (possibly with a sink).
 //
@@ -608,6 +621,11 @@ type Error struct {
 	Msg   string
 	Hints []string
 	From  Ref // optional; NoRef when this Error is unconditional
+	// Reported marks an error already surfaced via [Module.ParseErrors]
+	// (a scanner/parser diagnostic on the source, reported whether or not
+	// this code path runs). The runtime evaluates it to a poison
+	// [value.Error] without recording it again.
+	Reported bool
 }
 
 func (r *Error) Operands() []Ref {
@@ -651,42 +669,47 @@ func (c *CodeJoin) RemapOperands(f func(Ref) Ref) {
 	}
 }
 
-// LoopAccBegin produces an initial loop-accumulator value (an empty array
-// internally; treated as opaque accumulator state). Each iteration's body
-// result is added via [LoopAccAdd], and the final joined value is obtained via
-// [LoopAccResult].
-type LoopAccBegin struct {
+// JoinBegin produces an initial join-accumulator value (an empty array
+// internally; treated as opaque accumulator state). Each iteration's value is
+// added via [JoinAdd], and the final joined value is obtained via [JoinResult].
+// This is the dynamic-arity counterpart to the pure n-ary
+// [CodeJoin]/[ContentResult]: it exists for the one join whose item count is
+// not known at lowering time, a loop's cross-iteration accumulator. Every
+// straight-line join (block and function bodies) is built statically instead.
+type JoinBegin struct {
 	instr
 }
 
-func (*LoopAccBegin) Operands() []Ref               { return nil }
-func (*LoopAccBegin) RemapOperands(_ func(Ref) Ref) {}
+func (*JoinBegin) Operands() []Ref               { return nil }
+func (*JoinBegin) RemapOperands(_ func(Ref) Ref) {}
 
-// LoopAccAdd appends item to the accumulator and returns the same accumulator
+// JoinAdd appends item to a loop accumulator and returns the same accumulator
 // (mutated in place). The mutation is safe under SSA because the previous
 // accumulator value is read exactly once per iteration before being overwritten
 // by the WriteVar that follows.
-type LoopAccAdd struct {
+type JoinAdd struct {
 	instr
 	Acc  Ref
 	Item Ref
 }
 
-func (a *LoopAccAdd) Operands() []Ref { return []Ref{a.Acc, a.Item} }
-func (a *LoopAccAdd) RemapOperands(f func(Ref) Ref) {
+func (a *JoinAdd) Operands() []Ref { return []Ref{a.Acc, a.Item} }
+func (a *JoinAdd) RemapOperands(f func(Ref) Ref) {
 	a.Acc = f(a.Acc)
 	a.Item = f(a.Item)
 }
 
-// LoopAccResult joins the accumulated items into a single value using the
-// code-mode joiner (same semantics as [CodeJoin]).
-type LoopAccResult struct {
+// JoinResult joins the accumulated items into a single value using the
+// code-mode joiner (same semantics as [CodeJoin]). It finalizes a loop's
+// cross-iteration accumulator; straight-line joins are built statically with
+// [CodeJoin]/[ContentResult] instead.
+type JoinResult struct {
 	instr
 	Acc Ref
 }
 
-func (a *LoopAccResult) Operands() []Ref               { return []Ref{a.Acc} }
-func (a *LoopAccResult) RemapOperands(f func(Ref) Ref) { a.Acc = f(a.Acc) }
+func (a *JoinResult) Operands() []Ref               { return []Ref{a.Acc} }
+func (a *JoinResult) RemapOperands(f func(Ref) Ref) { a.Acc = f(a.Acc) }
 
 // Heading represents a `= Title`-style heading at the given level.
 type Heading struct {

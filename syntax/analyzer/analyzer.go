@@ -12,9 +12,9 @@
 // blocks, conditionals, loops, let-bindings, ...). Scopes only affect which
 // source names are visible at a given point.
 //
-// A frame corresponds to one function: the document body or any closure
-// nested inside it. Frames are the unit of SSA construction — every value
-// reference, basic block, and capture lives in exactly one frame.
+// A frame corresponds to one function: the document body or any closure nested
+// inside it. Frames are the unit of SSA construction — every value reference,
+// basic block, and capture lives in exactly one frame.
 //
 // Scopes nest inside frames. A frame opens with its own boundary scope and
 // closes when its function is complete; lexical scopes inside come and go
@@ -44,14 +44,38 @@
 //
 // Unknown names produce an "unknown variable" error.
 //
+// # Escapes
+//
+// break, continue, and return are escapes: they abandon the value a block is
+// building and jump away. break/continue unwind to the innermost loop on
+// [frame.loops]; bare return to the frame itself (a closure body,
+// [frame.isFn]).
+//
+// An escape does not emit its control transfer at its own site. Typst treats
+// escapes as flow events: the statement containing the escape is evaluated to
+// its end (sibling arguments, enclosing calls) and only then does control
+// leave. Lowering mirrors that by recording a [pendingEscape] on the frame;
+// statement sequences stop lowering once one is pending, and the innermost
+// enclosing catch point — a conditional branch, a loop body, or the closure
+// body — emits the terminator ([analyzer.firePending]). Before the transfer,
+// the escape recovers the in-flight value built so far: the partial join of
+// the frame's open join scopes from the escape target inward, with crossed
+// loops contributing their accumulated iterations, so a bare return still
+// folds through an enclosing loop's body (see [analyzer.partialJoin]).
+//
+// Recovering the value is shared ([analyzer.partialJoin]); only the delivery
+// differs by escape kind. break/continue append the recovered value to the
+// loop's runtime accumulator and jump to its exit/header block, while return
+// hands it to a Return terminator directly.
+//
 // # Errors
 //
 // Lexical and parse errors are already represented as [syntax.Error] nodes
 // embedded in the syntax tree; the analyzer threads them, alongside any
-// semantic errors it discovers (unknown variables, illegal writes to
-// captured variables, duplicate parameters, and so on), into the IR as
-// [expr.Error] instructions. The evaluator surfaces them at eval time, so
-// the rest of the document keeps rendering around the failure.
+// semantic errors it discovers (unknown variables, illegal writes to captured
+// variables, duplicate parameters, and so on), into the IR as [expr.Error]
+// instructions. The evaluator surfaces them at eval time, so the rest of the
+// document keeps rendering around the failure.
 package analyzer
 
 import (
@@ -99,17 +123,19 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 	}
 
 	a.mb = expr.NewModuleBuilder()
-	a.b = a.mb.NewBuilder()
-	a.mb.Module().Top = a.b.Function()
 
+	a.b = a.mb.NewBuilder()
 	// Push a new scope to avoid confusion about global names.
 	a.openScope()
 	a.frames = []*frame{{b: a.b, scope: a.scope}}
-
 	result := a.lowerMarkup(n)
-	a.b.Return(syntax.Span{}, result)
+	a.b.Return(n.Span(), result)
 	a.b.Finalize()
-	return a.mb.Module()
+
+	mod := a.mb.Module()
+	mod.Top = a.b.Function()
+	mod.ParseErrors = a.parseErrors
+	return mod
 }
 
 type analyzer struct {
@@ -118,10 +144,13 @@ type analyzer struct {
 	b      *expr.Builder
 	mb     *expr.ModuleBuilder
 
-	// frames is the stack of in-progress functions. frames[0] is the
-	// document body; frames[len-1] is the innermost closure under
-	// construction. [a.b] always aliases the innermost frame's builder, and
-	// [a.scope] is the current lexical scope within it.
+	// parseErrors accumulates every syntax error lowered via [emitSyntaxError].
+	parseErrors []*value.Error
+
+	// frames is the stack of in-progress functions. frames[0] is the document
+	// body; frames[len-1] is the innermost closure under construction. [a.b]
+	// always aliases the innermost frame's builder, and [a.scope] is the
+	// current lexical scope within it.
 	frames []*frame
 }
 
@@ -129,6 +158,7 @@ type analyzer struct {
 // [pushFrame] and popped by [popFrame].
 type frame struct {
 	b *expr.Builder
+
 	// scope is the bottom of the frame's lexical scope chain: any further
 	// scopes the frame opens chain off it, and its parent is the outer
 	// frame's scope at push time. Name resolution stops treating bindings
@@ -140,13 +170,34 @@ type frame struct {
 	// even if the body references it many times.
 	captures map[name.Name]expr.Ref
 
-	// loops is the stack of enclosing loops within this frame, used to
-	// resolve break/continue targets. Per-frame because loops don't cross
-	// closure boundaries: a break inside a nested closure that itself sits
-	// inside a loop is invalid (and would jump to a block in the wrong
-	// function's CFG).
-	loops []loop
+	// isFn marks a closure-body frame, the target of bare return. It is false
+	// for the document-body frame, where return is illegal. Per-frame (like
+	// scopes, loops, and pending below) because escapes don't cross closure
+	// boundaries: a break inside a nested closure that itself sits inside a
+	// loop is invalid (and would jump to a block in the wrong function's CFG),
+	// and a return resolves to its own closure.
+	isFn bool
+
+	// joinScopes is the stack of open join scopes (see [joinScope]),
+	// innermost last: block scopes collecting in-flight items, interleaved in
+	// source order with the accumulator entries of enclosing loops. Flattened
+	// from any index up to the top they are the in-flight value an escape
+	// recovers via [analyzer.partialJoin]. (Distinct from [frame.scope], the
+	// bottom of the frame's lexical scope chain.)
+	joinScopes []joinScope
+
+	// loops is the stack of enclosing loops (see [loopInfo]), innermost last.
+	// break/continue target the innermost entry.
+	loops []loopInfo
+
+	// pending is the frame's in-flight escape (see [pendingEscape]), recorded
+	// at the escape site and emitted at the innermost enclosing catch point.
+	pending *pendingEscape
 }
+
+// frame returns the innermost in-progress frame: the function (document body or
+// closure) currently under construction.
+func (a *analyzer) frame() *frame { return a.frames[len(a.frames)-1] }
 
 // pushFrame opens a fresh builder and frame scope for a nested closure.
 // Updates [a.b] and [a.scope] to point at the new frame.
@@ -155,47 +206,17 @@ func (a *analyzer) pushFrame() {
 	s := &scope{parent: a.scope}
 	a.b = b
 	a.scope = s
-	a.frames = append(a.frames, &frame{b: b, scope: s})
+	a.frames = append(a.frames, &frame{b: b, scope: s, isFn: true})
 }
 
 // popFrame discards the innermost frame, restoring [a.b] and [a.scope] to
 // the enclosing frame's state. Any intermediate non-closure scopes opened
 // inside the popped frame are dropped along with it.
 func (a *analyzer) popFrame() {
-	f := a.frames[len(a.frames)-1]
+	f := a.frame()
 	a.frames = a.frames[:len(a.frames)-1]
-	a.b = a.frames[len(a.frames)-1].b
+	a.b = a.frame().b
 	a.scope = f.scope.parent
-}
-
-// pushLoop records header/exit targets for the innermost enclosing loop on
-// the current frame. Break/continue inside the body resolve to these.
-func (a *analyzer) pushLoop(header, exit expr.BlockID) {
-	f := a.frames[len(a.frames)-1]
-	f.loops = append(f.loops, loop{header: header, exit: exit})
-}
-
-// popLoop drops the innermost loop from the current frame.
-func (a *analyzer) popLoop() {
-	f := a.frames[len(a.frames)-1]
-	f.loops = f.loops[:len(f.loops)-1]
-}
-
-// currentLoop returns the innermost loop on the current frame, or (loop{},
-// false) if the frame has no enclosing loop. break/continue inside a
-// closure do not see loops in outer frames.
-func (a *analyzer) currentLoop() (loop, bool) {
-	f := a.frames[len(a.frames)-1]
-	if len(f.loops) == 0 {
-		return loop{}, false
-	}
-	return f.loops[len(f.loops)-1], true
-}
-
-// loop describes an enclosing loop's targets for break/continue jumps.
-type loop struct {
-	header expr.BlockID // continue target
-	exit   expr.BlockID // break target
 }
 
 // emitError emits an [expr.Error] instruction at the current insertion
@@ -208,10 +229,30 @@ func (a *analyzer) emitError(span syntax.Span, msg string, hints ...string) expr
 	return a.b.Error(span, msg, expr.NoRef, hints...)
 }
 
-// emitSyntaxError adopts a parser/scanner [*syntax.Error] node from the CST
-// into the IR.
+// emitSyntaxError adopts a parser/scanner [*syntax.Error] node from the CST:
+// it records the diagnostic in [analyzer.parseErrors] — the single reporting
+// channel for parse errors, surfaced by eval whether or not the containing
+// code runs — and emits a poison [expr.Error] whose value propagates through
+// enclosing computations without being reported again.
 func (a *analyzer) emitSyntaxError(e *syntax.Error) expr.Ref {
-	return a.b.Error(e.Span(), e.Error(), expr.NoRef, e.Hints()...)
+	a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: e.Hints()})
+	return a.b.SyntaxError(e.Span(), e.Error(), e.Hints()...)
+}
+
+// adoptParseErrors records every [*syntax.Error] in n's subtree in
+// [analyzer.parseErrors] without emitting IR. Used for statements skipped
+// after a pending escape: they can never execute, but their parse errors are
+// diagnostics on the source, not on a code path, and must still surface.
+func (a *analyzer) adoptParseErrors(n syntax.Node) {
+	if e, ok := n.(*syntax.Error); ok {
+		a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: e.Hints()})
+		return
+	}
+	if inner, ok := n.(*syntax.Inner); ok {
+		for _, c := range inner.Children() {
+			a.adoptParseErrors(c)
+		}
+	}
 }
 
 // Scope ///////////////////////////////////////////////////////////////////////

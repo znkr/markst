@@ -321,7 +321,7 @@ v in iter {}
 │   b0:
 │     v0 = make_array [1, 2, 3]
 │     v1 = iter_open v0
-│     v2 = loop_acc_begin
+│     v2 = join_begin
 │     jump b1(v2)
 │   b1(v7):
 │     v3 = iter_has_next v1
@@ -330,15 +330,15 @@ v in iter {}
 │     v4 = iter_advance v1
 │     v5 = make_closure $fn_0
 │     v6 = call v5()
-│     v8 = loop_acc_add v7, v6
+│     v8 = join_add v7, v6
 │     jump b1(v8)
 │   b3:
-│     v9 = loop_acc_result v7
+│     v9 = join_result v7
 │     return v9
 │ 
 │ fn $fn_0 name="f":
 │   b0:
-│     v0 = error msg="break outside of loop"
+│     v0 = error msg="cannot break outside of loop"
 │     return v0
 
 --- continue-in-closure-inside-loop ---
@@ -353,7 +353,7 @@ v in iter {}
 │   b0:
 │     v0 = make_array [1, 2, 3]
 │     v1 = iter_open v0
-│     v2 = loop_acc_begin
+│     v2 = join_begin
 │     jump b1(v2)
 │   b1(v7):
 │     v3 = iter_has_next v1
@@ -362,15 +362,15 @@ v in iter {}
 │     v4 = iter_advance v1
 │     v5 = make_closure $fn_0
 │     v6 = call v5()
-│     v8 = loop_acc_add v7, v6
+│     v8 = join_add v7, v6
 │     jump b1(v8)
 │   b3:
-│     v9 = loop_acc_result v7
+│     v9 = join_result v7
 │     return v9
 │ 
 │ fn $fn_0 name="f":
 │   b0:
-│     v0 = error msg="continue outside of loop"
+│     v0 = error msg="cannot continue outside of loop"
 │     return v0
 
 --- destructuring-assign-invalid-lvalue ---

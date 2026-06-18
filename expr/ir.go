@@ -40,6 +40,12 @@ type Module struct {
 	Top       *Function     // the document body
 	Functions []*Function   // closures, indexed by FuncID
 	Constants []value.Value // module-wide constant pool, indexed by ModConstID
+
+	// ParseErrors are syntax errors lowered from the tree, collected so they
+	// surface regardless of whether their containing function is ever executed
+	// (parse errors are diagnostics on the source, not on a code path). Eval
+	// records them up front; any that also fire at runtime are deduplicated.
+	ParseErrors []*value.Error
 }
 
 // FuncID indexes [Module.Functions]. It is used in MakeClosure-style

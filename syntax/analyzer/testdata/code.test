@@ -638,15 +638,15 @@
 #{ while x { y } }
 │ fn $top:
 │   b0:
-│     v0 = loop_acc_begin
+│     v0 = join_begin
 │     jump b1(v0)
 │   b1(v1):
 │     branch none, b2, b3
 │   b2:
-│     v2 = loop_acc_add v1, none
+│     v2 = join_add v1, none
 │     jump b1(v2)
 │   b3:
-│     v3 = loop_acc_result v1
+│     v3 = join_result v1
 │     return v3
 
 --- for-loop ---
@@ -655,17 +655,17 @@
 │ fn $top:
 │   b0:
 │     v0 = iter_open none
-│     v1 = loop_acc_begin
+│     v1 = join_begin
 │     jump b1(v1)
 │   b1(v4):
 │     v2 = iter_has_next v0
 │     branch v2, b2, b3
 │   b2:
 │     v3 = iter_advance v0
-│     v5 = loop_acc_add v4, v3
+│     v5 = join_add v4, v3
 │     jump b1(v5)
 │   b3:
-│     v6 = loop_acc_result v4
+│     v6 = join_result v4
 │     return v6
 
 --- for-loop-with-pattern ---
@@ -674,7 +674,7 @@
 │ fn $top:
 │   b0:
 │     v0 = iter_open none
-│     v1 = loop_acc_begin
+│     v1 = join_begin
 │     jump b1(v1)
 │   b1(v7):
 │     v2 = iter_has_next v0
@@ -684,45 +684,96 @@
 │     v4 = destruct_array v3, before=2, after=0
 │     v5 = array_elem v4[0]
 │     v6 = array_elem v4[1]
-│     v8 = loop_acc_add v7, v5
+│     v8 = join_add v7, v5
 │     jump b1(v8)
 │   b3:
-│     v9 = loop_acc_result v7
+│     v9 = join_result v7
 │     return v9
 
 --- break ---
 #{ while true { break } }
 │ fn $top:
 │   b0:
-│     v0 = loop_acc_begin
+│     v0 = join_begin
 │     jump b1(v0)
-│   b1(v2):
-│     branch true, b2, b3
+│   b1(v1):
+│     branch true, b2, b3(v1)
 │   b2:
-│     jump b3
-│   b3:
-│     v3 = loop_acc_result v2
-│     return v3
+│     v2 = join_add v1, none
+│     jump b3(v2)
+│   b3(v4):
+│     v5 = join_result v4
+│     return v5
 │   b4:
-│     v1 = loop_acc_add <noref>, none
-│     jump b1(v1)
+│     v3 = join_add <noref>, none
+│     jump b1(v3)
 
 --- continue ---
 #{ while true { continue } }
 │ fn $top:
 │   b0:
-│     v0 = loop_acc_begin
+│     v0 = join_begin
 │     jump b1(v0)
-│   b1(v2):
+│   b1(v1):
 │     branch true, b2, b3
 │   b2:
+│     v2 = join_add v1, none
 │     jump b1(v2)
 │   b3:
-│     v3 = loop_acc_result v2
-│     return v3
+│     v4 = join_result v1
+│     return v4
 │   b4:
-│     v1 = loop_acc_add <noref>, none
-│     jump b1(v1)
+│     v3 = join_add <noref>, none
+│     jump b1(v3)
+
+--- break-join-nested-block ---
+// Break inside a nested block flushes the loop body's items and the nested
+// block's items as one folded join (a single join_add), not one per scope.
+#{ while true { 1; { 2; break } } }
+│ fn $top:
+│   b0:
+│     v0 = join_begin
+│     jump b1(v0)
+│   b1(v3):
+│     branch true, b2, b3(v3)
+│   b2:
+│     v1 = code_join [2]
+│     v2 = code_join [1, v1]
+│     v4 = join_add v3, v2
+│     jump b3(v4)
+│   b3(v6):
+│     v7 = join_result v6
+│     return v7
+│   b4:
+│     v5 = join_add <noref>, v2
+│     jump b1(v5)
+
+--- break-join-content-block ---
+// Same fold in content mode: the markup item and the nested code block's value
+// combine into one content_result before the single join_add.
+#for _ in range(1) [a#{ 1; break }]
+│ fn $top:
+│   b0:
+│     v0 = call <function range>(1)
+│     v1 = iter_open v0
+│     v2 = join_begin
+│     jump b1(v2)
+│   b1(v8):
+│     v3 = iter_has_next v1
+│     branch v3, b2, b3(v8)
+│   b2:
+│     v4 = iter_advance v1
+│     v5 = const text "a"
+│     v6 = code_join [1]
+│     v7 = content_result [v5, v6]
+│     v9 = join_add v8, v7
+│     jump b3(v9)
+│   b3(v11):
+│     v12 = join_result v11
+│     return v12
+│   b4:
+│     v10 = join_add <noref>, v7
+│     jump b1(v10)
 
 --- return-with-value ---
 #{ let f() = { return 1 } }
@@ -746,9 +797,28 @@
 │ 
 │ fn $fn_0 name="f":
 │   b0:
-│     return
+│     return none
 │   b1:
 │     return none
+
+--- return-discard-check ---
+// An explicit `return` that throws away a non-empty content prefix in a code
+// body emits a discard_check over the discarded join, so eval can warn.
+#{ let f() = { [x]; return 1 } }
+│ fn $top:
+│   b0:
+│     v0 = make_closure $fn_0
+│     return none
+│ 
+│ fn $fn_0 name="f":
+│   b0:
+│     v0 = const text "x"
+│     v1 = content_result [v0]
+│     v2 = code_join [v1]
+│     discard_check v2
+│     return 1
+│   b1:
+│     return v2
 
 --- include ---
 #{ include "other.typ" }

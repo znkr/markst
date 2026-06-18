@@ -322,4 +322,3 @@ func (pc *patternCtx) compileDictDestructure(n syntax.Node, rhs expr.Ref, items 
 		}
 	}
 }
-

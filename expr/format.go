@@ -266,12 +266,12 @@ func (f *formatter) formatInst(inst Instruction) {
 			sb.WriteString(f.ref(r))
 		}
 		sb.WriteString("]")
-	case *LoopAccBegin:
-		sb.WriteString("loop_acc_begin")
-	case *LoopAccAdd:
-		fmt.Fprintf(sb, "loop_acc_add %s, %s", f.ref(i.Acc), f.ref(i.Item))
-	case *LoopAccResult:
-		fmt.Fprintf(sb, "loop_acc_result %s", f.ref(i.Acc))
+	case *JoinBegin:
+		sb.WriteString("join_begin")
+	case *JoinAdd:
+		fmt.Fprintf(sb, "join_add %s, %s", f.ref(i.Acc), f.ref(i.Item))
+	case *JoinResult:
+		fmt.Fprintf(sb, "join_result %s", f.ref(i.Acc))
 	case *Heading:
 		fmt.Fprintf(sb, "heading level=%d %s", i.Level, f.ref(i.Body))
 	case *Strong:
@@ -303,6 +303,8 @@ func (f *formatter) formatInst(inst Instruction) {
 			fmt.Fprintf(sb, " %s", f.ref(i.Selector))
 		}
 		fmt.Fprintf(sb, ": %s", f.ref(i.Transform))
+	case *DiscardCheck:
+		fmt.Fprintf(sb, "discard_check %s", f.ref(i.Value))
 	case *Contextual:
 		fmt.Fprintf(sb, "contextual %s", f.ref(i.Body))
 	case *ModuleInclude:
