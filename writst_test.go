@@ -2,14 +2,18 @@ package writst_test
 
 import (
 	"flag"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"znkr.io/diff/textdiff"
 	"znkr.io/writst/eval"
+	"znkr.io/writst/expr"
 	"znkr.io/writst/internal/errcmp"
 	"znkr.io/writst/internal/testfile"
 	"znkr.io/writst/name"
+	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/analyzer"
 	"znkr.io/writst/syntax/parser"
 	"znkr.io/writst/types"
@@ -38,6 +42,8 @@ func TestWritst(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
+					var mod *expr.Module
+
 					bindings := map[name.Name]value.Value{
 						name.Make("test"): &value.Function{
 							Name:       "test",
@@ -45,8 +51,7 @@ func TestWritst(t *testing.T) {
 							F: func(fcc *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 								got, want := args[0], args[1]
 								if !value.Equal(got, want) {
-									call := tc.Input[fcc.Span.Start:fcc.Span.End]
-									t.Errorf("test failure: %s\n\n\twant: %s\t got: %s", call, value.FormatValue(want), value.FormatValue(got))
+									t.Errorf("%s", formatTestFailure(tc.Input, fcc.Span, mod, want, got))
 								}
 								return value.None{}, nil
 							},
@@ -60,7 +65,7 @@ func TestWritst(t *testing.T) {
 					}
 
 					root := parser.Parse(tc.Input)
-					mod := analyzer.Analyze(root, analyzer.WithBindings(bindings))
+					mod = analyzer.Analyze(root, analyzer.WithBindings(bindings))
 					contents, warnings, errors := eval.Eval(mod)
 
 					if diff := errcmp.Diff(root, evalErrors(warnings, errors)); diff != "" {
@@ -85,6 +90,40 @@ func TestWritst(t *testing.T) {
 			}
 		})
 	}
+}
+
+// formatTestFailure renders a debugging report for a failed test(got, want)
+// call: the failing call, the full test input with the failing row highlighted,
+// the want/got values, and the SSA dump of the evaluated module.
+func formatTestFailure(input string, span syntax.Span, mod *expr.Module, want, got value.Value) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "test failure: %s\n\n", input[span.Start:span.End])
+	b.WriteString(highlightSource(input, span))
+	fmt.Fprintf(&b, "\nwant: %s\n got: %s\n",
+		strings.TrimRight(value.FormatValue(want), "\n"),
+		strings.TrimRight(value.FormatValue(got), "\n"))
+	fmt.Fprintf(&b, "\nIR:\n%s", expr.FormatModule(mod))
+	return b.String()
+}
+
+// highlightSource renders input with 1-based line numbers, marking every row
+// overlapped by span with a leading '>'.
+func highlightSource(input string, span syntax.Span) string {
+	var b strings.Builder
+	offset := uint32(0)
+	for i, line := range strings.SplitAfter(input, "\n") {
+		if line == "" {
+			break
+		}
+		end := offset + uint32(len(line))
+		marker := ' '
+		if span.Start < end && span.End > offset {
+			marker = '>'
+		}
+		fmt.Fprintf(&b, "%c %3d │ %s\n", marker, i+1, strings.TrimRight(line, "\n"))
+		offset = end
+	}
+	return b.String()
 }
 
 func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
