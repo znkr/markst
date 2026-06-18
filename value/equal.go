@@ -108,7 +108,26 @@ func (n Angle) Equal(other Value) bool {
 
 // Collections /////////////////////////////////////////////////////////////////
 
+// argumentsArrayEqual reports whether a positional-only arguments value equals
+// an array with the same elements (in order). An arguments value carrying named
+// arguments never equals an array.
+func argumentsArrayEqual(args *Arguments, arr *Array) bool {
+	if args.Named.Len() != 0 || len(args.Positional) != len(arr.Elems) {
+		return false
+	}
+	for i := range args.Positional {
+		x, y := promote(syntax.Eq, args.Positional[i], arr.Elems[i])
+		if !x.Equal(y) {
+			return false
+		}
+	}
+	return true
+}
+
 func (n *Array) Equal(other Value) bool {
+	if a, ok := other.(*Arguments); ok {
+		return argumentsArrayEqual(a, n)
+	}
 	o, ok := other.(*Array)
 	if !ok || len(n.Elems) != len(o.Elems) {
 		return false
@@ -148,6 +167,12 @@ func (n *Function) Equal(other Value) bool {
 }
 
 func (n *Arguments) Equal(other Value) bool {
+	// A positional-only arguments value compares equal to an array of the same
+	// values (matching Typst, where e.g. a closure's `..sink` — itself an
+	// arguments value — tests equal to the array of captured positionals).
+	if a, ok := other.(*Array); ok {
+		return argumentsArrayEqual(n, a)
+	}
 	o, ok := other.(*Arguments)
 	if !ok {
 		return false

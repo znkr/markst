@@ -153,7 +153,7 @@
 }
 #f()
 
---- closure-capture-mut-false-positive (skip: symbol not implemented yet) ---
+--- closure-capture-mut-false-positive (skip: handled correctly by writst) ---
 // Test the closure capture error on a non-mutating field call.
 #let sx = symbol("p", ("push", sym.tilde))
 #let f() = {
@@ -176,7 +176,7 @@
   test(greet("Typst", whatever: 10))
 }
 
---- closure-args-sink (skip: destructuring not yet implemented) ---
+--- closure-args-sink ---
 // Parameter unpacking.
 #let f((a, b), ..c) = (a, b, c)
 #test(f((1, 2), 3, 4), (1, 2, (3, 4)))
