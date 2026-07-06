@@ -104,6 +104,11 @@ type TermItem struct {
 	Label       *Label
 }
 
+type Table struct {
+	Children []Content `writst:"required"`
+	Label    *Label
+}
+
 func (*Sequence) aValue()  {}
 func (*Heading) aValue()   {}
 func (*Text) aValue()      {}
@@ -120,6 +125,7 @@ func (*Enum) aValue()      {}
 func (*EnumItem) aValue()  {}
 func (*Terms) aValue()     {}
 func (*TermItem) aValue()  {}
+func (*Table) aValue()     {}
 
 func (Sequence) aContent()   {}
 func (*Heading) aContent()   {}
@@ -137,6 +143,7 @@ func (*Enum) aContent()      {}
 func (*EnumItem) aContent()  {}
 func (*Terms) aContent()     {}
 func (*TermItem) aContent()  {}
+func (*Table) aContent()     {}
 
 func (Sequence) Type() types.Type   { return types.Content }
 func (*Heading) Type() types.Type   { return types.Content }
@@ -154,3 +161,4 @@ func (*Enum) Type() types.Type      { return types.Content }
 func (*EnumItem) Type() types.Type  { return types.Content }
 func (*Terms) Type() types.Type     { return types.Content }
 func (*TermItem) Type() types.Type  { return types.Content }
+func (*Table) Type() types.Type     { return types.Content }

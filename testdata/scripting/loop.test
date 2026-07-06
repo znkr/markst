@@ -145,7 +145,7 @@
   [Not happening]
 }
 
---- loop-break-join-in-first-arg (skip: table is not implemented yet) ---
+--- loop-break-join-in-first-arg ---
 // Test second block during break flow.
 
 #for i in range(10) {
@@ -154,6 +154,13 @@
     for _ in range(3) [B]
   )
 }
+│ #parbreak()
+│ #table(
+│   #text("A"),
+│   #text("B")
+│   #text("B")
+│   #text("B"),
+│ )
 
 --- loop-break-join-in-first-arg-strings ---
 // Test that the second argument is evaluated during break flow.

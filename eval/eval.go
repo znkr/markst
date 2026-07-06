@@ -429,9 +429,12 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.FieldWrite:
 		fr.evalFieldWrite(i)
 	case *expr.DiscardCheck:
-		if _, ok := fr.get(i.Value).(value.Content); ok {
-			fr.warn(i.Span(), "this return unconditionally discards the content before it",
-				"try omitting the `return` to automatically join all values")
+		if c, ok := fr.get(i.Value).(value.Content); ok {
+			hints := []string{"try omitting the `return` to automatically join all values"}
+			if containsStateUpdate(c) {
+				hints = append(hints, "state/counter updates are content that must end up in the document to have an effect")
+			}
+			fr.warn(i.Span(), "this return unconditionally discards the content before it", hints...)
 		}
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
@@ -619,6 +622,23 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	default:
 		panic(fmt.Sprintf("ssa eval not implemented: %T", inst))
 	}
+}
+
+// containsStateUpdate reports whether content is, or (for a sequence)
+// transitively contains, a state update. Discarding such content is worth a
+// dedicated hint because the update silently has no effect.
+func containsStateUpdate(c value.Content) bool {
+	switch c := c.(type) {
+	case *value.StateUpdate:
+		return true
+	case *value.Sequence:
+		for _, child := range c.Children {
+			if containsStateUpdate(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // contentOf coerces a value to content. Returns (nil-content, error) when

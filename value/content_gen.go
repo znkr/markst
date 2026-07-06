@@ -522,6 +522,50 @@ func (n *Strong) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Table) Field(name name.Name) Value {
+	switch name {
+	case names.Children:
+		vs := make([]Value, len(n.Children))
+		for i, v := range n.Children {
+			vs[i] = v
+		}
+		return &Array{Elems: vs}
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Table) HasField(name name.Name) bool {
+	switch name {
+	case names.Children:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Table) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Table) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
 func (n *TermItem) Field(name name.Name) Value {
 	switch name {
 	case names.Term:

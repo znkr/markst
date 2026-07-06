@@ -331,6 +331,14 @@ func (n *TermItem) Format(f *formatter.Formatter) {
 	f.FuncCall("terms.item", nil, contentBlock{n.Term}, contentBlock{n.Description})
 }
 
+func (n *Table) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	for i := range n.Children {
+		args = append(args, formatter.PositionalArg(n.Children[i]))
+	}
+	f.FuncCall("table", args)
+}
+
 // Label ///////////////////////////////////////////////////////////////////////
 
 func (n *Label) Format(f *formatter.Formatter) {

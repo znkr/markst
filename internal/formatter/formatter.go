@@ -67,41 +67,56 @@ type Arg struct {
 func NamedArg(name string, v any) Arg { return Arg{name: name, value: v} }
 func PositionalArg(v any) Arg         { return Arg{positional: true, value: v} }
 
+// format writes the argument (with its `name: ` prefix, if named) to f.
+func (a Arg) format(f *Formatter) {
+	if !a.positional {
+		f.Str(a.name)
+		f.Str(": ")
+	}
+	switch v := a.value.(type) {
+	case Formattable:
+		v.Format(f)
+	case string:
+		f.Printf("%q", v)
+	default:
+		f.Print(v)
+	}
+}
+
 // FuncCall formats #name(args)[blocks...] for content nodes
 func (f *Formatter) FuncCall(name string, args []Arg, blocks ...Formattable) {
 	f.Prefix()
 	f.Str(name)
 	if len(args) > 0 {
-		inline := len(args) <= 2
-		f.Str("(")
-		if !inline {
-			f.indent++
-		}
+		// Pre-render each argument at the nested indent. An argument that spans
+		// multiple lines forces block layout so the nesting stays legible: the
+		// call breaks across lines and every continuation is indented one level.
+		rendered := make([]string, len(args))
+		multiline := false
 		for i, a := range args {
-			if !inline {
-				f.Linebreak()
+			sub := &Formatter{sb: new(strings.Builder), mode: f.mode, indent: f.indent + 1, inlineCode: f.inlineCode}
+			a.format(sub)
+			rendered[i] = sub.String()
+			if strings.Contains(rendered[i], "\n") {
+				multiline = true
 			}
-			if !a.positional {
-				f.Str(a.name)
-				f.Str(": ")
-			}
-			switch v := a.value.(type) {
-			case Formattable:
-				v.Format(f)
-			case string:
-				f.Printf("%q", v)
-			default:
-				f.Print(v)
-			}
-			if inline {
-				if i < len(args)-1 {
+		}
+		inline := len(args) <= 2 && !multiline
+		f.Str("(")
+		if inline {
+			for i, s := range rendered {
+				if i > 0 {
 					f.Str(", ")
 				}
-			} else {
+				f.Str(s)
+			}
+		} else {
+			f.indent++
+			for _, s := range rendered {
+				f.Linebreak()
+				f.Str(s)
 				f.Str(",")
 			}
-		}
-		if !inline {
 			f.indent--
 			f.Linebreak()
 		}

@@ -162,7 +162,7 @@
 │ #text("Hello")
 │ #text("rest")
 
---- return-discard-state (skip: state is not implemented yet) ---
+--- return-discard-state ---
 // Test that discarding a joined content with state is special warning
 
 #let f() = {
@@ -175,8 +175,10 @@
 }
 
 #test(f(), [ Hello ])
+│ #parbreak()
+│ #parbreak()
 
---- return-discard-loop (skip: state is not implemented yet) ---
+--- return-discard-loop ---
 // Test that return from within a control flow construct is not a warning.
 #let f1() = {
   state("hello").update("world")
@@ -195,8 +197,10 @@
 
 #test(f1(), "nope1")
 #test(f2(), "nope2")
+│ #parbreak()
+│ #parbreak()
 
---- return-no-discard (skip: state is not implemented yet) ---
+--- return-no-discard ---
 // Test that returning the joined content is not a warning.
 #let f() = {
   state("hello").update("world")
@@ -204,6 +208,7 @@
 }
 
 #test(f(), state("hello").update("world"))
+│ #parbreak()
 
 --- return-discard-not-content ---
 // Test that non-content joined value is not a warning.

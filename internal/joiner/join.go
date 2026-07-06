@@ -134,7 +134,15 @@ func (j *contentJoiner) Add(v value.Value) error {
 	j.content = append(j.content, c)
 	return nil
 }
-func (j *contentJoiner) Result() value.Value { return &value.Sequence{Children: j.content} }
+func (j *contentJoiner) Result() value.Value {
+	// Joining folds with `+` starting from `none`, so `none + x == x`: a single
+	// content element joins to itself, not a one-element sequence. This keeps a
+	// joined single content equal to the bare content (matching Typst).
+	if len(j.content) == 1 {
+		return j.content[0]
+	}
+	return &value.Sequence{Children: j.content}
+}
 
 type arrayJoiner struct {
 	values []value.Value

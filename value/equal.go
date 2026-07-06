@@ -317,3 +317,16 @@ func (n *TermItem) Equal(other Value) bool {
 	o, ok := other.(*TermItem)
 	return ok && n.Term.Equal(o.Term) && n.Description.Equal(o.Description) && labelEqual(n.Label, o.Label)
 }
+
+func (n *Table) Equal(other Value) bool {
+	o, ok := other.(*Table)
+	if !ok || len(n.Children) != len(o.Children) || !labelEqual(n.Label, o.Label) {
+		return false
+	}
+	for i := range n.Children {
+		if !n.Children[i].Equal(o.Children[i]) {
+			return false
+		}
+	}
+	return true
+}

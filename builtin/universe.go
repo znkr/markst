@@ -35,9 +35,11 @@ var stdDef = value.SimpleModuleDef{
 	names.Ratio:     reflectedTypes[types.Ratio],
 	names.Relative:  reflectedTypes[types.Relative],
 	names.Repr:      Repr,
+	names.State:     State,
 	names.Str:       reflectedTypes[types.Str],
 	names.Sym:       Sym,
 	names.Symbol:    Symbol,
+	names.Table:     Table,
 	names.Type:      reflectedTypes[types.ReflectedType],
 }
 
@@ -101,6 +103,7 @@ var reflectedTypes = [...]*value.Type{
 		Reflected:   types.Label,
 		Constructor: Label,
 	},
+	types.State: {Reflected: types.State},
 }
 
 // TypeFields maps each type to its available methods and fields. When a field
@@ -184,4 +187,7 @@ var TypeFields = [...]map[name.Name]value.Value{
 		names.Pos:    ArgumentsPos,
 	},
 	types.Content: {},
+	types.State: {
+		names.Update: StateUpdate,
+	},
 }
