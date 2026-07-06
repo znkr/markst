@@ -30,6 +30,7 @@ var (
 	Dest        = name.Make("dest")
 	Digits      = name.Make("digits")
 	Emoji       = name.Make("emoji")
+	Emph        = name.Make("emph")
 	Endian      = name.Make("endian")
 	Enumerate   = name.Make("enumerate")
 	Eq          = name.Make("eq")

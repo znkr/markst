@@ -49,7 +49,7 @@
 │ #parbreak()
 │ #parbreak()
 
---- return-in-nested-content-block (skip: emph is not implemented yet) ---
+--- return-in-nested-content-block ---
 // Test return with joining and content.
 
 #let f(text, caption: none) = {
@@ -63,6 +63,15 @@
 #f(caption: [with caption])[My figure]
 
 #f[My other figure]
+│ #parbreak()
+│ #parbreak()
+│ #text("My figure")
+│ #text(",")
+│ #emph[#text("with caption")]
+│ #text(".")
+│ #parbreak()
+│ #text("My other figure")
+│ #text(".")
 
 --- return-outside-of-function ---
 // Test return outside of function.

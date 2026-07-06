@@ -24,6 +24,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Content:   reflectedTypes[types.Content],
 	names.Decimal:   reflectedTypes[types.Decimal],
 	names.Emoji:     Emoji,
+	names.Emph:      Emph,
 	names.Float:     reflectedTypes[types.Float],
 	names.Fraction:  reflectedTypes[types.Fraction],
 	names.Function:  reflectedTypes[types.Function],
