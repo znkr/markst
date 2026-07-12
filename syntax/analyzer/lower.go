@@ -683,20 +683,6 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 	return a.b.MakeDict(n.Span(), entries)
 }
 
-// peekAfterEq returns the kind of the first non-trivia node after the `=` at
-// the cursor's current position, or [syntax.KindNone] if none exists. The
-// cursor is left untouched.
-func peekAfterEq(ns *nodes) syntax.Kind {
-	for i := ns.pos + 1; i < len(ns.items); i++ {
-		k := ns.items[i].Kind()
-		if k == syntax.KindSpace || k == syntax.KindLineComment || k == syntax.KindBlockComment {
-			continue
-		}
-		return k
-	}
-	return syntax.KindNone
-}
-
 // peekLeafText returns the text of the current node if it is a *syntax.Leaf.
 // Used to peek at string-literal keys for compile-time duplicate detection
 // without consuming the node.
@@ -813,17 +799,12 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		// but with no pattern there's nothing meaningful to do with the value.
 		return expr.NoRef
 	}
-	// `let f = (..) => body` form: pass f as the recursion name so the body
-	// can refer to itself via a self binding.
-	if patternNode.Kind() == syntax.KindIdent && ns.at(syntax.KindEq) && peekAfterEq(ns) == syntax.KindClosure {
-		recName := name.Make(a.leaf(patternNode, syntax.KindIdent))
-		ns.node() // consume eq
-		closureNode := ns.node()
-		rhs := a.lowerClosureNamed(closureNode, recName)
-		v := a.allocVar(recName)
-		a.b.WriteVar(v, a.b.CurrentBlock(), rhs)
-		return expr.NoRef
-	}
+	// Note: `let f = (..) => body` (an anonymous closure bound to a name) is
+	// deliberately *not* self-referential — unlike the `let f(..) = body`
+	// function-shorthand form. Inside the body, `f` resolves to the outer
+	// binding (or is unknown), because the new binding is not yet in scope
+	// within its own initializer. It falls through to the normal destructuring
+	// path below and is lowered as a plain anonymous closure.
 	var rhs expr.Ref
 	if ns.at(syntax.KindEq) {
 		ns.node() // consume eq
@@ -1209,11 +1190,12 @@ func (a *analyzer) lowerClosure(n syntax.Node) expr.Ref {
 	return a.lowerClosureNamed(n, name.Invalid)
 }
 
-// lowerClosureNamed lowers a closure literal. recName, when non-invalid, is
-// the let-binding name wrapping this closure (e.g. `f` in `let f = ...` or
-// `let f(x) = ...`). It is bound inside the closure body to a self-reference Ref
-// reference, so direct recursion needs no capture, and is used as the
-// function's display name.
+// lowerClosureNamed lowers a closure literal. recName, when non-invalid, is the
+// closure's name and is bound inside the body as a self-reference Ref (so direct
+// recursion needs no capture) and used as the function's display name. It is set
+// only for the `let f(x) = body` function-shorthand form, where `f` is in scope
+// within its own body — not for `let f = (x) => body`, where the body's `f`
+// resolves to the outer binding and the closure is anonymous.
 func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref {
 	// Emit any structural parser errors (e.g. missing `=`, missing body)
 	// at the OUTER block first. Errors deep inside the closure's body live
@@ -1401,7 +1383,7 @@ func (a *analyzer) collectClosureParamSpecs(n syntax.Node) []closureParamSpec {
 		}
 		if s.kind == expr.ParamSink {
 			if sawSink {
-				a.emitError(s.span, "only one arguments sink is allowed")
+				a.emitError(s.span, "only one argument sink is allowed")
 			}
 			sawSink = true
 		}

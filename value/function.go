@@ -152,44 +152,27 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	if sinkIdx < 0 && m > len(n.Positional) {
 		return nil, nil, ArgErrorPosf(len(n.Positional), "unexpected argument")
 	}
-	if sinkIdx >= 0 && m < nonSinkParamCount {
-		// Not enough args to fill required non-sink params.
-		// The detailed "missing argument" error is raised by Apply when mapping has -2 slots.
-	}
+	// When there are too few args to fill the required non-sink params, the
+	// detailed "missing argument" error is raised by Apply for the unfilled
+	// (-2) slots.
 
 	mapping := slices.Repeat([]int{-2}, len(n.Positional))
 	if sinkIdx >= 0 {
 		mapping[sinkIdx] = -3 // sentinel: handled by Apply
 	}
 
-	// Post-sink params consume from the back of args.
-	postSinkArgStart := m - len(postSink)
-	if postSinkArgStart < 0 {
-		postSinkArgStart = m
-	}
-	for i, p := range postSink {
-		argIdx := postSinkArgStart + i
-		if argIdx >= m {
-			if p.Default != nil {
-				mapping[postSinkSlots[i]] = -1
-			}
-			continue
-		}
-		if !p.Type.Contains(merged.Positional[argIdx].Type()) {
-			err := ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
-			hintDecimal(err, merged.Positional[argIdx].Type(), p.Type)
-			return nil, nil, err
-		}
-		mapping[postSinkSlots[i]] = argIdx
+	// Positional args are consumed strictly front-to-back: pre-sink params
+	// first, then the sink absorbs the surplus (args beyond all non-sink
+	// params), then post-sink params. When there are too few args, the
+	// trailing post-sink params are the ones left unfilled.
+	sinkSize := 0
+	if sinkIdx >= 0 {
+		sinkSize = max(0, m-nonSinkParamCount)
 	}
 
 	// Pre-sink params consume from the front, using the existing type-matching
-	// algorithm. Available args for pre-sink are [0, postSinkArgStart).
-	preSinkArgEnd := postSinkArgStart
-	if sinkIdx < 0 {
-		preSinkArgEnd = m
-	}
-	preSinkArgCount := min(preSinkArgEnd, len(preSink))
+	// algorithm.
+	preSinkArgCount := min(m, len(preSink))
 
 	lo := 0
 	reqRemaining := 0
@@ -231,6 +214,25 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 		if preSink[i].Default != nil {
 			mapping[preSinkSlots[i]] = -1
 		}
+	}
+
+	// Post-sink params consume from the front, continuing after the args taken
+	// by the pre-sink params and the sink.
+	postSinkArgStart := preSinkArgCount + sinkSize
+	for i, p := range postSink {
+		argIdx := postSinkArgStart + i
+		if argIdx >= m {
+			if p.Default != nil {
+				mapping[postSinkSlots[i]] = -1
+			}
+			continue
+		}
+		if !p.Type.Contains(merged.Positional[argIdx].Type()) {
+			err := ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
+			hintDecimal(err, merged.Positional[argIdx].Type(), p.Type)
+			return nil, nil, err
+		}
+		mapping[postSinkSlots[i]] = argIdx
 	}
 
 	// Validate named args.
@@ -282,7 +284,13 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 		case -3:
 			// Sink slot — filled below.
 		case -2:
-			return nil, fmt.Errorf("missing argument: %s", n.Positional[i].Name)
+			// An anonymous positional param (underscore or destructuring
+			// pattern) is named "_"; report it as a pattern parameter.
+			pname := n.Positional[i].Name
+			if pname == "_" {
+				pname = "pattern parameter"
+			}
+			return nil, fmt.Errorf("missing argument: %s", pname)
 		case -1:
 			pos[i] = n.Positional[i].Default
 		default:

@@ -32,13 +32,6 @@
   test(fact(5), 120)
 }
 
---- closure-recursion-let-eq ---
-// Direct recursion via `let f = (n) => ...` form.
-#{
-  let fact = (n) => if n == 0 { 1 } else { n * fact(n - 1) }
-  test(fact(6), 720)
-}
-
 --- closure-recursion-via-nested-closure ---
 // Inner anonymous closure references its enclosing let-bound name.
 #{

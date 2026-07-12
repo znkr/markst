@@ -54,6 +54,11 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	return
 }
 
+// maxCallDepth bounds the number of nested user-closure calls before
+// evaluation aborts with "maximum function call depth exceeded", guarding the
+// Go stack against unbounded recursion (e.g. `let rec(n) = rec(n) + 1`).
+const maxCallDepth = 64
+
 // session is the [Eval]-wide state shared by every running SSA function: the
 // module being evaluated, the document-level label set, and the accumulated
 // warning list. Each [frame] holds a back-pointer to its session so eval
@@ -61,6 +66,11 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 type session struct {
 	mod    *expr.Module
 	labels map[name.Name]struct{}
+
+	// callDepth counts the number of user-closure calls currently on the stack.
+	// Incremented on entry to a closure in [frame.evalCall] and decremented on
+	// return; when it would exceed [maxCallDepth] the call is refused.
+	callDepth int
 
 	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
@@ -1104,6 +1114,17 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 				"use a string in the decimal constructor to avoid loss of precision: `decimal(\""+f.String()+"\")`",
 			)
 		}
+	}
+
+	// Guard the Go stack against unbounded user-closure recursion. Only
+	// closures count toward the depth (matching where the runtime actually
+	// recurses); built-ins do not nest evaluation this way.
+	if fn.Closure {
+		if fr.s.callDepth >= maxCallDepth {
+			return fr.error(fr.span(c.Result()), "maximum function call depth exceeded")
+		}
+		fr.s.callDepth++
+		defer func() { fr.s.callDepth-- }()
 	}
 
 	fcc := value.FunctionCallContext{Span: fr.span(c.Result())}

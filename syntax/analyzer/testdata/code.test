@@ -485,11 +485,11 @@
 │     v3 = code_join [v2]
 │     return v3
 │ 
-│ fn $fn_0 name="f":
+│ fn $fn_0:
 │   b0:
 │     return 1
 │ 
-│ fn $fn_1 name="g":
+│ fn $fn_1:
 │   b0:
 │     return 2
 
