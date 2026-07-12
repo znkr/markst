@@ -432,6 +432,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.vals[r] = dict
 	case *expr.FieldRead:
 		fr.vals[r] = fr.evalFieldRead(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan)
+	case *expr.MethodField:
+		fr.vals[r] = fr.evalMethodField(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan, i.TargetText)
 	case *expr.Call:
 		fr.vals[r] = fr.evalCall(i)
 	case *expr.CallSet:
@@ -931,6 +933,103 @@ func dictExcluding(d *value.Dict, exclude []name.Name) *value.Dict {
 	return out
 }
 
+// evalMethodField resolves the callee of a method call `target.method(...)`. It
+// applies method-call error semantics: dictionary keys cannot be called
+// directly, and a missing field on a content element or a method-bearing type
+// is reported as a missing method rather than a missing field. targetText is the
+// source text of the target expression, used to build the dictionary-key hints.
+func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fieldSpan syntax.Span, targetText string) value.Value {
+	// Symbols, modules, and reflected types resolve identically to a plain
+	// field read (a symbol modifier or module definition is legitimately
+	// callable; a type's method table is the same).
+	switch t := target.(type) {
+	case *value.Type:
+		ms := builtin.TypeFields[t.Reflected]
+		f := ms[fname]
+		if f == nil {
+			return fr.errorf(span, "type %s has no method `%s`", t.Reflected, fname.String())
+		}
+		return f
+	case *value.Symbol:
+		nsym, ok := t.Resolve(fname)
+		if !ok {
+			return fr.errorf(fieldSpan, "unknown symbol modifier")
+		}
+		return nsym
+	case *value.Module:
+		v := t.Def.Get(fname)
+		if v == nil {
+			return fr.errorf(fieldSpan, "module %s has no definition `%s`", t.Name, fname.String())
+		}
+		return v
+	}
+	// A built-in method always wins over a same-named dictionary key or content
+	// field, and is dispatched by binding the receiver as the first argument.
+	if f := builtin.TypeFields[target.Type()][fname]; f != nil {
+		switch f := f.(type) {
+		case *value.Function:
+			fn, err := f.With(&value.Arguments{Positional: []value.Value{target}})
+			if err != nil {
+				if fcerr, ok := err.(*value.FunctionCallError); ok {
+					return fr.error(fieldSpan, fcerr.Msg, fcerr.Hints...)
+				}
+				return fr.error(fieldSpan, err.Error())
+			}
+			return fn
+		default:
+			return f
+		}
+	}
+	switch t := target.(type) {
+	case *value.Dict:
+		// A dictionary key is never directly callable via method syntax: the
+		// key could shadow a built-in method name. Steer the user to either
+		// call the stored value or read the key.
+		if val, ok := t.Elems.Get(value.Str(fname.String())); ok {
+			conflict := "dictionary keys cannot be used with method syntax as keys could conflict with built-in method names"
+			var hints []string
+			if _, isFunc := val.(*value.Function); isFunc {
+				hints = []string{
+					fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s.%s)(..)`", targetText, fname),
+					conflict,
+				}
+			} else {
+				hints = []string{
+					conflict,
+					fmt.Sprintf("to access the `%s` key, remove the function arguments: `%s.%s`", fname, targetText, fname),
+				}
+			}
+			return fr.error(span, "cannot directly call dictionary keys as functions", hints...)
+		}
+		return fr.errorf(span, "dictionary does not contain key %q", fname.String())
+	case value.Content:
+		name := t.Name()
+		if t.HasField(fname) {
+			// The field exists but holds a value, not a method — calling it
+			// with method syntax would be ambiguous.
+			return fr.error(span,
+				fmt.Sprintf("`%s` is not a valid method for element `%s`", fname, name),
+				fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s([], %s: x => x + 1).%s)(..)`", name, fname, fname))
+		}
+		return fr.errorf(span, "element %s has no method `%s`", name, fname.String())
+	case *value.Function:
+		if f, ok := t.Scope[fname]; ok {
+			return f
+		}
+		if t.Closure {
+			return fr.errorf(fieldSpan, "cannot access fields on user-defined functions")
+		}
+		return fr.errorf(fieldSpan, "function `%s` does not contain field `%s`", t.Name, fname.String())
+	}
+	// The field is neither a method nor a value-specific field. If the type has
+	// a method table at all, report the miss as an unknown method against the
+	// whole access; otherwise the type has no accessible fields.
+	if len(builtin.TypeFields[target.Type()]) > 0 {
+		return fr.errorf(span, "type %s has no method `%s`", target.Type(), fname.String())
+	}
+	return fr.errorf(fieldSpan, "cannot access fields on type %s", target.Type())
+}
+
 // evalFieldRead replicates the legacy FieldAccess.eval logic for SSA: type
 // methods, module definitions, dict keys, and content fields are all
 // supported. span covers the whole `target.field` expression and is used
@@ -942,7 +1041,7 @@ func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldS
 		ms := builtin.TypeFields[t.Reflected]
 		f := ms[fname]
 		if f == nil {
-			return fr.errorf(span, "type %s has no method `%s`", t.Reflected, fname.String())
+			return fr.errorf(span, "type %s has no field `%s`", t.Reflected, fname.String())
 		}
 		return f
 	case *value.Symbol:
@@ -995,10 +1094,10 @@ func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldS
 		return fr.errorf(fieldSpan, "function `%s` does not contain field `%s`", t.Name, fname.String())
 	}
 	// The field is neither a method nor a value-specific field. If the type has
-	// a method table at all, report the miss as an unknown method against the
+	// a method table at all, report the miss as an unknown field against the
 	// whole access; otherwise the type has no accessible fields.
 	if len(builtin.TypeFields[target.Type()]) > 0 {
-		return fr.errorf(span, "type %s has no method `%s`", target.Type(), fname.String())
+		return fr.errorf(span, "type %s has no field `%s`", target.Type(), fname.String())
 	}
 	return fr.errorf(fieldSpan, "cannot access fields on type %s", target.Type())
 }
@@ -1100,6 +1199,12 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 	if e != nil {
 		return e
 	}
+	// A mutating method (Impure) needs a mutable place to write back; a mutating
+	// call on a temporary is an error. Both mutating-ness and the receiver's
+	// place-ness are resolved here at runtime — see [expr.MutCheck].
+	if c.Mut != nil && fn.Impure && !fr.receiverIsPlace(c.Mut) {
+		return fr.error(c.Mut.RecvSpan, "cannot mutate a temporary value")
+	}
 	args, e := fr.buildCallArgs(fr.span(c.Result()), c.Args, c.Blocks)
 	if e != nil {
 		return e
@@ -1133,6 +1238,25 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		return fr.applyErr(fn, fr.span(c.Result()), c.Args, err)
 	}
 	return v
+}
+
+// receiverIsPlace reports whether a method call's receiver denotes a mutable
+// place. The receiver chain must root in a variable (not a temporary) and every
+// method link must resolve to an accessor — a method whose result is a mutable
+// place into its receiver ([value.Function.Accessor]). An empty accessor list
+// with RecvTemporary false is an unconditional place (a bare identifier or field
+// chain).
+func (fr *frame) receiverIsPlace(m *expr.MutCheck) bool {
+	if m.RecvTemporary {
+		return false
+	}
+	for _, aref := range m.RecvAccessors {
+		f, ok := fr.get(aref).(*value.Function)
+		if !ok || !f.Accessor {
+			return false
+		}
+	}
+	return true
 }
 
 // evalCallSet implements lvalue-style assignment to a function call (e.g.

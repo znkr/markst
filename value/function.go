@@ -45,6 +45,15 @@ type Function struct {
 	// The default — false — means the function is pure.
 	Impure bool
 
+	// Accessor marks a method whose result is a mutable place into its receiver
+	// rather than a fresh value — i.e. it registers a
+	// [FunctionCallContext.Setter] (array/dict `at`, `first`, `last`). A mutating
+	// method may be chained onto an accessor's result (`m.at(1).at(0).push(5)`)
+	// without hitting "cannot mutate a temporary value"; the method-call
+	// place check consults this flag on the resolved method rather than matching
+	// method names.
+	Accessor bool
+
 	// Scope holds associated functions reachable via field access on the
 	// function value itself (e.g. assert.eq). Only built-in functions populate
 	// it; it is nil for plain functions and user-defined closures.
@@ -111,9 +120,28 @@ func (n *Function) With(args *Arguments) (*Function, error) {
 		WithArgs:   merged,
 		F:          n.F,
 		Impure:     n.Impure,
+		Accessor:   n.Accessor,
 		Scope:      n.Scope,
 		Closure:    n.Closure,
 	}, nil
+}
+
+// callableAsFunction checks whether v satisfies a parameter of type pt,
+// coercing a type value to its constructor when the parameter expects a
+// function. A type is callable — invoking it runs its constructor — so passing
+// a callable type where a function is required (e.g. `array.map(str)`) binds the
+// type's constructor function, matching Typst. Returns the possibly-coerced
+// value and whether it satisfies pt.
+func callableAsFunction(pt types.Set, v Value) (Value, bool) {
+	if pt.Contains(v.Type()) {
+		return v, true
+	}
+	if pt.Contains(types.Function) {
+		if t, ok := v.(*Type); ok && t.Constructor != nil {
+			return t.Constructor, true
+		}
+	}
+	return v, false
 }
 
 // bind merges WithArgs with args, validates types and named arguments, and
@@ -191,7 +219,8 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			if preSink[slot].Default != nil && argsLeft <= reqRemaining {
 				continue
 			}
-			if preSink[slot].Type.Contains(arg.Type()) {
+			if coerced, ok := callableAsFunction(preSink[slot].Type, arg); ok {
+				merged.Positional[i] = coerced
 				for j := lo; j < slot; j++ {
 					mapping[preSinkSlots[j]] = -1
 				}
@@ -227,7 +256,9 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			}
 			continue
 		}
-		if !p.Type.Contains(merged.Positional[argIdx].Type()) {
+		if coerced, ok := callableAsFunction(p.Type, merged.Positional[argIdx]); ok {
+			merged.Positional[argIdx] = coerced
+		} else {
 			err := ArgErrorPosf(argIdx, "expected %s, found %s", p.Type, merged.Positional[argIdx].Type())
 			hintDecimal(err, merged.Positional[argIdx].Type(), p.Type)
 			return nil, nil, err
@@ -235,7 +266,13 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 		mapping[postSinkSlots[i]] = argIdx
 	}
 
-	// Validate named args.
+	// Validate named args. Callable-type coercions are collected and applied
+	// after the loop so the map isn't mutated mid-iteration.
+	type namedCoercion struct {
+		key name.Name
+		val Value
+	}
+	var namedCoercions []namedCoercion
 	for name, val := range merged.Named.All() {
 		if _, ok := n.Named[name]; !ok {
 			if sinkIdx < 0 {
@@ -251,9 +288,16 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			// When a sink exists, unknown named args go to the sink.
 			continue
 		}
-		if typ := val.Type(); !n.Named[name].Type.Contains(typ) {
-			return nil, nil, ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, typ)
+		coerced, ok := callableAsFunction(n.Named[name].Type, val)
+		if !ok {
+			return nil, nil, ArgErrorNamedf(name, "expected %s, found %s", n.Named[name].Type, val.Type())
 		}
+		if coerced != val {
+			namedCoercions = append(namedCoercions, namedCoercion{name, coerced})
+		}
+	}
+	for _, c := range namedCoercions {
+		merged.Named.Put(c.key, c.val)
 	}
 	return merged, mapping, nil
 }

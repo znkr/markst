@@ -562,7 +562,7 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 		}
 		fns := a.inner(leftNode, syntax.KindFuncCall)
 		calleeNode := fns.node()
-		callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
+		callee := expr.Callee{Ref: a.lowerCallee(calleeNode), Span: calleeNode.Span()}
 		args, blocks := a.lowerArgs(fns.node())
 		// Use the LHS span so runtime errors point at the call expression.
 		a.b.CallSet(leftNode.Span(), callee, args, blocks, newVal, op)
@@ -707,14 +707,136 @@ func (a *analyzer) lowerFieldAccess(n syntax.Node) expr.Ref {
 	return a.b.FieldRead(n.Span(), fieldNode.Span(), target, fieldName)
 }
 
+// lowerCallee lowers the callee of a call to its value Ref. A `target.method`
+// callee resolves with method-call semantics ([Builder.MethodField]) so a
+// missing member reports as a missing method rather than a missing field;
+// anything else is lowered as an ordinary value. The method-vs-field choice is
+// positional — it belongs to the caller that knows the field access sits in
+// callee position, not to [lowerExpr], which lowers a field access to a plain
+// field read in every value context.
+func (a *analyzer) lowerCallee(calleeNode syntax.Node) expr.Ref {
+	if calleeNode.Kind() != syntax.KindFieldAccess {
+		return a.lowerExpr(calleeNode)
+	}
+	ns := a.inner(calleeNode, syntax.KindFieldAccess)
+	targetNode := ns.node()
+	ns.take(syntax.KindDot)
+	fieldNode := ns.node()
+	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
+	return a.b.MethodField(calleeNode.Span(), fieldNode.Span(), a.lowerExpr(targetNode), method, targetNode.Text())
+}
+
 // Function calls //////////////////////////////////////////////////////////////
 
 func (a *analyzer) lowerFuncCall(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindFuncCall)
 	calleeNode := ns.node()
+	argsNode := ns.node()
+	// `target.method(args)` is a method call, which goes through MethodField
+	// dispatch and a receiver place check distinct from a plain
+	// field-access-then-call.
+	if calleeNode.Kind() == syntax.KindFieldAccess {
+		ref, _ := a.lowerMethodCall(n, calleeNode, argsNode)
+		return ref
+	}
 	callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
-	args, blocks := a.lowerArgs(ns.node())
-	return a.b.Call(n.Span(), callee, args, blocks, false)
+	args, blocks := a.lowerArgs(argsNode)
+	return a.b.Call(n.Span(), callee, args, blocks, false, nil)
+}
+
+// placeInfo records whether a method-call receiver denotes a mutable place. The
+// receiver is a place iff its chain roots in a variable (temporary is false)
+// and every method link resolves to an accessor; accessors holds those links'
+// callee Refs, checked at runtime via [value.Function.Accessor]. temporary true
+// means the receiver is definitely a temporary — a literal/arbitrary-expression
+// root, or a plain (non-method) call somewhere in the chain — and accessors is
+// then irrelevant.
+type placeInfo struct {
+	temporary bool
+	accessors []expr.Ref
+}
+
+// lowerReceiver lowers the receiver of a method call, returning its value Ref
+// plus the place info an enclosing mutating call needs. It mirrors lowerExpr for
+// the shapes that can form a mutable place — identifiers, field accesses, and
+// method-call links — and falls back to lowerExpr (marking the result a
+// temporary) for everything else.
+func (a *analyzer) lowerReceiver(n syntax.Node) (expr.Ref, placeInfo) {
+	switch n.Kind() {
+	case syntax.KindIdent:
+		// A bare variable is an unconditional place.
+		return a.lowerExpr(n), placeInfo{}
+	case syntax.KindFieldAccess:
+		// A field-access link preserves the base's place-ness.
+		ns := a.inner(n, syntax.KindFieldAccess)
+		baseRef, base := a.lowerReceiver(ns.node())
+		ns.node() // consume `.`
+		fieldNode := ns.node()
+		fieldName := name.Make(a.leaf(fieldNode, syntax.KindIdent))
+		return a.b.FieldRead(n.Span(), fieldNode.Span(), baseRef, fieldName), base
+	case syntax.KindFuncCall:
+		ns := a.inner(n, syntax.KindFuncCall)
+		calleeNode := ns.node()
+		argsNode := ns.node()
+		if calleeNode.Kind() == syntax.KindFieldAccess {
+			return a.lowerMethodCall(n, calleeNode, argsNode)
+		}
+		// A plain function call yields a fresh value, never a place.
+		return a.lowerExpr(n), placeInfo{temporary: true}
+	default:
+		return a.lowerExpr(n), placeInfo{temporary: true}
+	}
+}
+
+// lowerMethodCall lowers `target.method(args)`, returning the result Ref and the
+// place info of the whole expression (for use when this call is itself the
+// receiver of an outer mutating method call). Dispatch goes through a
+// [Builder.MethodField] callee so the runtime applies method-call error
+// semantics (dictionary keys are not directly callable; a missing field on a
+// content element or method-bearing type is reported as a missing method).
+//
+// Evaluation order is uniform: the receiver is evaluated first, then the
+// arguments left-to-right — the same order as a plain function call and every
+// other expression in the language. Unlike Typst, mutating methods do not get a
+// separate arguments-first order; the two orders differ only when an argument's
+// side effects alias the receiver's place (e.g.
+// `arr.at(pair.remove(0)).push(pair.remove(0))`), which is exactly the case a
+// runtime aliasing guard would flag. See "Method-call evaluation order: aliasing
+// guard" in IDEAS.md.
+//
+// A mutating method requires the receiver to be a mutable place; a mutating call
+// on a temporary reports "cannot mutate a temporary value". Both mutating-ness
+// (from the resolved method's [value.Function.Impure]) and place-ness (from the
+// resolved links' [value.Function.Accessor]) are decided at runtime — the
+// receiver's type isn't known here — so the emitted [expr.MutCheck] carries only
+// the static shape of the receiver chain.
+func (a *analyzer) lowerMethodCall(callNode, faNode, argsNode syntax.Node) (expr.Ref, placeInfo) {
+	fns := a.inner(faNode, syntax.KindFieldAccess)
+	targetNode := fns.node()
+	fns.take(syntax.KindDot)
+	fieldNode := fns.node()
+	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
+
+	targetRef, recv := a.lowerReceiver(targetNode)
+	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text())
+	callee := expr.Callee{Ref: calleeRef, Span: faNode.Span()}
+	args, blocks := a.lowerArgs(argsNode)
+
+	mut := &expr.MutCheck{
+		RecvSpan:      targetNode.Span(),
+		RecvTemporary: recv.temporary,
+		RecvAccessors: recv.accessors,
+	}
+	ref := a.b.Call(callNode.Span(), callee, args, blocks, false, mut)
+
+	// `target.method(args)` is itself a place chain-link for an enclosing
+	// mutating call: a place iff the receiver was a place and this method
+	// resolves to an accessor (calleeRef). A fresh accessors slice avoids
+	// aliasing the one handed to mut above.
+	if recv.temporary {
+		return ref, placeInfo{temporary: true}
+	}
+	return ref, placeInfo{accessors: append(append([]expr.Ref(nil), recv.accessors...), calleeRef)}
 }
 
 func (a *analyzer) lowerArgs(n syntax.Node) ([]expr.CallArg, []expr.Ref) {

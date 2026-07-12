@@ -275,8 +275,8 @@ func TestBuilderCallPurityDCE(t *testing.T) {
 
 	pureCallee := Callee{Ref: b.Const(span, pure)}
 	impureCallee := Callee{Ref: b.Const(span, impure)}
-	b.Call(span, pureCallee, nil, nil, false)              // result unused
-	keptRef := b.Call(span, impureCallee, nil, nil, false) // result also unused, but impure
+	b.Call(span, pureCallee, nil, nil, false, nil)              // result unused
+	keptRef := b.Call(span, impureCallee, nil, nil, false, nil) // result also unused, but impure
 	// Pin the impure call's result to confirm it's not getting dropped by the
 	// (unrelated) regular DCE path — the impurity check is what should save it.
 	_ = keptRef

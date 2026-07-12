@@ -53,9 +53,10 @@ func (n *StateUpdate) Format(f *formatter.Formatter) {
 	f.Str(")")
 }
 
-func (n *StateUpdate) Field(name.Name) Value    { return nil }
-func (n *StateUpdate) HasField(name.Name) bool  { return false }
-func (n *StateUpdate) Fields() *Dict            { return new(Dict) }
+func (n *StateUpdate) Field(name.Name) Value   { return nil }
+func (n *StateUpdate) HasField(name.Name) bool { return false }
+func (n *StateUpdate) Fields() *Dict           { return new(Dict) }
+func (n *StateUpdate) Name() string            { return "state" }
 func (n *StateUpdate) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label

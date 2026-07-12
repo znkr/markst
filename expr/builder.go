@@ -418,12 +418,29 @@ func (b *Builder) MakeDict(span syntax.Span, entries []DictEntry) Ref {
 // `target.field` span; fieldSpan is the `.field`/field-ident span.
 func (b *Builder) FieldRead(span, fieldSpan syntax.Span, target Ref, field name.Name) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
-		return &FieldRead{instr: instr{result: ref}, Target: target, Field: field, FieldSpan: fieldSpan}
+		return &FieldRead{fieldAccess{instr: instr{result: ref}, Target: target, Field: field, FieldSpan: fieldSpan}}
 	})
 }
 
-// Call emits a function-call instruction.
-func (b *Builder) Call(span syntax.Span, callee Callee, args []CallArg, blocks []Ref, allowSetter bool) Ref {
+// MethodField emits a field-access instruction that is the callee of a method
+// call (`target.field(...)`). Method-call semantics differ from a plain field
+// read: dictionary keys cannot be called directly, and a missing field on a
+// content element or method-bearing type is reported as a missing *method*.
+// targetText is the source text of the target expression, used to build the
+// "wrap in parentheses" / "remove the arguments" hints.
+func (b *Builder) MethodField(span, fieldSpan syntax.Span, target Ref, field name.Name, targetText string) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MethodField{
+			fieldAccess: fieldAccess{instr: instr{result: ref}, Target: target, Field: field, FieldSpan: fieldSpan},
+			TargetText:  targetText,
+		}
+	})
+}
+
+// Call emits a function-call instruction. mut is non-nil for method calls and
+// carries the receiver place check applied when the resolved callee is a
+// mutating method; it is nil for plain function calls.
+func (b *Builder) Call(span syntax.Span, callee Callee, args []CallArg, blocks []Ref, allowSetter bool, mut *MutCheck) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Call{
 			instr:       instr{result: ref},
@@ -431,6 +448,7 @@ func (b *Builder) Call(span syntax.Span, callee Callee, args []CallArg, blocks [
 			Args:        args,
 			Blocks:      blocks,
 			AllowSetter: allowSetter,
+			Mut:         mut,
 		}
 	})
 }

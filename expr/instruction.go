@@ -33,7 +33,7 @@ type Instruction interface {
 func IsPure(instr Instruction) bool {
 	switch instr.(type) {
 	case *Const, *Unary, *Binary,
-		*MakeArray, *MakeDict, *FieldRead,
+		*MakeArray, *MakeDict, *FieldRead, *MethodField,
 		*ArrayElem, *ArraySlice,
 		*DictField, *DictRest,
 		*MakeClosure,
@@ -290,22 +290,40 @@ type DictEntry struct {
 	Spread bool
 }
 
-// FieldRead reads a named field from a value (dictionary, content, or method
-// receiver). Method dispatch lives in the runtime, not the IR.
+// fieldAccess is the shared shape of a field-access instruction: reading the
+// named field Field from Target. It is embedded by [FieldRead] and
+// [MethodField]; field resolution lives in the runtime, not the IR.
 //
 // FieldSpan covers just the `.field` portion of the source (used by errors
 // pointing at the field name, e.g. "content does not have field X");
 // [inst.span] covers the whole `target.field` expression (used by errors that
 // report against the access as a whole, e.g. "type T has no method").
-type FieldRead struct {
+type fieldAccess struct {
 	instr
 	Target    Ref
 	Field     name.Name
 	FieldSpan syntax.Span
 }
 
-func (f *FieldRead) Operands() []Ref                { return []Ref{f.Target} }
-func (f *FieldRead) RemapOperands(rn func(Ref) Ref) { f.Target = rn(f.Target) }
+func (f *fieldAccess) Operands() []Ref                { return []Ref{f.Target} }
+func (f *fieldAccess) RemapOperands(rn func(Ref) Ref) { f.Target = rn(f.Target) }
+
+// FieldRead reads a named field from a value (dictionary, content, or function
+// scope).
+type FieldRead struct {
+	fieldAccess
+}
+
+// MethodField reads the callee of a method call (`target.field(...)`). It uses
+// the same field resolution as [FieldRead] but applies method-call error
+// semantics: dictionary keys are not directly callable, and a missing field on
+// a content element or a method-bearing type is reported as a missing *method*
+// rather than a missing field. TargetText is the source text of the target
+// expression, used to build the dictionary-key call hints.
+type MethodField struct {
+	fieldAccess
+	TargetText string
+}
 
 // ArgKind discriminates the variants of [CallArg].
 type ArgKind uint8
@@ -342,22 +360,47 @@ type Callee struct {
 // arguments in source order; Blocks holds the Refs of any trailing content
 // blocks (markup form: `f[...]`). AllowSetter is true when this call is the LHS
 // of an assignment, signalling that the callee's runtime should surface a
-// setter via FunctionCallContext.
+// setter via FunctionCallContext. Mut, set for method calls, carries the
+// receiver place check that reports "cannot mutate a temporary value" when the
+// resolved method is mutating.
 type Call struct {
 	instr
 	Callee      Callee
 	Args        []CallArg
 	Blocks      []Ref
 	AllowSetter bool
+	Mut         *MutCheck
+}
+
+// MutCheck describes the receiver of a method call for the runtime
+// mutable-place check. When the call's resolved callee is a mutating
+// ([value.Function.Impure]) method, the receiver must be a mutable place or the
+// call reports "cannot mutate a temporary value" at RecvSpan. Place-ness is
+// decided dynamically: the receiver chain must root in a variable
+// (RecvTemporary is false) and every method link must resolve to an accessor
+// (RecvAccessors, checked via [value.Function.Accessor]). An empty RecvAccessors
+// with RecvTemporary false is an unconditional place (a bare identifier or field
+// chain).
+type MutCheck struct {
+	RecvSpan      syntax.Span
+	RecvTemporary bool
+	RecvAccessors []Ref
 }
 
 func (c *Call) Operands() []Ref {
-	out := make([]Ref, 0, 1+len(c.Args)+len(c.Blocks))
+	n := 1 + len(c.Args) + len(c.Blocks)
+	if c.Mut != nil {
+		n += len(c.Mut.RecvAccessors)
+	}
+	out := make([]Ref, 0, n)
 	out = append(out, c.Callee.Ref)
 	for _, a := range c.Args {
 		out = append(out, a.Value)
 	}
 	out = append(out, c.Blocks...)
+	if c.Mut != nil {
+		out = append(out, c.Mut.RecvAccessors...)
+	}
 	return out
 }
 
@@ -368,6 +411,11 @@ func (c *Call) RemapOperands(f func(Ref) Ref) {
 	}
 	for i := range c.Blocks {
 		c.Blocks[i] = f(c.Blocks[i])
+	}
+	if c.Mut != nil {
+		for i := range c.Mut.RecvAccessors {
+			c.Mut.RecvAccessors[i] = f(c.Mut.RecvAccessors[i])
+		}
 	}
 }
 

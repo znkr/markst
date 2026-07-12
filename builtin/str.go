@@ -47,6 +47,18 @@ var (
 		},
 		F: StrSplitImpl,
 	}
+
+	StrTrim = &value.Function{
+		Name: "str.trim",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Str)},
+			{Name: "pattern", Type: types.SetOf(types.Str, types.None), Default: value.None{}},
+		},
+		Named: value.NamedParams{
+			names.Repeat: value.Param{Name: "repeat", Type: types.SetOf(types.Bool), Default: value.Bool(true)},
+		},
+		F: strTrimImpl,
+	}
 )
 
 func strImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
@@ -94,6 +106,39 @@ func StrAtImpl(_ *value.FunctionCallContext, args []value.Value, named value.Nam
 func strLenImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	s := string(args[0].(value.Str))
 	return value.Int(utf8.RuneCountInString(s)), nil
+}
+
+// strTrimImpl implements str.trim: it removes matching affixes from both ends
+// of the string. With no pattern it strips leading/trailing whitespace;
+// otherwise it strips the given substring. When repeat is true (the default) it
+// removes as many consecutive matches as possible at each end.
+func strTrimImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	s := string(args[0].(value.Str))
+	repeat := bool(named.Get(names.Repeat).(value.Bool))
+	switch pat := args[1].(type) {
+	case value.None:
+		return value.Str(strings.TrimSpace(s)), nil
+	case value.Str:
+		p := string(pat)
+		if p == "" {
+			return value.Str(s), nil
+		}
+		for strings.HasPrefix(s, p) {
+			s = s[len(p):]
+			if !repeat {
+				break
+			}
+		}
+		for strings.HasSuffix(s, p) {
+			s = s[:len(s)-len(p)]
+			if !repeat {
+				break
+			}
+		}
+		return value.Str(s), nil
+	default:
+		panic("unexpected type: " + pat.Type().String())
+	}
 }
 
 func StrSplitImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {

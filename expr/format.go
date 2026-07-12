@@ -163,6 +163,8 @@ func (f *formatter) formatInst(inst Instruction) {
 		sb.WriteString(")")
 	case *FieldRead:
 		fmt.Fprintf(sb, "field_read %s.%s", f.ref(i.Target), i.Field.String())
+	case *MethodField:
+		fmt.Fprintf(sb, "method_field %s.%s", f.ref(i.Target), i.Field.String())
 	case *Call:
 		sb.WriteString("call ")
 		sb.WriteString(f.ref(i.Callee.Ref))
@@ -191,6 +193,21 @@ func (f *formatter) formatInst(inst Instruction) {
 		}
 		if i.AllowSetter {
 			sb.WriteString(" lvalue")
+		}
+		if i.Mut != nil {
+			switch {
+			case i.Mut.RecvTemporary:
+				sb.WriteString(" mut(temp)")
+			case len(i.Mut.RecvAccessors) > 0:
+				sb.WriteString(" mut(place if")
+				for _, a := range i.Mut.RecvAccessors {
+					sb.WriteString(" ")
+					sb.WriteString(f.ref(a))
+				}
+				sb.WriteString(" accessors)")
+			default:
+				sb.WriteString(" mut(place)")
+			}
 		}
 	case *DestructArray:
 		fmt.Fprintf(sb, "destruct_array %s, before=%d, after=%d", f.ref(i.Source), i.Before, i.After)

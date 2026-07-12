@@ -25,7 +25,32 @@ var (
 		Named: value.NamedParams{
 			names.Default: value.Param{Name: "default", Type: types.Any},
 		},
-		F: dictAtImpl,
+		F:        dictAtImpl,
+		Accessor: true,
+	}
+
+	DictInsert = &value.Function{
+		Name: "dictionary.insert",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Dict)},
+			{Name: "key", Type: types.SetOf(types.Str)},
+			{Name: "value", Type: types.Any},
+		},
+		Impure: true,
+		F:      dictInsertImpl,
+	}
+
+	DictRemove = &value.Function{
+		Name: "dictionary.remove",
+		Positional: []value.Param{
+			{Name: "self", Type: types.SetOf(types.Dict)},
+			{Name: "key", Type: types.SetOf(types.Str)},
+		},
+		Named: value.NamedParams{
+			names.Default: value.Param{Name: "default", Type: types.Any},
+		},
+		Impure: true,
+		F:      dictRemoveImpl,
 	}
 )
 
@@ -36,6 +61,26 @@ func dictPairsImpl(_ *value.FunctionCallContext, args []value.Value, named value
 		pairs = append(pairs, &value.Array{Elems: []value.Value{k, v}})
 	}
 	return &value.Array{Elems: pairs}, nil
+}
+
+func dictInsertImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	dict := args[0].(*value.Dict)
+	key := args[1].(value.Str)
+	dict.Elems.Put(key, args[2])
+	return value.None{}, nil
+}
+
+func dictRemoveImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	dict := args[0].(*value.Dict)
+	key := args[1].(value.Str)
+	rem, ok := dict.Elems.Delete(key)
+	if !ok {
+		if named.IsSet(names.Default) {
+			return named.Get(names.Default), nil
+		}
+		return nil, value.ArgErrorPosf(1, "dictionary does not contain key %q and no default value was specified", key)
+	}
+	return rem, nil
 }
 
 func dictAtImpl(fc *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {

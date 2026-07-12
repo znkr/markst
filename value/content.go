@@ -19,6 +19,11 @@ type Content interface {
 	HasField(name.Name) bool
 	Fields() *Dict
 
+	// Name returns the element name of the content value (e.g. "text",
+	// "heading", "sequence"), matching the function name used to construct it.
+	// Used in diagnostics such as "element <name> has no method `x`".
+	Name() string
+
 	aContent()
 }
 
@@ -144,6 +149,27 @@ func (*EnumItem) aContent()  {}
 func (*Terms) aContent()     {}
 func (*TermItem) aContent()  {}
 func (*Table) aContent()     {}
+
+// Name returns the element name, matching the constructor function used to
+// build it. Table has no dedicated diagnostic name and reports the generic
+// "content".
+func (Sequence) Name() string   { return "sequence" }
+func (*Heading) Name() string   { return "heading" }
+func (*Strong) Name() string    { return "strong" }
+func (*Emph) Name() string      { return "emph" }
+func (*Text) Name() string      { return "text" }
+func (*Raw) Name() string       { return "raw" }
+func (*Linebreak) Name() string { return "linebreak" }
+func (*Parbreak) Name() string  { return "parbreak" }
+func (*Link) Name() string      { return "link" }
+func (*Ref) Name() string       { return "ref" }
+func (*List) Name() string      { return "list" }
+func (*ListItem) Name() string  { return "list.item" }
+func (*Enum) Name() string      { return "enum" }
+func (*EnumItem) Name() string  { return "enum.item" }
+func (*Terms) Name() string     { return "terms" }
+func (*TermItem) Name() string  { return "terms.item" }
+func (*Table) Name() string     { return "table" }
 
 func (Sequence) Type() types.Type   { return types.Content }
 func (*Heading) Type() types.Type   { return types.Content }

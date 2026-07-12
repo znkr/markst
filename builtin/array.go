@@ -41,7 +41,8 @@ var (
 		Named: value.NamedParams{
 			names.Default: value.Param{Name: "default", Type: types.Any},
 		},
-		F: arrayAtImpl,
+		F:        arrayAtImpl,
+		Accessor: true,
 	}
 
 	ArrayPosition = &value.Function{
@@ -61,7 +62,8 @@ var (
 		Named: value.NamedParams{
 			names.Default: value.Param{Name: "default", Type: types.Any},
 		},
-		F: arrayFirstImpl,
+		F:        arrayFirstImpl,
+		Accessor: true,
 	}
 
 	ArrayLast = &value.Function{
@@ -72,7 +74,8 @@ var (
 		Named: value.NamedParams{
 			names.Default: value.Param{Name: "default", Type: types.Any},
 		},
-		F: arrayLastImpl,
+		F:        arrayLastImpl,
+		Accessor: true,
 	}
 
 	ArrayLen = &value.Function{

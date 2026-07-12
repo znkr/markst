@@ -139,6 +139,7 @@ var TypeFields = [...]map[name.Name]value.Value{
 		names.Split: StrSplit,
 		names.At:    StrAt,
 		names.Len:   StrLen,
+		names.Trim:  StrTrim,
 	},
 	types.Bytes: {
 		names.Slice: BytesSlice,
@@ -172,8 +173,10 @@ var TypeFields = [...]map[name.Name]value.Value{
 		names.Zip:         ArrayZip,
 	},
 	types.Dict: {
-		names.At:    DictAt,
-		names.Pairs: DictPairs,
+		names.At:     DictAt,
+		names.Insert: DictInsert,
+		names.Pairs:  DictPairs,
+		names.Remove: DictRemove,
 	},
 	types.Function: {
 		names.With: FunctionWith,

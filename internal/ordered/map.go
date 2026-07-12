@@ -42,6 +42,25 @@ func (m *Map[K, V]) Put(key K, value V) {
 	}
 }
 
+// Delete removes key from the map, preserving the relative order of the
+// remaining keys. Returns the removed value and true if the key was present,
+// or the zero value and false otherwise.
+func (m *Map[K, V]) Delete(key K) (V, bool) {
+	idx, ok := m.index[key]
+	if !ok {
+		return *new(V), false
+	}
+	removed := m.values[idx]
+	m.keys = append(m.keys[:idx], m.keys[idx+1:]...)
+	m.values = append(m.values[:idx], m.values[idx+1:]...)
+	delete(m.index, key)
+	// Reindex the keys that shifted down.
+	for i := idx; i < len(m.keys); i++ {
+		m.index[m.keys[i]] = i
+	}
+	return removed, true
+}
+
 // All returns an iterator over all key-value pairs in insertion order.
 func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {

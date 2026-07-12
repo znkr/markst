@@ -357,8 +357,8 @@
 #foo.bar()
 │ fn $top:
 │   b0:
-│     v0 = field_read none.bar
-│     v1 = call v0()
+│     v0 = method_field none.bar
+│     v1 = call v0() mut(place)
 │     return v1
 
 --- simple-closure ---

@@ -1,0 +1,4 @@
+--- field-call-mut-literal ---
+// A mutating method directly on an array literal (a temporary) is an error.
+// Error: 2-11 cannot mutate a temporary value
+#(1, 2, 3).push(4)
