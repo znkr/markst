@@ -10,6 +10,7 @@ import (
 	"znkr.io/writst/expr"
 	"znkr.io/writst/internal/graphemes"
 	"znkr.io/writst/internal/joiner"
+	"znkr.io/writst/internal/names"
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/types"
@@ -37,6 +38,10 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	if _, ok := value.IsError(v); ok {
 		v = &value.Sequence{}
 	}
+	// A top-level markup body of a single item skips the ContentResult
+	// assembly (lowerMarkup's single-item shortcut), so a lone/trailing set or
+	// show rule reaches here unfolded. Collapse it the same way assembly would.
+	v = foldTemplates(v)
 	cc, cerr := value.ToContent(v)
 	// Only surface a content-coercion failure if no other errors were
 	// recorded during eval. When other errors exist, the "non-content
@@ -533,6 +538,14 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			fr.vals[r] = value.None{}
 			break
 		}
+		if isTemplateUpdate(c) {
+			// A set/show update can never carry a label. The label attaches to
+			// the update's *scope* siblings, not the transient node itself — so
+			// with nothing else preceding it, the label is unattached.
+			fr.warn(fr.span(r), fmt.Sprintf("label `<%s>` is not attached to anything", i.Label.String()))
+			fr.vals[r] = value.None{}
+			break
+		}
 		// Use the operand's defining instruction span for the attach
 		// diagnostic. Module-const refs have no per-function span — use the
 		// AttachLabel's own span instead, and skip the operand-slot writeback
@@ -629,7 +642,11 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			return
 		}
 		fr.vals[r] = &value.TermItem{Term: term, Description: desc}
-	case *expr.SetRule, *expr.ShowRule, *expr.Contextual, *expr.ModuleInclude:
+	case *expr.SetRule:
+		fr.vals[r] = fr.evalSetRule(i)
+	case *expr.ShowRule:
+		fr.vals[r] = fr.evalShowRule(i)
+	case *expr.Contextual, *expr.ModuleInclude:
 		panic(fmt.Sprintf("TODO: ssa eval %T", i))
 	default:
 		panic(fmt.Sprintf("ssa eval not implemented: %T", inst))
@@ -720,7 +737,7 @@ func (fr *frame) evalCodeJoin(c *expr.CodeJoin) value.Value {
 			return fr.error(it.span, err.Error())
 		}
 	}
-	return j.Result()
+	return foldTemplates(j.Result())
 }
 
 // joinValues runs the code-mode joiner over a slice of values. Returns
@@ -766,7 +783,141 @@ func (fr *frame) joinValues(values []value.Value, span syntax.Span) value.Value 
 			return fr.error(span, err.Error())
 		}
 	}
-	return j.Result()
+	return foldTemplates(j.Result())
+}
+
+// evalSetRule evaluates a `set target(args) [if cond]` rule to a transient
+// [value.TemplateUpdate] carrying the resolved [value.Set]. A false condition
+// makes the rule a no-op ([value.None], stripped downstream). The target must
+// resolve to a [value.Element], and the arguments are validated against that
+// element's signature (a set rule overrides a subset of its properties).
+func (fr *frame) evalSetRule(i *expr.SetRule) value.Value {
+	if i.Condition != expr.NoRef {
+		cond := fr.get(i.Condition)
+		cb, ok := cond.(value.Bool)
+		if !ok {
+			return fr.errorf(fr.span(i.Result()), "expected boolean, found %s", cond.Type())
+		}
+		if !bool(cb) {
+			return value.None{}
+		}
+	}
+	target := fr.get(i.Target)
+	elem, ok := target.(*value.Element)
+	if !ok {
+		return fr.errorf(fr.span(i.Result()), "expected element, found %s", target.Type())
+	}
+	args, e := fr.buildCallArgs(fr.span(i.Result()), i.Args, nil)
+	if e != nil {
+		return e
+	}
+	set, err := elem.BindTemplateSet(&args)
+	if err != nil {
+		return fr.applyErr((*value.Function)(elem), fr.span(i.Result()), i.Args, err)
+	}
+	return &value.TemplateUpdate{Set: set}
+}
+
+// evalShowRule evaluates a `show selector: transform` rule to a transient
+// [value.TemplateUpdate] carrying the resolved [value.Recipe]. The transform is
+// captured as-is (stored, not applied — application is a future realize pass).
+func (fr *frame) evalShowRule(i *expr.ShowRule) value.Value {
+	sel, e := fr.evalSelector(i.Selector, fr.span(i.Result()))
+	if e != nil {
+		return e
+	}
+	transform := fr.get(i.Transform)
+	return &value.TemplateUpdate{Recipe: &value.Recipe{Selector: sel, Transform: transform}}
+}
+
+// evalSelector resolves a show-rule selector operand. A [expr.NoRef] operand is
+// a bare `show: transform` (nil selector). An element, label, or existing
+// selector value maps to the matching [value.Selector]; anything else errors.
+func (fr *frame) evalSelector(ref expr.Ref, span syntax.Span) (value.Selector, *value.Error) {
+	if ref == expr.NoRef {
+		return nil, nil
+	}
+	v := fr.get(ref)
+	switch s := v.(type) {
+	case *value.Element:
+		return &value.ElementSelector{Element: s}, nil
+	case *value.Label:
+		return &value.LabelSelector{Label: s.Name}, nil
+	case value.Selector:
+		return s, nil
+	default:
+		return nil, fr.errorf(span, "expected selector, found %s", v.Type())
+	}
+}
+
+// whereMethod builds the `.where(label:)` selector constructor for an element
+// target. Calling it with a label yields a [value.WhereSelector] matching that
+// element carrying that label.
+func whereMethod(e *value.Element) *value.Function {
+	return &value.Function{
+		Name:  "where",
+		Named: value.NamedParams{names.Label: {Name: "label", Type: types.SetOf(types.Label)}},
+		F: func(_ *value.FunctionCallContext, _ []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+			lbl, ok := named.Get(names.Label).(*value.Label)
+			if !ok {
+				return nil, value.ArgErrorNamedf(names.Label, "expected label")
+			}
+			return &value.WhereSelector{Element: e, Label: lbl.Name}, nil
+		},
+	}
+}
+
+// applyTemplates folds each [value.TemplateUpdate] into a [value.Templated]
+// wrapper around the remaining siblings, giving one template per set/show
+// scope. A trailing update (no following siblings) is dropped as a no-op.
+func applyTemplates(children []value.Content) []value.Content {
+	for i, c := range children {
+		tu, ok := c.(*value.TemplateUpdate)
+		if !ok {
+			continue
+		}
+		tail := applyTemplates(children[i+1:])
+		if len(tail) == 0 {
+			return children[:i:i]
+		}
+		w := &value.Templated{Body: seqOf(tail)}
+		if tu.Set != nil {
+			w.Sets = append(w.Sets, tu.Set)
+		}
+		if tu.Recipe != nil {
+			w.Recipes = append(w.Recipes, tu.Recipe)
+		}
+		return append(children[:i:i], w)
+	}
+	return children
+}
+
+// seqOf wraps children in a Sequence, collapsing a single element to itself.
+func seqOf(children []value.Content) value.Content {
+	if len(children) == 1 {
+		return children[0]
+	}
+	return &value.Sequence{Children: children}
+}
+
+// foldTemplates applies [applyTemplates] to a code-mode join result so a `set`
+// or `show` inside a code block scopes over the trailing joined siblings. A
+// lone trailing update collapses to [value.None] (a no-op).
+func foldTemplates(v value.Value) value.Value {
+	switch c := v.(type) {
+	case *value.Sequence:
+		folded := applyTemplates(c.Children)
+		if len(folded) == len(c.Children) {
+			return v // nothing folded
+		}
+		if len(folded) == 1 {
+			return folded[0]
+		}
+		return &value.Sequence{Children: folded, Label: c.Label}
+	case *value.TemplateUpdate:
+		return value.None{}
+	}
+	return v
 }
 
 // evalContentResult joins a list of value-producing items into a Sequence,
@@ -785,6 +936,16 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		}
 		if lbl, ok := v.(*value.Label); ok {
 			if len(ret) == 0 {
+				continue
+			}
+			// A set/show update can never carry a label; a label landing on one
+			// is unattached and warned about rather than silently dropped.
+			if isTemplateUpdate(ret[len(ret)-1]) {
+				lblSpan := fr.span(c.Result())
+				if r.IsLocal() {
+					lblSpan = fr.fn.RefSpans[r]
+				}
+				fr.warn(lblSpan, fmt.Sprintf("label `<%s>` is not attached to anything", lbl.Name.String()))
 				continue
 			}
 			fr.attachLabel(ret[len(ret)-1], lbl, lastSpan)
@@ -809,10 +970,19 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 			lastSpan = fr.span(c.Result())
 		}
 	}
+	ret = applyTemplates(ret)
 	if len(ret) == 1 {
 		return ret[0]
 	}
 	return &value.Sequence{Children: ret}
+}
+
+// isTemplateUpdate reports whether c is a transient set/show update — content
+// that will be folded into a [value.Templated] wrapper by [applyTemplates] and
+// never survives on its own.
+func isTemplateUpdate(c value.Content) bool {
+	_, ok := c.(*value.TemplateUpdate)
+	return ok
 }
 
 // evalDestructArray validates that the destructuring source is an array of
@@ -962,6 +1132,16 @@ func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fiel
 			return fr.errorf(fieldSpan, "module %s has no definition `%s`", t.Name, fname.String())
 		}
 		return v
+	case *value.Element:
+		// `.where(label:)` builds a selector; other names resolve against the
+		// element's scope (e.g. `list.item`). Anything else is an invalid method.
+		if fname == names.Where {
+			return whereMethod(t)
+		}
+		if f, ok := t.Scope[fname]; ok {
+			return f
+		}
+		return fr.errorf(span, "`%s` is not a valid method for element `%s`", fname.String(), t.Name)
 	}
 	// A built-in method always wins over a same-named dictionary key or content
 	// field, and is dispatched by binding the receiver as the first argument.
@@ -1113,6 +1293,8 @@ func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Fun
 			return nil, fr.errorf(span, "type %s is not callable", cc.Reflected)
 		}
 		return cc.Constructor, nil
+	case *value.Element:
+		return (*value.Function)(cc), nil
 	default:
 		return nil, fr.errorf(span, "expected function, found %s", callee.Type())
 	}

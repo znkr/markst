@@ -258,6 +258,10 @@ func (n *Emph) Format(f *formatter.Formatter) {
 	f.FuncCall("emph", nil, contentBlock{n.Body})
 }
 
+func (n *Par) Format(f *formatter.Formatter) {
+	f.FuncCall("par", nil, contentBlock{n.Body})
+}
+
 func (n *Text) Format(f *formatter.Formatter) {
 	f.FuncCall("text", []formatter.Arg{formatter.PositionalArg(n.Text)})
 }

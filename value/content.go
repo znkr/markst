@@ -50,6 +50,11 @@ type Emph struct {
 	Label *Label
 }
 
+type Par struct {
+	Body  Content `writst:"required"`
+	Label *Label
+}
+
 type Text struct {
 	Text  string `writst:"required"`
 	Label *Label
@@ -120,6 +125,7 @@ func (*Text) aValue()      {}
 func (*Raw) aValue()       {}
 func (*Strong) aValue()    {}
 func (*Emph) aValue()      {}
+func (*Par) aValue()       {}
 func (*Linebreak) aValue() {}
 func (*Parbreak) aValue()  {}
 func (*Link) aValue()      {}
@@ -138,6 +144,7 @@ func (*Text) aContent()      {}
 func (*Raw) aContent()       {}
 func (*Strong) aContent()    {}
 func (*Emph) aContent()      {}
+func (*Par) aContent()       {}
 func (*Linebreak) aContent() {}
 func (*Parbreak) aContent()  {}
 func (*Link) aContent()      {}
@@ -157,6 +164,7 @@ func (Sequence) Name() string   { return "sequence" }
 func (*Heading) Name() string   { return "heading" }
 func (*Strong) Name() string    { return "strong" }
 func (*Emph) Name() string      { return "emph" }
+func (*Par) Name() string       { return "par" }
 func (*Text) Name() string      { return "text" }
 func (*Raw) Name() string       { return "raw" }
 func (*Linebreak) Name() string { return "linebreak" }
@@ -177,6 +185,7 @@ func (*Text) Type() types.Type      { return types.Content }
 func (*Raw) Type() types.Type       { return types.Content }
 func (*Strong) Type() types.Type    { return types.Content }
 func (*Emph) Type() types.Type      { return types.Content }
+func (*Par) Type() types.Type       { return types.Content }
 func (*Linebreak) Type() types.Type { return types.Content }
 func (*Parbreak) Type() types.Type  { return types.Content }
 func (*Link) Type() types.Type      { return types.Content }

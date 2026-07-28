@@ -91,7 +91,7 @@
 // Trailing comma.
 #test(1 + 1, 2,)
 
---- call-args-duplicate (skip: text is not implemented yet) ---
+--- call-args-duplicate (skip: text font property not modeled) ---
 // Error: 26-30 duplicate argument: font
 #set text(font: "Arial", font: "Helvetica")
 

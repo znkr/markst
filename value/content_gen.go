@@ -329,6 +329,46 @@ func (n *ListItem) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Par) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Par) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Par) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Par) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
 func (n *Parbreak) Field(name name.Name) Value {
 	return nil
 }

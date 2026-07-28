@@ -1,0 +1,88 @@
+// Constructor tests for the content elements. Each element is callable as a
+// function that builds its dedicated value.* content type; these mirror the
+// content structures existing markup tests produce, but via the element
+// constructors.
+
+--- element-linebreak ---
+#linebreak()
+│ #linebreak()
+
+--- element-parbreak ---
+#parbreak()
+│ #parbreak()
+
+--- element-raw ---
+#raw("let x = 1")
+│ #raw("let x = 1")
+
+--- element-raw-block-lang ---
+#raw("fn main() {}", block: true, lang: "rust")
+│ #raw(
+│   block: true,
+│   lang: "rust",
+│   "fn main() {}",
+│ )
+
+--- element-strong ---
+#strong[bold]
+│ #strong[#text("bold")]
+
+--- element-emph ---
+#emph[italic]
+│ #emph[#text("italic")]
+
+--- element-heading ---
+#heading(level: 2)[Title]
+│ #heading(level: 2)
+
+--- element-text ---
+#text("hello")
+│ #text("hello")
+
+--- element-par ---
+#par[a paragraph]
+│ #par[#text("a paragraph")]
+
+--- element-link ---
+#link("https://example.com")[a site]
+│ #link(dest: "https://example.com")[#text("a site")]
+
+--- element-ref ---
+#ref(<intro>)
+│ #ref(target: "intro")
+
+--- element-list ---
+#list([apples], [oranges])
+│ #list(#list.item[#text("apples")], #list.item[#text("oranges")])
+
+--- element-list-item ---
+#list.item([a single item])
+│ #list.item[#text("a single item")]
+
+--- element-list-of-items ---
+#list(list.item([first]), list.item([second]))
+│ #list(#list.item[#text("first")], #list.item[#text("second")])
+
+--- element-enum ---
+#enum([one], [two])
+│ #enum(#enum.item(1)[#text("one")], #enum.item(2)[#text("two")])
+
+--- element-enum-item ---
+#enum.item([numbered], number: 5)
+│ #enum.item(5)[#text("numbered")]
+
+--- element-terms-item ---
+#terms.item([term], [description])
+│ #terms.item[#text("term")][#text("description")]
+
+--- element-terms ---
+#terms(terms.item([apple], [a fruit]), terms.item([oak], [a tree]))
+│ #terms(#terms.item[#text("apple")][#text("a fruit")], #terms.item[#text("oak")][#text("a tree")])
+
+--- element-table ---
+#table([a], [b])
+│ #table(#text("a"), #text("b"))
+
+--- element-unknown-method ---
+// Error: 2-11 `nope` is not a valid method for element `list`
+#list.nope()

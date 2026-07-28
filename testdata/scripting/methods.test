@@ -63,7 +63,7 @@ $ std.red.fun() $
 // Error: 3-9 element text has no method `fun`
 $ pi.fun() $
 
---- field-call-invalid-content-field-func (skip: the heading element is not implemented yet) ---
+--- field-call-invalid-content-field-func (skip: heading supplement field not implemented yet) ---
 // This would be cursed to allow.
 // Error: 2-48 `supplement` is not a valid method for element `heading`
 // Hint: 2-48 to call the stored function, wrap the field access in parentheses: `(heading([], supplement: x => x + 1).supplement)(..)`

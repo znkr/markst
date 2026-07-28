@@ -244,6 +244,11 @@ func (n *Emph) Equal(other Value) bool {
 	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
 }
 
+func (n *Par) Equal(other Value) bool {
+	o, ok := other.(*Par)
+	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
+}
+
 func (n *Linebreak) Equal(other Value) bool {
 	_, ok := other.(*Linebreak)
 	return ok
