@@ -5,8 +5,7 @@
 // TODO: #enum.item
 #assert.eq
 #assert.ne
-│ #raw("assert.eq")
-│ #raw("assert.ne")
+│ #document[#par[#raw("assert.eq")#raw("assert.ne")]]
 
 --- field-normal-function-invalid ---
 // Error: 9-16 function `assert` does not contain field `invalid`

@@ -9,8 +9,7 @@
 #if true == false [
   {Bad}, but we {dont-care}!
 ]
-│ #text("One.")
-│ #parbreak()
+│ #document[#par[One.]]
 
 --- if-condition-complex ---
 // Braced condition.
@@ -55,18 +54,14 @@
 ] else [
   Seven.
 ]
-│ #text("One.")
-│ #parbreak()
-│ #text("Two.")
-│ #parbreak()
-│ #text("Three.")
-│ #parbreak()
-│ #text("Four.")
-│ #parbreak()
-│ #text("Fi")
-│ #text("ve.")
-│ #parbreak()
-│ #text("Six.")
+│ #document[
+│   #par[One.]
+│   #par[Two.]
+│   #par[Three.]
+│   #par[Four.]
+│   #par[Five.]
+│   #par[Six.]
+│ ]
 
 --- if-else-if-else ---
 // Test else if.
@@ -84,8 +79,7 @@
 #test(nth(3), "3rd")
 #test(nth(4), "4th")
 #test(nth(5), "5th")
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- if-expression ---
 // Value of if expressions.
@@ -107,7 +101,7 @@
   z = if x > y { "bad" }
   test(z, none)
 }
-│ #parbreak()
+│ #document[]
 
 --- if-condition-string-invalid ---
 // Condition must be boolean.

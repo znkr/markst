@@ -7,6 +7,7 @@
 // ... but this was.
 #let f(..x) = {}
 #f(arg: 1)
+│ #document[]
 
 --- params-sink-unnamed ---
 // unnamed spread
@@ -16,7 +17,7 @@
 // This wasn't allowed before the bug fix ...
 #let f(..) = 2
 #test(f(arg: 1), 2)
-│ #parbreak()
+│ #document[]
 
 --- params-sink-bool-invalid ---
 // Error: 10-14 expected pattern, found boolean
@@ -34,6 +35,7 @@
   test(repr(f(1, 2, 3)), "(arguments(1, 2), 3)")
   test(repr(f(1, 2, 3, 4, 5)), "(arguments(1, 2, 3, 4), 5)")
 }
+│ #document[]
 
 --- params-sink-in-middle ---
 // Spread in the middle.
@@ -42,6 +44,7 @@
   test(repr(f(1, 2)), "(1, arguments(), 2)")
   test(repr(f(1, 2, 3, 4, 5)), "(1, arguments(2, 3, 4), 5)")
 }
+│ #document[]
 
 --- params-sink-unnamed-empty ---
 // Unnamed sink should just ignore any extra arguments.
@@ -52,6 +55,7 @@
   test(f(13, 20, b: 12), (13, 12))
   test(f(15, b: 16, c: 13), (15, 16))
 }
+│ #document[]
 
 --- params-sink-missing-arguments ---
 #{
@@ -64,6 +68,7 @@
 --- issue-1029-parameter-destructuring ---
 // Test that underscore works in parameter patterns.
 #test((1, 2, 3).zip((1, 2, 3)).map(((_, x)) => x), (1, 2, 3))
+│ #document[]
 
 --- issue-1351-parameter-dictionary ---
 // Error: 17-22 expected pattern, found string

@@ -10,6 +10,7 @@
   }
   test(outer()(), 10)
 }
+│ #document[]
 
 --- closure-transitive-capture-three-deep ---
 // Capture across three closure boundaries.
@@ -24,6 +25,7 @@
   }
   test(a()()(), 7)
 }
+│ #document[]
 
 --- closure-recursion-let-shorthand ---
 // Direct recursion via `let f(n) = ...` resolves f through DefSelf.
@@ -31,6 +33,7 @@
   let fact(n) = if n == 0 { 1 } else { n * fact(n - 1) }
   test(fact(5), 120)
 }
+│ #document[]
 
 --- closure-recursion-via-nested-closure ---
 // Inner anonymous closure references its enclosing let-bound name.
@@ -41,3 +44,4 @@
   }
   test(f(3), "done")
 }
+│ #document[]

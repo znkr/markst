@@ -335,3 +335,8 @@ func (n *Table) Equal(other Value) bool {
 	}
 	return true
 }
+
+func (n *Document) Equal(other Value) bool {
+	o, ok := other.(*Document)
+	return ok && contentEqual(n.Title, o.Title) && contentEqual(n.Body, o.Body)
+}

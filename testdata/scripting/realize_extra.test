@@ -1,0 +1,53 @@
+// Tests for the realization pass: content is wrapped in a Document, parbreak-
+// separated runs become paragraphs, consecutive list/enum/term items are
+// grouped, and `set document(title: …)` populates the document title.
+
+--- realize-paragraphs ---
+First paragraph.
+
+Second paragraph.
+│ #document[
+│   #par[First paragraph.]
+│   #par[Second paragraph.]
+│ ]
+
+--- realize-heading-then-paragraph ---
+= Title
+
+Body text.
+│ #document[
+│   #heading(level: 1)
+│   #par[Body text.]
+│ ]
+
+--- realize-markup-list ---
+- apples
+- pears
+│ #document[#list(#list.item[apples], #list.item[pears])]
+
+--- realize-markup-enum ---
++ first
++ second
+│ #document[#enum(#enum.item(-1)[first], #enum.item(-1)[second])]
+
+--- realize-list-then-paragraph ---
+- item
+
+After the list.
+│ #document[
+│   #list(#list.item[item])
+│   #par[After the list.]
+│ ]
+
+--- realize-document-title ---
+#set document(title: "My Document")
+= Hello
+│ #document(title: [My Document])[#heading(level: 1)]
+
+--- realize-inline-not-paragraphed-in-heading ---
+= A *bold* title
+│ #document[#heading(level: 1)]
+
+--- realize-document-not-callable ---
+// Error: 2-10 element document is not callable
+#document()

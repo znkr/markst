@@ -19,31 +19,30 @@
   if false [Nope]
   [you] + "?"
 }
-│ #text("Hello,")
-│ #text("my fri")
-│ #text("end.")
-│ #parbreak()
-│ #text("How")
-│ #text(" are")
-│ 
-│ #text("you")
-│ #text("?")
+│ #document[
+│   #par[Hello,my friend.]
+│   #par[How areyou?]
+│ ]
 
 --- code-block-empty ---
 // Nothing evaluates to none.
 #test({}, none)
+│ #document[]
 
 --- code-block-let ---
 // Let evaluates to none.
 #test({ let v = 0 }, none)
+│ #document[]
 
 --- code-block-single-expression ---
 // Evaluates to single expression.
 #test({ "hello" }, "hello")
+│ #document[]
 
 --- code-block-multiple-expressions-single-line ---
 // Evaluates to string.
 #test({ let x = "m"; x + "y" }, "my")
+│ #document[]
 
 --- code-block-join-let-with-expression ---
 // Evaluated to int.
@@ -52,6 +51,7 @@
   let y = 2
   x + y
 }, 3)
+│ #document[]
 
 --- code-block-join-expression-with-none ---
 // String is joined with trailing none, evaluates to string.
@@ -59,6 +59,7 @@
   type("")
   none
 }, str)
+│ #document[]
 
 --- code-block-join-int-with-content ---
 // Some things can't be joined.
@@ -113,6 +114,7 @@
   }
   test(a, "a1")
 }
+│ #document[]
 
 --- code-block-multiple-literals-without-semicolon ---
 // Multiple unseparated expressions in one line.

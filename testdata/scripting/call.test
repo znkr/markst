@@ -22,30 +22,19 @@
 #g[A][B]
 #g([A], [B])
 #g()[A][B]
-│ #strong[#text("Bold")]
-│ #parbreak()
-│ #raw("1")
-│ #text("2")
-│ #raw("3")
-│ #parbreak()
-│ #raw("test")
-│ #text("(it)")
-│ #parbreak()
-│ #text("A")
-│ #text("A")
-│ #text("A")
-│ #parbreak()
-│ #text("A")
-│ #text("B")
-│ #text("A")
-│ #text("B")
-│ #text("A")
-│ #text("B")
+│ #document[
+│   #par[#strong[Bold]]
+│   #par[#raw("1")2#raw("3")]
+│   #par[#raw("test")(it)]
+│   #par[AAA]
+│   #par[ABABAB]
+│ ]
 
 --- call-aliased-function ---
 // Call function assigned to variable.
 #let alias = type
 #test(alias(alias), type)
+│ #document[]
 
 --- call-complex-callee-expression ---
 // Callee expressions.
@@ -57,6 +46,7 @@
   let adder(dx) = x => x + dx
   test(adder(2)(5), 7)
 }
+│ #document[]
 
 --- call-bad-type-bool-literal ---
 // Error: 2-6 expected function, found boolean
@@ -90,6 +80,7 @@
 --- call-args-trailing-comma ---
 // Trailing comma.
 #test(1 + 1, 2,)
+│ #document[]
 
 --- call-args-duplicate (skip: text font property not modeled) ---
 // Error: 26-30 duplicate argument: font
@@ -140,6 +131,7 @@
 --- call-args-lone-underscore ---
 // Test that lone underscore works.
 #test((1, 2, 3).map(_ => {}).len(), 3)
+│ #document[]
 
 --- call-args-spread-override ---
 // Test standard argument overriding.
@@ -153,6 +145,7 @@
   test(myf(weight: "black"), "(style: normal, weight: black)")
   test(myf(style: "italic"), "(style: italic, weight: bold)")
 }
+│ #document[]
 
 --- call-args-spread-forward ---
 // Test multiple calls.
@@ -161,6 +154,7 @@
   let g(a, ..sink) = a + f(..sink)
   test(g("a", "b", c: "c"), "abc")
 }
+│ #document[]
 
 --- call-args-spread-type-repr ---
 // Test doing things with arguments.
@@ -172,6 +166,7 @@
 
   save(1, 2, three: true)
 }
+│ #document[]
 
 --- call-args-spread-array-and-dict ---
 // Test spreading array and dictionary.
@@ -187,7 +182,7 @@
   let tostr(..args) = repr(args)
   test(tostr(a: 1, ..more, b: 2), "arguments(a: 1, c: 3, d: 4, b: 2)")
 }
-│ #parbreak()
+│ #document[]
 
 --- call-args-spread-none ---
 // None is spreadable.
@@ -195,6 +190,7 @@
 #f(..none)
 #f(..if false {})
 #f(..for x in () [])
+│ #document[]
 
 --- call-args-spread-string-invalid ---
 // Error: 11-19 cannot spread string
@@ -209,24 +205,28 @@
 // Test bugs with argument sinks.
 #let foo(..body) = repr(body.pos())
 #foo(a: "1", b: "2", 1, 2, 3, 4, 5, 6)
-│ #text("(1, 2, 3, 4, 5, 6)")
+│ #document[#par[(1, 2, 3, 4, 5, 6)]]
 
 --- issue-3144-unexpected-arrow ---
 #let f(a: 10) = a(1) + 1
 #test(f(a: _ => 5), 6)
+│ #document[]
 
 --- issue-3502-space-and-comments-around-destructuring-colon ---
 #let ( key :  /* hi */ binding ) = ( key: "ok" )
 #test(binding, "ok")
+│ #document[]
 
 --- issue-3502-space-around-dict-colon ---
 #test(( key : "value" ).key, "value")
+│ #document[]
 
 --- issue-3502-space-around-param-colon ---
 #let v
 // Test that a space after a named parameter is permissible.
 #let f( param : v ) = param
 #test(f( param /* ok */ : 2 ), 2)
+│ #document[]
 
 --- call-args-unclosed ---
 // Error: 3-7 unknown variable: func

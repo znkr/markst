@@ -3,6 +3,7 @@
 #test(0x10, 16)
 #test(0b1101, 13)
 #test(0xA + 0xa, 0x14)
+│ #document[]
 
 --- int-base-binary-invalid ---
 // Error: 2-7 invalid binary number: 0b123
@@ -31,6 +32,7 @@
 #test(int(-58.34), -58)
 #test(int(decimal("92492.193848921")), 92492)
 #test(int(decimal("-224.342211")), -224)
+│ #document[]
 
 --- int-constructor-bad-type ---
 // Error: 6-10 expected boolean, integer, float, decimal, or string, found length
@@ -99,6 +101,7 @@
 #test(int(-1.0).signum(), -1)
 #test(int(10.0).signum(), 1)
 #test(int(-10.0).signum(), -1)
+│ #document[]
 
 --- int-from-and-to-bytes ---
 // Test `int.from-bytes` and `int.to-bytes`.
@@ -113,6 +116,7 @@
 #test(int.from-bytes(1000.to-bytes(endian: "big", size: 5), endian: "big", signed: true), 1000)
 #test(int.from-bytes(1000.to-bytes(endian: "little", size: 5), endian: "little", signed: true), 1000)
 #test(int.from-bytes(1000.to-bytes(endian: "little", size: 5), endian: "little", signed: false), 1000)
+│ #document[]
 
 --- int-from-and-to-bytes-too-many ---
 // Error: 2-34 too many bytes to convert to a 64 bit number
@@ -129,6 +133,7 @@
 #test(repr(-9876543210), "-9876543210")
 #test(repr(-0987654321), "-987654321")
 #test(repr(4 - 8), "-4")
+│ #document[]
 
 --- int-parse-large-literals (skip: not implemented yet) ---
 #import "../loading/edge-case.typ": large-integer, representable-integer
@@ -175,29 +180,14 @@
 #(-9876543210) \
 #(-0987654321) \
 #(4 - 8)
-│ #raw("12")
-│ #linebreak()
-│ #raw("1234567890")
-│ #linebreak()
-│ #raw("123456789")
-│ #linebreak()
-│ #raw("0")
-│ #linebreak()
-│ #raw("0")
-│ #linebreak()
-│ #raw("-1")
-│ #linebreak()
-│ #raw("-9876543210")
-│ #linebreak()
-│ #raw("-987654321")
-│ #linebreak()
-│ #raw("-4")
+│ #document[#par[#raw("12")#linebreak()#raw("1234567890")#linebreak()#raw("123456789")#linebreak()#raw("0")#linebreak()#raw("0")#linebreak()#raw("-1")#linebreak()#raw("-9876543210")#linebreak()#raw("-987654321")#linebreak()#raw("-4")]]
 
 --- issue-int-constructor ---
 // Test that integer -> integer conversion doesn't do a roundtrip through float.
 #let x = 9223372036854775800
 #test(type(x), int)
 #test(int(x), x)
+│ #document[]
 
 --- number-invalid-suffix ---
 // Error: 2-4 invalid number suffix: u

@@ -2,18 +2,21 @@
 // This wasn't allowed.
 #let ((x)) = 1
 #test(x, 1)
+│ #document[]
 
 --- destructuring-group-2 ---
 // This also wasn't allowed.
 #let ((a, b)) = (1, 2)
 #test(a, 1)
 #test(b, 2)
+│ #document[]
 
 --- destructuring-dict-underscore ---
 // Here, `best` was accessed as a variable, where it shouldn't have.
 #{
   (best: _) = (best: "brr")
 }
+│ #document[]
 
 --- destructuring-dict-array-at ---
 // Same here.
@@ -22,6 +25,7 @@
   (test: array.at(1), best: _) = (test: "baz", best: "brr")
   test(array, (1, "baz", 3, 4))
 }
+│ #document[]
 
 --- destructuring-dict-bad ---
 // Error: 7-10 expected identifier, found group
@@ -32,28 +36,33 @@
 // Here, `a` is not duplicate, where it was previously identified as one.
 #let f((a: b), (c,), a) = (a, b, c)
 #test(f((a: 1), (2,), 3), (3, 1, 2))
+│ #document[]
 
 --- destructuring-non-atomic ---
 // Ensure that we can't have non-atomic destructuring.
 #let x = 1
 #let c = [#() = ()]
 #test(c.children.last(), [()])
+│ #document[]
 
 --- destructuring-let-array ---
 // Simple destructuring.
 #let (a, b) = (1, 2)
 #test(a, 1)
 #test(b, 2)
+│ #document[]
 
 --- destructuring-let-array-single-item ---
 #let (a,) = (1,)
 #test(a, 1)
+│ #document[]
 
 --- destructuring-let-array-placeholders ---
 // Destructuring with multiple placeholders.
 #let (a, _, c, _) = (1, 2, 3, 4)
 #test(a, 1)
 #test(c, 3)
+│ #document[]
 
 --- destructuring-let-array-with-sink-at-end ---
 // Destructuring with a sink.
@@ -61,6 +70,7 @@
 #test(a, 1)
 #test(b, 2)
 #test(c, (3, 4, 5, 6))
+│ #document[]
 
 --- destructuring-let-array-with-sink-in-middle ---
 // Destructuring with a sink in the middle.
@@ -68,6 +78,7 @@
 #test(a, 1)
 #test(b, (2, 3, 4, 5))
 #test(c, 6)
+│ #document[]
 
 --- destructuring-let-array-with-sink-at-start-empty ---
 // Destructuring with an empty sink.
@@ -75,6 +86,7 @@
 #test(a, ())
 #test(b, 1)
 #test(c, 2)
+│ #document[]
 
 --- destructuring-let-array-with-sink-in-middle-empty ---
 // Destructuring with an empty sink.
@@ -82,6 +94,7 @@
 #test(a, 1)
 #test(b, ())
 #test(c, 2)
+│ #document[]
 
 --- destructuring-let-array-with-sink-at-end-empty ---
 // Destructuring with an empty sink.
@@ -89,11 +102,13 @@
 #test(a, 1)
 #test(b, 2)
 #test(c, ())
+│ #document[]
 
 --- destructuring-let-array-with-sink-empty ---
 // Destructuring with an empty sink and empty array.
 #let (..a) = ()
 #test(a, ())
+│ #document[]
 
 --- destructuring-let-array-with-unnamed-sink ---
 // Destructuring with unnamed sink.
@@ -121,6 +136,7 @@
 
 --- destructuring-let-empty-array ---
 #let () = ()
+│ #document[]
 
 --- destructuring-let-empty-array-too-many-elements ---
 // Error: 6-8 too many elements to destructure
@@ -152,36 +168,43 @@
 #test(a, 1)
 #test(b, 2)
 #test(c, 3)
+│ #document[]
 
 --- destructuring-let-dict-with-sink-at-end ---
 // Destructuring with a sink.
 #let (a: _, ..b) = (a: 1, b: 2, c: 3)
 #test(b, (b: 2, c: 3))
+│ #document[]
 
 --- destructuring-let-dict-with-sink-in-middle ---
 // Destructuring with a sink in the middle.
 #let (a: _, ..b, c: _) = (a: 1, b: 2, c: 3)
 #test(b, (b: 2))
+│ #document[]
 
 --- destructuring-let-dict-with-sink-at-end-empty ---
 // Destructuring with an empty sink.
 #let (a: _, ..b) = (a: 1)
 #test(b, (:))
+│ #document[]
 
 --- destructuring-let-dict-with-sink-empty ---
 // Destructuring with an empty sink and empty dict.
 #let (..a) = (:)
 #test(a, (:))
+│ #document[]
 
 --- destructuring-let-dict-with-unnamed-sink ---
 // Destructuring with unnamed sink.
 #let (a, ..) = (a: 1, b: 2)
 #test(a, 1)
+│ #document[]
 
 --- destructuring-let-nested ---
 // Nested destructuring.
 #let ((a, b), (key: c)) = ((1, 2), (key: 3))
 #test((a, b, c), (1, 2, 3))
+│ #document[]
 
 --- destructuring-let-dict-key-string-invalid ---
 // Keyed destructuring is not currently supported.
@@ -232,18 +255,7 @@
   }
   [#word = #roman \ ]
 }
-│ #text("one")
-│ #text("=")
-│ #text("I")
-│ #linebreak()
-│ #text("two")
-│ #text("=")
-│ #text("II")
-│ #linebreak()
-│ #text("one")
-│ #text("=")
-│ #text("I")
-│ #linebreak()
+│ #document[#par[one=I#linebreak()two=II#linebreak()one=I#linebreak()]]
 
 --- destructuring-assign ---
 // Test destructuring assignments.
@@ -286,14 +298,7 @@
 #((b, ..a.at(0)) = (1, 2, 3, 4))
 #test(a, ((2, 3, 4), 2))
 #test(b, 1)
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- destructuring-assign-commas ---
 // Test comma placement in destructuring assignment.
@@ -312,9 +317,7 @@
 #let array = (1, 2, 3)
 #((array.at(1)) = ("hi",))
 #test(array, (1, ("hi",), 3))
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- destructuring-assign-nested ---
 // Test nested destructuring assignment.
@@ -323,6 +326,7 @@
 #let c
 #(((a, b), (key: c)) = ((1, 2), (key: 3)))
 #test((a, b, c), (1, 2, 3))
+│ #document[]
 
 --- destructuring-assign-nested-invalid ---
 #let array = (1, 2, 3)
@@ -336,6 +340,7 @@
 #for x in (a: 1, b: 2) {}
 #for x in "foo" {}
 #for x in bytes("😊") {}
+│ #document[]
 
 --- issue-3275-placeholder ---
 // Placeholder.
@@ -343,6 +348,7 @@
 #for _ in (a: 1, b: 2) {}
 #for _ in "foo" {}
 #for _ in bytes("😊") {}
+│ #document[]
 
 --- issue-3275-destructuring ---
 // Destructuring.
@@ -350,6 +356,7 @@
 #for (a, ..) in (("a", 1, bytes(())), ("b", 2, bytes(""))) {}
 #for (k, v)  in (a: 1, b: 2, c: 3) {}
 #for (.., v) in (a: 1, b: 2, c: 3) {}
+│ #document[]
 
 --- issue-3275-loop-over-content ---
 // Error: 11-17 cannot loop over content

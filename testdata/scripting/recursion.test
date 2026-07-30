@@ -11,7 +11,7 @@
 }
 
 #test(fib(10), 55)
-│ #parbreak()
+│ #document[]
 
 --- recursion-unnamed-invalid ---
 // Test with unnamed function.
@@ -24,18 +24,21 @@
 #let f = 10
 #let f() = f
 #test(type(f()), function)
+│ #document[]
 
 --- recursion-unnamed-does-not-return-itself ---
 // Test capturing with unnamed function.
 #let f = 10
 #let f = () => f
 #test(type(f()), int)
+│ #document[]
 
 --- recursion-shadowing ---
 // Test redefinition.
 #let f(x) = "hello"
 #let f(x) = if x != none { f(none) } else { "world" }
 #test(f(1), "world")
+│ #document[]
 
 --- recursion-maximum-depth ---
 // Error: 15-21 maximum function call depth exceeded

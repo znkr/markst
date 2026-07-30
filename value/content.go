@@ -119,6 +119,13 @@ type Table struct {
 	Label    *Label
 }
 
+// Document is the realized document root, produced by the realization pass (it
+// has no constructor). Title is populated from a `set document(title: …)` rule.
+type Document struct {
+	Title Content
+	Body  Content `writst:"required"`
+}
+
 func (*Sequence) aValue()  {}
 func (*Heading) aValue()   {}
 func (*Text) aValue()      {}
@@ -137,6 +144,7 @@ func (*EnumItem) aValue()  {}
 func (*Terms) aValue()     {}
 func (*TermItem) aValue()  {}
 func (*Table) aValue()     {}
+func (*Document) aValue()  {}
 
 func (Sequence) aContent()   {}
 func (*Heading) aContent()   {}
@@ -156,6 +164,7 @@ func (*EnumItem) aContent()  {}
 func (*Terms) aContent()     {}
 func (*TermItem) aContent()  {}
 func (*Table) aContent()     {}
+func (*Document) aContent()  {}
 
 // Name returns the element name, matching the constructor function used to
 // build it. Table has no dedicated diagnostic name and reports the generic
@@ -178,6 +187,7 @@ func (*EnumItem) Name() string  { return "enum.item" }
 func (*Terms) Name() string     { return "terms" }
 func (*TermItem) Name() string  { return "terms.item" }
 func (*Table) Name() string     { return "table" }
+func (*Document) Name() string  { return "document" }
 
 func (Sequence) Type() types.Type   { return types.Content }
 func (*Heading) Type() types.Type   { return types.Content }
@@ -197,3 +207,4 @@ func (*EnumItem) Type() types.Type  { return types.Content }
 func (*Terms) Type() types.Type     { return types.Content }
 func (*TermItem) Type() types.Type  { return types.Content }
 func (*Table) Type() types.Type     { return types.Content }
+func (*Document) Type() types.Type  { return types.Content }

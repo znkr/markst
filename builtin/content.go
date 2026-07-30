@@ -310,3 +310,14 @@ func termItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.Name
 		Description: args[1].(value.Content),
 	}, nil
 }
+
+// Document is the document root's set target: `#set document(title: …)`
+// configures the realized [value.Document]. It has no constructor (F == nil) —
+// the root is assembled by the realization pass, not called — so `#document(…)`
+// reports "not callable".
+var Document = &value.Element{
+	Name: "document",
+	Named: value.NamedParams{
+		names.Title: {Name: "title", Type: types.Any},
+	},
+}

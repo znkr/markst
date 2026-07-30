@@ -7,11 +7,7 @@
 
 // Should output `x => y`.
 #x => y
-│ #parbreak()
-│ #parbreak()
-│ #text("x")
-│ #text("=")
-│ #text("> y")
+│ #document[#par[x=\> y]]
 
 --- closure-without-captures ---
 // Basic closure without captures.
@@ -19,6 +15,7 @@
   let adder = (x, y) => x + y
   test(adder(2, 3), 5)
 }
+│ #document[]
 
 --- closure-as-arg ---
 // Pass closure as argument and return closure.
@@ -30,6 +27,7 @@
   let h = chain(f, g)
   test(h(2), 5)
 }
+│ #document[]
 
 --- closure-capture-from-popped-stack-frame ---
 // Capture environment.
@@ -48,6 +46,7 @@
   mark = "?"
   test(greet("Typst"), "Hi, Typst!")
 }
+│ #document[]
 
 --- closure-shadows-outer-var ---
 // Redefined variable.
@@ -59,6 +58,7 @@
   }
   test(f(), 3)
 }
+│ #document[]
 
 --- closure-shadows-outer-var-import (skip: modules are not implemented yet) ---
 // Import bindings.
@@ -82,6 +82,7 @@
   }
   test(f(), 6)
 }
+│ #document[]
 
 --- closure-let-basic ---
 // Let + closure bindings.
@@ -93,6 +94,7 @@
   }
   test(f(), "bye")
 }
+│ #document[]
 
 --- closure-let-args ---
 // Parameter bindings.
@@ -105,6 +107,7 @@
 
   test(g()(8), 13)
 }
+│ #document[]
 
 --- closure-bad-capture ---
 // Don't leak environment.
@@ -143,7 +146,7 @@
   a
 }
 #f()
-│ #raw("(\"b\": 10)\n")
+│ #document[#par[#raw("(\"b\": 10)\n")]]
 
 --- closure-capture-mut-error ---
 #let x = ()
@@ -236,4 +239,4 @@
 #let x = 1
 #let c = [#(x) => (1, 2)]
 #test(c.children.last(), [(1, 2)]))
-│ #text(")")
+│ #document[#par[)]]

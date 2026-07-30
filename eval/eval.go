@@ -53,6 +53,10 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	if cc == nil {
 		cc = &value.Sequence{}
 	}
+	// Turn the recorded content tree into a realized document: paragraphs
+	// formed, list/enum/term items grouped, templates resolved, wrapped in a
+	// Document root.
+	cc = s.realizeDocument(cc)
 	c = cc
 	warn = s.warnings
 	err = s.errors
@@ -79,6 +83,10 @@ type session struct {
 
 	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
+
+	// docTitle holds the document title collected from a `set document(title: …)`
+	// rule during the realization pass; nil when unset.
+	docTitle value.Content
 
 	// errors collects every diagnostic produced during evaluation. Every
 	// failure surfaces here via [session.recordError]; instructions that
@@ -820,7 +828,7 @@ func (fr *frame) evalSetRule(i *expr.SetRule) value.Value {
 
 // evalShowRule evaluates a `show selector: transform` rule to a transient
 // [value.TemplateUpdate] carrying the resolved [value.Recipe]. The transform is
-// captured as-is (stored, not applied — application is a future realize pass).
+// captured as-is; the realization pass applies it to matching content.
 func (fr *frame) evalShowRule(i *expr.ShowRule) value.Value {
 	sel, e := fr.evalSelector(i.Selector, fr.span(i.Result()))
 	if e != nil {
@@ -1294,6 +1302,11 @@ func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Fun
 		}
 		return cc.Constructor, nil
 	case *value.Element:
+		// A set-only element (e.g. `document`) has no implementation and can't be
+		// called as a constructor.
+		if cc.F == nil {
+			return nil, fr.errorf(span, "element %s is not callable", cc.Name)
+		}
 		return (*value.Function)(cc), nil
 	default:
 		return nil, fr.errorf(span, "expected function, found %s", callee.Type())

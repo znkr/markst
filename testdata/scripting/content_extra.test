@@ -5,83 +5,83 @@
 
 --- element-linebreak ---
 #linebreak()
-│ #linebreak()
+│ #document[#par[#linebreak()]]
 
 --- element-parbreak ---
 #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- element-raw ---
 #raw("let x = 1")
-│ #raw("let x = 1")
+│ #document[#par[#raw("let x = 1")]]
 
 --- element-raw-block-lang ---
 #raw("fn main() {}", block: true, lang: "rust")
-│ #raw(
+│ #document[#raw(
 │   block: true,
 │   lang: "rust",
 │   "fn main() {}",
-│ )
+│ )]
 
 --- element-strong ---
 #strong[bold]
-│ #strong[#text("bold")]
+│ #document[#par[#strong[bold]]]
 
 --- element-emph ---
 #emph[italic]
-│ #emph[#text("italic")]
+│ #document[#par[#emph[italic]]]
 
 --- element-heading ---
 #heading(level: 2)[Title]
-│ #heading(level: 2)
+│ #document[#heading(level: 2)]
 
 --- element-text ---
 #text("hello")
-│ #text("hello")
+│ #document[#par[hello]]
 
 --- element-par ---
 #par[a paragraph]
-│ #par[#text("a paragraph")]
+│ #document[#par[a paragraph]]
 
 --- element-link ---
 #link("https://example.com")[a site]
-│ #link(dest: "https://example.com")[#text("a site")]
+│ #document[#par[#link(dest: "https://example.com")[a site]]]
 
 --- element-ref ---
 #ref(<intro>)
-│ #ref(target: "intro")
+│ #document[#par[#ref(target: "intro")]]
 
 --- element-list ---
 #list([apples], [oranges])
-│ #list(#list.item[#text("apples")], #list.item[#text("oranges")])
+│ #document[#list(#list.item[apples], #list.item[oranges])]
 
 --- element-list-item ---
 #list.item([a single item])
-│ #list.item[#text("a single item")]
+│ #document[#list(#list.item[a single item])]
 
 --- element-list-of-items ---
 #list(list.item([first]), list.item([second]))
-│ #list(#list.item[#text("first")], #list.item[#text("second")])
+│ #document[#list(#list.item[first], #list.item[second])]
 
 --- element-enum ---
 #enum([one], [two])
-│ #enum(#enum.item(1)[#text("one")], #enum.item(2)[#text("two")])
+│ #document[#enum(#enum.item(1)[one], #enum.item(2)[two])]
 
 --- element-enum-item ---
 #enum.item([numbered], number: 5)
-│ #enum.item(5)[#text("numbered")]
+│ #document[#enum(#enum.item(5)[numbered])]
 
 --- element-terms-item ---
 #terms.item([term], [description])
-│ #terms.item[#text("term")][#text("description")]
+│ #document[#terms(#terms.item[term][description])]
 
 --- element-terms ---
 #terms(terms.item([apple], [a fruit]), terms.item([oak], [a tree]))
-│ #terms(#terms.item[#text("apple")][#text("a fruit")], #terms.item[#text("oak")][#text("a tree")])
+│ #document[#terms(#terms.item[apple][a fruit], #terms.item[oak][a tree])]
 
 --- element-table ---
 #table([a], [b])
-│ #table(#text("a"), #text("b"))
+│ #document[#table(a, b)]
 
 --- element-unknown-method ---
 // Error: 2-11 `nope` is not a valid method for element `list`

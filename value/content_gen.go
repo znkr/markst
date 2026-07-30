@@ -5,6 +5,44 @@ package value
 import "znkr.io/writst/internal/names"
 import "znkr.io/writst/name"
 
+func (n *Document) Field(name name.Name) Value {
+	switch name {
+	case names.Title:
+		if n.Title == nil {
+			return nil
+		}
+		return n.Title
+	case names.Body:
+		return n.Body
+	default:
+		return nil
+	}
+}
+
+func (n *Document) HasField(name name.Name) bool {
+	switch name {
+	case names.Title:
+		return n.Title != nil
+	case names.Body:
+		return true
+	default:
+		return false
+	}
+}
+
+func (n *Document) Fields() *Dict {
+	fields := new(Dict)
+	if f := n.Field(names.Title); f != nil {
+		fields.Elems.Put(Str(names.Title.String()), f)
+	}
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	return fields
+}
+
+func (n *Document) SetLabel(label *Label) *Label {
+	return nil
+}
+
 func (n *Emph) Field(name name.Name) Value {
 	switch name {
 	case names.Body:

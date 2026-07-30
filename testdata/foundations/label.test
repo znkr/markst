@@ -48,22 +48,21 @@ _Visible_
 --- label-unclosed-is-text ---
 // Test that incomplete label is text.
 1 < 2 is #if 1 < 2 [not] a label.
-│ #text("1")
-│ #text("< 2 is")
-│ #text("not")
-│ #text("a label.")
+│ #document[#par[1\< 2 isnota label.]]
 
 --- label-text-styled-and-sequence ---
 // Test label on text, styled, and sequence.
 #test([Hello<hi>].label, <hi>)
 #test([#[A *B* C]<hi>].label, <hi>)
 //TODO: #test([#text(red)[Hello]<hi>].label, <hi>)
+│ #document[]
 
 --- label-string-conversion ---
 // Test getting the name of a label.
 #test(str(<hey>), "hey")
 #test(str(label("hey")), "hey")
 #test(str([Hmm<hey>].label), "hey")
+│ #document[]
 
 --- label-in-code-mode-hint ---
 // Error: 7 expected semicolon or line break

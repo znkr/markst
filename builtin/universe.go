@@ -23,6 +23,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Calc:      Calc,
 	names.Content:   reflectedTypes[types.Content],
 	names.Decimal:   reflectedTypes[types.Decimal],
+	names.Document:  Document,
 	names.Emoji:     Emoji,
 	names.Emph:      Emph,
 	names.Enum:      Enum,

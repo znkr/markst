@@ -1,6 +1,7 @@
 package value
 
 import (
+	"strings"
 	"unicode"
 
 	"github.com/woodsbury/decimal128"
@@ -235,7 +236,9 @@ func (n *Heading) Format(f *formatter.Formatter) {
 	f.FuncCall("heading", []formatter.Arg{formatter.NamedArg("level", n.Depth)})
 }
 
-// contentBlock wraps a Content value so FuncCall renders it as [...].
+// contentBlock wraps a Content value so FuncCall renders it as [...]. It is used
+// for element bodies, which are inline: a multi-child sequence is rendered with
+// its children concatenated on one line (no line breaks between them).
 type contentBlock struct{ c Content }
 
 func (b contentBlock) Format(f *formatter.Formatter) {
@@ -245,7 +248,13 @@ func (b contentBlock) Format(f *formatter.Formatter) {
 	prev := f.Mode()
 	f.SetMode(syntax.ModeMarkup)
 	f.Str("[")
-	b.c.Format(f)
+	if seq, ok := b.c.(*Sequence); ok {
+		for _, c := range seq.Children {
+			c.Format(f)
+		}
+	} else {
+		b.c.Format(f)
+	}
 	f.Str("]")
 	f.SetMode(prev)
 }
@@ -263,7 +272,30 @@ func (n *Par) Format(f *formatter.Formatter) {
 }
 
 func (n *Text) Format(f *formatter.Formatter) {
+	// In markup context text is written literally (its natural form); only in
+	// code context does it need the explicit `text("…")` wrapper.
+	if f.Mode() == syntax.ModeMarkup {
+		f.Str(escapeMarkupText(n.Text))
+		return
+	}
 	f.FuncCall("text", []formatter.Arg{formatter.PositionalArg(n.Text)})
+}
+
+// escapeMarkupText backslash-escapes the characters that would otherwise be
+// structural in markup, so literal text round-trips unambiguously in a dump.
+func escapeMarkupText(s string) string {
+	const special = "\\[]#*_`<>@$"
+	if !strings.ContainsAny(s, special) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(special, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func (n *Raw) Format(f *formatter.Formatter) {
@@ -341,6 +373,33 @@ func (n *Table) Format(f *formatter.Formatter) {
 		args = append(args, formatter.PositionalArg(n.Children[i]))
 	}
 	f.FuncCall("table", args)
+}
+
+func (n *Document) Format(f *formatter.Formatter) {
+	f.Prefix()
+	f.Str("document")
+	if n.Title != nil {
+		f.Str("(title: ")
+		contentBlock{n.Title}.Format(f)
+		f.Str(")")
+	}
+	prev := f.Mode()
+	f.SetMode(syntax.ModeMarkup)
+	f.Str("[")
+	if seq, ok := n.Body.(*Sequence); ok && len(seq.Children) > 1 {
+		// Multi-block body: one block per indented line.
+		f.IncreaseIndent()
+		for _, c := range seq.Children {
+			f.Linebreak()
+			c.Format(f)
+		}
+		f.DecreaseIndent()
+		f.Linebreak()
+	} else if n.Body != nil {
+		n.Body.Format(f)
+	}
+	f.Str("]")
+	f.SetMode(prev)
 }
 
 // Label ///////////////////////////////////////////////////////////////////////

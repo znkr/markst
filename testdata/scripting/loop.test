@@ -16,9 +16,7 @@
 
 #test(var, 21)
 #test(error, false)
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- loop-break-join-basic ---
 // Test joining with break.
@@ -34,8 +32,7 @@
 }
 
 #test(x, "12345.")
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- loop-continue-basic ---
 // Test continue.
@@ -53,9 +50,7 @@
 
 // If continue did not work, this would equal 10.
 #test(x, 12)
-│ #parbreak()
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- loop-continue-join ---
 // Test joining with continue.
@@ -70,8 +65,7 @@
 }
 
 #test(x, "a_a1a2a_a4")
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- loop-break-outside-of-loop ---
 // Test break outside of loop.
@@ -97,7 +91,7 @@
 }
 
 #test(out, "AB")
-│ #parbreak()
+│ #document[]
 
 --- loop-continue-outside-of-loop-in-block ---
 // Test continue outside of loop.
@@ -118,9 +112,7 @@
     break
   }]
 }
-│ #text("Hello")
-│ #text("World")
-│ #text("🌎")
+│ #document[#par[HelloWorld🌎]]
 
 --- loop-break-join-set-and-show (skip: text, colors, smallcaps, and show rules are not implemented yet) ---
 // Should output `Some` in red, `Some` in blue and `Last` in green.
@@ -154,13 +146,7 @@
     for _ in range(3) [B]
   )
 }
-│ #parbreak()
-│ #table(
-│   #text("A"),
-│   #text("B")
-│   #text("B")
-│   #text("B"),
-│ )
+│ #document[#table(A, #par[BBB])]
 
 --- loop-break-join-in-first-arg-strings ---
 // Test that the second argument is evaluated during break flow.
@@ -172,5 +158,4 @@
 }
 
 #test(out, "ABCCC")
-│ #parbreak()
-│ #parbreak()
+│ #document[]

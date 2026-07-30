@@ -12,18 +12,11 @@
 #sym.arrow.tr.hook
 
 #sym.arrow.r;this and this#sym.arrow.l;
-│ #text("😀")
-│ #text("👵")
-│ #text("🐢")
-│ #parbreak()
-│ #text("→")
-│ #text("←")
-│ #text("⟿")
-│ #text("⤤")
-│ #parbreak()
-│ #text("→")
-│ #text("this and this")
-│ #text("←")
+│ #document[
+│   #par[😀👵🐢]
+│   #par[→←⟿⤤]
+│   #par[→this and this←]
+│ ]
 
 --- symbol-constructor ---
 #let envelope = symbol(
@@ -46,15 +39,7 @@
 #envelope.fly
 #one
 #one.emoji
-│ #parbreak()
-│ #text("🖂")
-│ #text("🖃")
-│ #text("🖆")
-│ #text("🖆")
-│ #text("🖄")
-│ #text("🖅")
-│ #text("1")
-│ #text("1️")
+│ #document[#par[🖂🖃🖆🖆🖄🖅11️]]
 
 --- symbol-constructor-empty ---
 // Error: 2-10 expected at least one variant
@@ -196,7 +181,7 @@
   repr(envelope.fly),
   `symbol("🖅")`.text,
 )
-│ #parbreak()
+│ #document[]
 
 --- symbol-sect-deprecated (skip: equation parsing not implemented yet) ---
 // Warning: 3-7 `join` is deprecated, use `bowtie.big` instead
@@ -221,8 +206,4 @@ $ gt.tri $
 // See: https://github.com/typst/typst/pull/6875.
 #sym.copyright #emoji.copyright \
 #sym.suit.heart #emoji.suit.heart
-│ #text("©︎")
-│ #text("©️")
-│ #linebreak()
-│ #text("♥︎")
-│ #text("♥️")
+│ #document[#par[©︎©️#linebreak()♥︎♥️]]

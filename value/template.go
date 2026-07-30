@@ -7,9 +7,10 @@ import (
 )
 
 // This file implements the value-layer machinery for `#set` and `#show` rules.
-// The design is deferred: a rule is *recorded* in the content tree rather than
-// folded into element fields. There is no realize/render pass yet, so the
-// styling effect is not observable in golden output; only the structure is.
+// During evaluation a rule is *recorded* in the content tree rather than folded
+// into element fields; the realization pass (eval/realize.go) later resolves the
+// wrappers — applying show recipes and hoisting `set document(title:)` — so they
+// don't survive into final output.
 //
 // Element, Set, Recipe, and the Selector variants are plain values. The two
 // content nodes — TemplateUpdate and Templated — are hand-written like
@@ -94,8 +95,8 @@ func (n *Set) equal(o *Set) bool {
 }
 
 // Recipe is one resolved show-rule effect: a selector (nil for a bare
-// `show: transform`) and the transform value applied to matching content.
-// Transform is stored, not applied — it is a *Function, Content, *Element, or
+// `show: transform`) and the transform applied to matching content by the
+// realization pass. Transform is a *Function, Content, *Element, or
 // *TemplateUpdate.
 type Recipe struct {
 	Selector  Selector
@@ -239,8 +240,8 @@ func (n *TemplateUpdate) SetLabel(label *Label) *Label {
 
 // Templated is the reified per-scope template: one wrapper per set/show scope,
 // recording the rules that apply to Body (the remaining siblings after the
-// rule). Mirrors Typst's StyledElem. Rules are recorded, not applied — concrete
-// resolution is a future realize pass.
+// rule). Mirrors Typst's StyledElem. The realization pass (eval/realize.go)
+// resolves it — applying recipes to Body and dropping the wrapper.
 type Templated struct {
 	Sets    []*Set
 	Recipes []*Recipe

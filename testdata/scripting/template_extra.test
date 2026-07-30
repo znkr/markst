@@ -1,34 +1,37 @@
-// Structural tests for #set / #show rule evaluation. Rules are recorded as a
-// deferred value.Templated wrapper around the siblings they scope over; the
-// styling effect is not resolved (no realize pass yet), so these assert the
-// wrapper structure, not rendered output.
+// Tests for #set / #show rule evaluation, after the realization pass. `#show`
+// recipes are applied to matching content; `#set` rules are consumed and
+// realized away without styling effect (element-property defaults aren't
+// modeled yet — only `set document(title:)` in realize_extra takes effect), so
+// the set scopes below leave the headings at their explicit level.
 //
-// Set-rule arguments are validated against the element's own parameters, so the
-// tests use `level` (heading's one modeled property); a bogus property errors
-// (see template-set-unknown-property).
+// Set-rule arguments are still validated against the element's own parameters,
+// so the tests use `level` (heading's one modeled property); a bogus property
+// errors (see template-set-unknown-property).
 
 --- template-set-scopes-following-siblings ---
 = A
 #set heading(level: 2)
 = B
-│ #heading(level: 1)
-│ #templated(set heading(level: #2), body: [#heading(level: 1)])
+│ #document[
+│   #heading(level: 1)
+│   #heading(level: 1)
+│ ]
 
 --- template-set-if-false-noop ---
 #set heading(level: 2) if false
 = B
-│ #heading(level: 1)
+│ #document[#heading(level: 1)]
 
 --- template-set-if-true ---
 #set heading(level: 2) if true
 = B
-│ #templated(set heading(level: #2), body: [#heading(level: 1)])
+│ #document[#heading(level: 1)]
 
 --- template-consecutive-sets-nest ---
 #set heading(level: 2)
 #set heading(level: 3)
 = B
-│ #templated(set heading(level: #2), body: [#templated(set heading(level: #3), body: [#heading(level: 1)])])
+│ #document[#heading(level: 1)]
 
 --- template-set-code-mode ---
 #{
@@ -36,8 +39,7 @@
   set heading(level: 2)
   [B]
 }
-│ #text("A")
-│ #templated(set heading(level: #2), body: [#text("B")])
+│ #document[#par[AB]]
 
 --- template-set-unknown-property ---
 // Error: 14-29 unexpected argument: numbering
@@ -48,22 +50,23 @@
 #set heading(level: 2)
 // Warning: 1-4 label `<a>` is not attached to anything
 <a>
+│ #document[]
 
 --- template-show-element ---
 #show heading: emph
 = A
-│ #templated(show heading: #emph, body: [#heading(level: 1)])
+│ #document[#par[#emph[#heading(level: 1)]]]
 
 --- template-show-where-selector ---
 #show heading.where(label: <x>): emph
-= A
-│ #templated(show heading.where(label: <x>): #emph, body: [#heading(level: 1)])
+= A <x>
+│ #document[#par[#emph[#heading(level: 1)]]]
 
 --- template-show-label-selector ---
 #show <x>: emph
-= A
-│ #templated(show <x>: #emph, body: [#heading(level: 1)])
+= A <x>
+│ #document[#par[#emph[#heading(level: 1)]]]
 
 --- template-element-constructor-call ---
 #heading(level: 2)[Title]
-│ #heading(level: 2)
+│ #document[#heading(level: 2)]

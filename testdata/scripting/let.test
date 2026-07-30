@@ -13,8 +13,7 @@
 // TODO: #let fill = conifer
 // TODO: #let f(body) = rect(width: 2cm, fill: fill, inset: 5pt, body)
 // TODO: #f[Hi!]
-│ #parbreak()
-│ #parbreak()
+│ #document[]
 
 --- let-termination ---
 // Termination.
@@ -33,13 +32,11 @@ Three
 #test(v1, 1)
 #test(v2, 2)
 #test(v3, 3)
-│ #parbreak()
-│ #text("One")
-│ #parbreak()
-│ #text("Two")
-│ #parbreak()
-│ #text("Three")
-│ #parbreak()
+│ #document[
+│   #par[One]
+│   #par[Two]
+│   #par[Three]
+│ ]
 
 --- let-valid-idents ---
 // Test what constitutes a valid Typst identifier.
@@ -55,6 +52,7 @@ Three
 #test(__name, 1)
 #let ůñıćóðė = 1
 #test(ůñıćóðė, 1)
+│ #document[]
 
 --- let-binding-keyword-in-markup ---
 // Error: 6-8 expected pattern, found keyword `as`
@@ -71,6 +69,7 @@ Three
 --- let-ident-parenthesized ---
 // Test parenthesised assignments.
 #let (a) = (1, 2)
+│ #document[]
 
 --- let-incomplete ---
 // Error: 5 expected pattern
