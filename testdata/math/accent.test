@@ -1,0 +1,677 @@
+// Test math accents.
+
+--- math-accent-sym-call ---
+// Test function call.
+$ grave(a), acute(b), hat(f), tilde(§), macron(ä), dash(ä), breve(ä), \
+  dot(!), dot.double(a), diaer(a), dot.triple(a), dot.quad(a), circle(a), \
+  acute.double(a), caron(@), arrow(Z), arrow.l(Z), arrow.l.r(Z), \
+  harpoon(a), harpoon.lt(a) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "̀")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "́")[#math.text("b")]
+│     #math.text(",")
+│     #math.accent(accent: "̂")[#math.text("f")]
+│     #math.text(",")
+│     #math.accent(accent: "̃")[#math.text("§")]
+│     #math.text(",")
+│     #math.accent(accent: "̄")[#math.text("ä")]
+│     #math.text(",")
+│     #math.accent(accent: "̅")[#math.text("ä")]
+│     #math.text(",")
+│     #math.accent(accent: "̆")[#math.text("ä")]
+│     #math.text(",")
+│     #linebreak()
+│     #math.accent(accent: "̇")[#math.text("!")]
+│     #math.text(",")
+│     #math.accent(accent: "̈")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "̈")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "⃛")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "⃜")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "̊")[#math.text("a")]
+│     #math.text(",")
+│     #linebreak()
+│     #math.accent(accent: "̋")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "̌")[#math.text("@")]
+│     #math.text(",")
+│     #math.accent(accent: "⃗")[#math.text("Z")]
+│     #math.text(",")
+│     #math.accent(accent: "⃖")[#math.text("Z")]
+│     #math.text(",")
+│     #math.accent(accent: "⃡")[#math.text("Z")]
+│     #math.text(",")
+│     #linebreak()
+│     #math.accent(accent: "⃑")[#math.text("a")]
+│     #math.text(",")
+│     #math.accent(accent: "⃐")[#math.text("a")]
+│   ]
+│ ]
+
+--- math-accent-sym-call-error ---
+#test(math.tilde(math.pi), math.accent(math.pi, math.tilde))
+// Error: 2-9 symbol π is not callable
+#math.pi(math.tilde)
+
+--- math-accent-align ---
+$ x &= p \ dot(x) &= v \ dot.double(x) &= a \ dot.triple(x) &= j \ dot.quad(x) &= s $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("x")
+│     #math.align-point()
+│     #math.text("=")
+│     #math.text("p")
+│     #linebreak()
+│     #math.accent(accent: "̇")[#math.text("x")]
+│     #math.align-point()
+│     #math.text("=")
+│     #math.text("v")
+│     #linebreak()
+│     #math.accent(accent: "̈")[#math.text("x")]
+│     #math.align-point()
+│     #math.text("=")
+│     #math.text("a")
+│     #linebreak()
+│     #math.accent(accent: "⃛")[#math.text("x")]
+│     #math.align-point()
+│     #math.text("=")
+│     #math.text("j")
+│     #linebreak()
+│     #math.accent(accent: "⃜")[#math.text("x")]
+│     #math.align-point()
+│     #math.text("=")
+│     #math.text("s")
+│   ]
+│ ]
+
+--- math-accent-func ---
+// Test `accent` function.
+$accent(ö, .), accent(v, <-), accent(ZZ, \u{0303})$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̇")[#math.text("ö")]
+│       #math.text(",")
+│       #math.accent(accent: "⃖")[#math.text("v")]
+│       #math.text(",")
+│       #math.accent(accent: "̃")[#math.text("ℤ")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-bounds ---
+// Test accent bounds.
+$sqrt(tilde(T)) + hat(f)/hat(g)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.root[
+│         #math.accent(accent: "̃")[#math.text("T")]
+│       ]
+│       #math.text("+")
+│       #math.frac[
+│         #math.accent(accent: "̂")[#math.text("f")]
+│       ][
+│         #math.accent(accent: "̂")[#math.text("g")]
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-wide-base ---
+// Test wide base.
+$arrow("ABC" + d), tilde(sum)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "⃗")[
+│         #math.text("ABC")
+│         #math.text("+")
+│         #math.text("d")
+│       ]
+│       #math.text(",")
+│       #math.accent(accent: "̃")[#math.text("∑")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-superscript ---
+// Test effect of accent on superscript.
+$A^x != hat(A)^x != hat(hat(A))^x$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(t: [#math.text("x")])[#math.text("A")]
+│       #math.text("≠")
+│       #math.attach(t: [#math.text("x")])[
+│         #math.accent(accent: "̂")[#math.text("A")]
+│       ]
+│       #math.text("≠")
+│       #math.attach(t: [#math.text("x")])[
+│         #math.accent(accent: "̂")[
+│           #math.accent(accent: "̂")[#math.text("A")]
+│         ]
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-high-base ---
+// Test high base.
+$ tilde(integral), tilde(integral)_a^b, tilde(integral_a^b) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "̃")[#math.text("∫")]
+│     #math.text(",")
+│     #math.attach(
+│       t: [#math.text("b")],
+│       b: [#math.text("a")],
+│     )[
+│       #math.accent(accent: "̃")[#math.text("∫")]
+│     ]
+│     #math.text(",")
+│     #math.accent(accent: "̃")[
+│       #math.attach(
+│         t: [#math.text("b")],
+│         b: [#math.text("a")],
+│       )[#math.text("∫")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-sized ---
+// Test accent size.
+$tilde(sum), tilde(sum, size: #50%), accent(H, hat, size: #200%)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̃")[#math.text("∑")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̃",
+│         size: #50%,
+│       )[#math.text("∑")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̂",
+│         size: #200%,
+│       )[#math.text("H")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-sized-script (skip: sscript and the math size functions are not implemented yet) ---
+// Test accent size in script size.
+$tilde(U, size: #1.1em), x^tilde(U, size: #1.1em), sscript(tilde(U, size: #1.1em))$
+
+--- math-accent-dotless ---
+// Test dotless glyph variants.
+#let test(c) = $grave(#c), acute(sans(#c)), hat(frak(#c)), tilde(mono(#c)),
+  macron(bb(#c)), dot(cal(#c)), diaer(upright(#c)), breve(bold(#c)),
+  circle(bold(upright(#c))), caron(upright(sans(#c))), arrow(bold(frak(#c)))$
+$test(i) \ test(j)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.equation(block: false)[
+│         #math.accent(accent: "̀")[#math.text("i")]
+│         #math.text(",")
+│         #math.accent(accent: "́")[
+│           #math.text(
+│             "i",
+│             variant: "sans",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̂")[
+│           #math.text(
+│             "i",
+│             variant: "frak",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̃")[
+│           #math.text(
+│             "i",
+│             variant: "mono",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̄")[#math.text("i", variant: "bb")]
+│         #math.text(",")
+│         #math.accent(accent: "̇")[
+│           #math.text(
+│             "i",
+│             variant: "cal",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̈")[#math.text("i", italic: false)]
+│         #math.text(",")
+│         #math.accent(accent: "̆")[#math.text("i", bold: true)]
+│         #math.text(",")
+│         #math.accent(accent: "̊")[
+│           #math.text(
+│             "i",
+│             bold: true,
+│             italic: false,
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̌")[
+│           #math.text(
+│             "i",
+│             italic: false,
+│             variant: "sans",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "⃗")[
+│           #math.text(
+│             "i",
+│             bold: true,
+│             variant: "frak",
+│           )
+│         ]
+│       ]
+│       #linebreak()
+│       #math.equation(block: false)[
+│         #math.accent(accent: "̀")[#math.text("j")]
+│         #math.text(",")
+│         #math.accent(accent: "́")[
+│           #math.text(
+│             "j",
+│             variant: "sans",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̂")[
+│           #math.text(
+│             "j",
+│             variant: "frak",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̃")[
+│           #math.text(
+│             "j",
+│             variant: "mono",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̄")[#math.text("j", variant: "bb")]
+│         #math.text(",")
+│         #math.accent(accent: "̇")[
+│           #math.text(
+│             "j",
+│             variant: "cal",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̈")[#math.text("j", italic: false)]
+│         #math.text(",")
+│         #math.accent(accent: "̆")[#math.text("j", bold: true)]
+│         #math.text(",")
+│         #math.accent(accent: "̊")[
+│           #math.text(
+│             "j",
+│             bold: true,
+│             italic: false,
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "̌")[
+│           #math.text(
+│             "j",
+│             italic: false,
+│             variant: "sans",
+│           )
+│         ]
+│         #math.text(",")
+│         #math.accent(accent: "⃗")[
+│           #math.text(
+│             "j",
+│             bold: true,
+│             variant: "frak",
+│           )
+│         ]
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-dotless-disabled ---
+// Test disabling the dotless glyph variants.
+$hat(i), hat(i, dotless: #false), accent(j, tilde), accent(j, tilde, dotless: #false)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̂")[#math.text("i")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̂",
+│         dotless: false,
+│       )[#math.text("i")]
+│       #math.text(",")
+│       #math.accent(accent: "̃")[#math.text("j")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̃",
+│         dotless: false,
+│       )[#math.text("j")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-dotless-set-rule ---
+#set math.accent(dotless: false)
+$ hat(i) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "̂")[#math.text("i")]
+│   ]
+│ ]
+
+--- math-accent-dotless-greedy ---
+// Currently the dotless style propagates to everything in the accent's base,
+// even though it shouldn't.
+$ arrow(P_(c, i dot j) P_(1, i) j) \
+  arrow(P_(c, i dot j) P_(1, i) j, dotless: #false) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃗")[
+│       #math.attach(
+│         b: [
+│           #math.text("c")
+│           #math.text(",")
+│           #math.text("i")
+│           #math.text("⋅")
+│           #math.text("j")
+│         ],
+│       )[#math.text("P")]
+│       #math.attach(
+│         b: [
+│           #math.text("1")
+│           #math.text(",")
+│           #math.text("i")
+│         ],
+│       )[#math.text("P")]
+│       #math.text("j")
+│     ]
+│     #linebreak()
+│     #math.accent(
+│       accent: "⃗",
+│       dotless: false,
+│     )[
+│       #math.attach(
+│         b: [
+│           #math.text("c")
+│           #math.text(",")
+│           #math.text("i")
+│           #math.text("⋅")
+│           #math.text("j")
+│         ],
+│       )[#math.text("P")]
+│       #math.attach(
+│         b: [
+│           #math.text("1")
+│           #math.text(",")
+│           #math.text("i")
+│         ],
+│       )[#math.text("P")]
+│       #math.text("j")
+│     ]
+│   ]
+│ ]
+
+--- math-accent-flattened (skip: text(font: ...) is not implemented yet) ---
+// Test flattened accent glyph variants.
+#show math.equation: set text(font: "STIX Two Math")
+$hat(a) hat(A)$
+$tilde(w) tilde(W)$
+$grave(i) grave(j)$
+$grave(I) grave(J)$
+
+--- math-accent-bottom ---
+// Test bottom accents.
+$accent(a, \u{20EE}), accent(T, \u{0323}), accent(xi, \u{0332}),
+  accent(f, \u{20ED}), accent(F, \u{20E8}), accent(y, \u{032E}),
+  accent(!, \u{032F}), accent(J, \u{0333}), accent(p, \u{0331})$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "⃮")[#math.text("a")]
+│       #math.text(",")
+│       #math.accent(accent: "̣")[#math.text("T")]
+│       #math.text(",")
+│       #math.accent(accent: "̲")[#math.text("ξ")]
+│       #math.text(",")
+│       #math.accent(accent: "⃭")[#math.text("f")]
+│       #math.text(",")
+│       #math.accent(accent: "⃨")[#math.text("F")]
+│       #math.text(",")
+│       #math.accent(accent: "̮")[#math.text("y")]
+│       #math.text(",")
+│       #math.accent(accent: "̯")[#math.text("!")]
+│       #math.text(",")
+│       #math.accent(accent: "̳")[#math.text("J")]
+│       #math.text(",")
+│       #math.accent(accent: "̱")[#math.text("p")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-bottom-wide-base ---
+// Test wide base with bottom accents.
+$accent(x + y, \u{20EF}), accent(sum, \u{032D})$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "⃯")[
+│         #math.text("x")
+│         #math.text("+")
+│         #math.text("y")
+│       ]
+│       #math.text(",")
+│       #math.accent(accent: "̭")[#math.text("∑")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-bottom-subscript ---
+// Test effect of bottom accent on subscript.
+$q_x != accent(q, \u{032C})_x != accent(accent(q, \u{032C}), \u{032C})_x$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(b: [#math.text("x")])[#math.text("q")]
+│       #math.text("≠")
+│       #math.attach(b: [#math.text("x")])[
+│         #math.accent(accent: "̬")[#math.text("q")]
+│       ]
+│       #math.text("≠")
+│       #math.attach(b: [#math.text("x")])[
+│         #math.accent(accent: "̬")[
+│           #math.accent(accent: "̬")[#math.text("q")]
+│         ]
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-bottom-high-base ---
+// Test high base with bottom accents.
+$ accent(integral, \u{20EC}), accent(integral, \u{20EC})_a^b, accent(integral_a^b, \u{20EC}) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃬")[#math.text("∫")]
+│     #math.text(",")
+│     #math.attach(
+│       t: [#math.text("b")],
+│       b: [#math.text("a")],
+│     )[
+│       #math.accent(accent: "⃬")[#math.text("∫")]
+│     ]
+│     #math.text(",")
+│     #math.accent(accent: "⃬")[
+│       #math.attach(
+│         t: [#math.text("b")],
+│         b: [#math.text("a")],
+│       )[#math.text("∫")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-bottom-sized ---
+// Test bottom accent size.
+$accent(sum, \u{0330}), accent(sum, \u{0330}, size: #50%), accent(H, \u{032D}, size: #200%)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̰")[#math.text("∑")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̰",
+│         size: #50%,
+│       )[#math.text("∑")]
+│       #math.text(",")
+│       #math.accent(
+│         accent: "̭",
+│         size: #200%,
+│       )[#math.text("H")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-cramped (skip: scripts() is not implemented yet) ---
+// Test whether cramped styles applied to the base of top accents.
+$ hat(x^2) x^2 $
+$ breve(scripts(sum)^X^X) scripts(sum)^X^X $
+
+--- math-accent-bottom-cramped (skip: scripts() is not implemented yet) ---
+// Test whether cramped styles applied to the base of bottom accents.
+$ accent(x^2, \u{0330}) x^2 $
+$ accent(scripts(sum)^X^X, \u{032D}) scripts(sum)^X^X $
+
+--- math-accent-nested ---
+// Test nested top and bottom accents.
+$hat(accent(L, \u{0330})), accent(circle(p), \u{0323}),
+  macron(accent(caron(accent(A, \u{20ED})), \u{0333})) \
+  breve(accent(eta, \u{032E})) = accent(breve(eta), \u{032E})$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̂")[
+│         #math.accent(accent: "̰")[#math.text("L")]
+│       ]
+│       #math.text(",")
+│       #math.accent(accent: "̣")[
+│         #math.accent(accent: "̊")[#math.text("p")]
+│       ]
+│       #math.text(",")
+│       #math.accent(accent: "̄")[
+│         #math.accent(accent: "̳")[
+│           #math.accent(accent: "̌")[
+│             #math.accent(accent: "⃭")[#math.text("A")]
+│           ]
+│         ]
+│       ]
+│       #linebreak()
+│       #math.accent(accent: "̆")[
+│         #math.accent(accent: "̮")[#math.text("η")]
+│       ]
+│       #math.text("=")
+│       #math.accent(accent: "̮")[
+│         #math.accent(accent: "̆")[#math.text("η")]
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-string-too-long ---
+// Error: 17-21 expected exactly one character
+$ accent(x + y, "..") $
+
+--- math-accent-content-too-long ---
+// Error: 17-19 expected a single-codepoint symbol
+$ accent(x + y, ..) $
+
+--- math-accent-overlay (skip: colors are not implemented yet) ---
+// Ensure accent is laid out above the base.
+#show "\u{0338}": set text(red)
+$accent(W, \u{0338})$, $accent(y, \u{0338})$
+
+--- issue-7437-math-accent-text-presentation ---
+// Make sure that the `arrow.l.r` symbol correctly works as an accent even
+// though it includes a text presentation variation selector.
+
+// Ensure that symbol style works.
+$ accent(x + y, arrow.l.r) $
+// Ensure that string style works.
+$ accent(x + y, "↔") $
+// Ensure that content style works.
+$ accent(x + y, ↔) $
+// Ensure that shorthand style works.
+$ accent(x + y, <->) $
+// Ensure that function call works.
+$ arrow.l.r(x + y) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃡")[
+│       #math.text("x")
+│       #math.text("+")
+│       #math.text("y")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃡")[
+│       #math.text("x")
+│       #math.text("+")
+│       #math.text("y")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃡")[
+│       #math.text("x")
+│       #math.text("+")
+│       #math.text("y")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃡")[
+│       #math.text("x")
+│       #math.text("+")
+│       #math.text("y")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.accent(accent: "⃡")[
+│       #math.text("x")
+│       #math.text("+")
+│       #math.text("y")
+│     ]
+│   ]
+│ ]
+
+--- issue-7437-math-accent-emoji-presentation ---
+// Check that we do not normalize an accent character with emoji presentation
+// variation selector to an accent.
+//
+// Since we already support arbitrary characters as accents, we might want to
+// support clusters like this one, too, but it should render as an emoji instead
+// of normalizing into the same accent as `arrow.l.r`, so it's better to keep
+// this an error for now.
+
+// Error: 12-31 expected exactly one character
+$accent(A, std.emoji.arrow.l.r)$
+
+--- issue-7437-math-accent-trailing-text ---
+// Test that we don't allow extra text after the text variation selector.
+
+// Error: 13-47 expected exactly one character
+$accent(A, #symbol("\u{2194}\u{fe0e}\u{fe0f}"))$

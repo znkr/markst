@@ -39,6 +39,7 @@ func IsPure(instr Instruction) bool {
 		*MakeClosure,
 		*Heading, *Strong, *Emph, *Link, *RefMarkup,
 		*ListItem, *EnumItem, *TermItem,
+		*Equation, *MathAttach, *MathFrac, *MathRoot, *MathPrimes, *MathDelimited,
 		*ContentResult, *CodeJoin,
 		*JoinBegin, *JoinResult:
 		return true
@@ -323,6 +324,11 @@ type FieldRead struct {
 type MethodField struct {
 	fieldAccess
 	TargetText string
+	// Math is true when the method call is in math mode (`$ target.field(...) $`).
+	// Math-mode calls report the same errors but with math-specific hints (steer
+	// the user to code mode) and, for dictionary keys holding a non-function,
+	// suggest adding a space before the parentheses instead of dropping them.
+	Math bool
 }
 
 // ArgKind discriminates the variants of [CallArg].
@@ -385,6 +391,13 @@ type MutCheck struct {
 	RecvSpan      syntax.Span
 	RecvTemporary bool
 	RecvAccessors []Ref
+
+	// Math is set for method calls in math mode. A math-mode call whose resolved
+	// callee is mutating is rejected outright ("cannot call mutating methods in
+	// math") — there is no mutable place to write the result back to. MathCall is
+	// the call's source text, used to build the "use code mode" hint.
+	Math     bool
+	MathCall string
 }
 
 func (c *Call) Operands() []Ref {
@@ -483,6 +496,19 @@ type DiscardCheck struct {
 	voidInstr
 	Value Ref
 }
+
+// Warn records a non-fatal diagnostic at eval time (e.g. linebreaks ignored in
+// a math cell). It is emitted statically by the analyzer but fires only when
+// its block executes, so it never warns for code that isn't evaluated.
+// Side-effect-only: no SSA result and no operands.
+type Warn struct {
+	voidInstr
+	Msg   string
+	Hints []string
+}
+
+func (w *Warn) Operands() []Ref             { return nil }
+func (w *Warn) RemapOperands(func(Ref) Ref) {}
 
 func (d *DiscardCheck) Operands() []Ref                { return []Ref{d.Value} }
 func (d *DiscardCheck) RemapOperands(rn func(Ref) Ref) { d.Value = rn(d.Value) }
@@ -642,9 +668,15 @@ func (m *MakeClosure) RemapOperands(f func(Ref) Ref) {
 // ContentResult joins a sequence of value refs into a content sequence,
 // applying the content joiner. Used at the end of markup bodies / content
 // blocks to materialise the document/content fragment.
+//
+// Math marks a join over the contents of an equation, where symbols, strings
+// and numbers become math text rather than the upright text they are in markup
+// (see value.ToMathContent) — a single-item math body bypasses the joiner and
+// is coerced by the element it lands in, so both paths have to agree.
 type ContentResult struct {
 	instr
 	Items []Ref
+	Math  bool
 }
 
 func (c *ContentResult) Operands() []Ref { return c.Items }
@@ -848,6 +880,109 @@ func (t *TermItem) Operands() []Ref { return []Ref{t.Term, t.Description} }
 func (t *TermItem) RemapOperands(f func(Ref) Ref) {
 	t.Term = f(t.Term)
 	t.Description = f(t.Description)
+}
+
+// Math instructions ///////////////////////////////////////////////////////////
+
+// Equation represents a math equation `$...$`. Block reports whether it is
+// displayed on its own line.
+type Equation struct {
+	instr
+	Block bool
+	Body  Ref
+}
+
+func (e *Equation) Operands() []Ref               { return []Ref{e.Body} }
+func (e *Equation) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
+
+// MathAttach is a base with optional sub-/superscripts: a_1^2. Top and Bottom
+// are NoRef when absent.
+type MathAttach struct {
+	instr
+	Base   Ref
+	Top    Ref
+	Bottom Ref
+}
+
+func (m *MathAttach) Operands() []Ref {
+	out := []Ref{m.Base}
+	if m.Top != NoRef {
+		out = append(out, m.Top)
+	}
+	if m.Bottom != NoRef {
+		out = append(out, m.Bottom)
+	}
+	return out
+}
+
+func (m *MathAttach) RemapOperands(f func(Ref) Ref) {
+	m.Base = f(m.Base)
+	if m.Top != NoRef {
+		m.Top = f(m.Top)
+	}
+	if m.Bottom != NoRef {
+		m.Bottom = f(m.Bottom)
+	}
+}
+
+// MathFrac is a fraction: x/2.
+type MathFrac struct {
+	instr
+	Num   Ref
+	Denom Ref
+}
+
+func (m *MathFrac) Operands() []Ref { return []Ref{m.Num, m.Denom} }
+func (m *MathFrac) RemapOperands(f func(Ref) Ref) {
+	m.Num = f(m.Num)
+	m.Denom = f(m.Denom)
+}
+
+// MathRoot is a root: √x or root(3, x). Index is NoRef for a square root.
+type MathRoot struct {
+	instr
+	Index    Ref
+	Radicand Ref
+}
+
+func (m *MathRoot) Operands() []Ref {
+	if m.Index == NoRef {
+		return []Ref{m.Radicand}
+	}
+	return []Ref{m.Index, m.Radicand}
+}
+
+func (m *MathRoot) RemapOperands(f func(Ref) Ref) {
+	if m.Index != NoRef {
+		m.Index = f(m.Index)
+	}
+	m.Radicand = f(m.Radicand)
+}
+
+// MathPrimes attaches Count prime marks to a base: a”'.
+type MathPrimes struct {
+	instr
+	Base  Ref
+	Count int
+}
+
+func (m *MathPrimes) Operands() []Ref               { return []Ref{m.Base} }
+func (m *MathPrimes) RemapOperands(f func(Ref) Ref) { m.Base = f(m.Base) }
+
+// MathDelimited is a delimited group in math: [x + y]. Open and Close hold the
+// delimiter content.
+type MathDelimited struct {
+	instr
+	Open  Ref
+	Body  Ref
+	Close Ref
+}
+
+func (m *MathDelimited) Operands() []Ref { return []Ref{m.Open, m.Body, m.Close} }
+func (m *MathDelimited) RemapOperands(f func(Ref) Ref) {
+	m.Open = f(m.Open)
+	m.Body = f(m.Body)
+	m.Close = f(m.Close)
 }
 
 // Stub instructions for currently-unimplemented constructs ////////////////////

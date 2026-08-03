@@ -32,11 +32,7 @@ Three
 #test(v1, 1)
 #test(v2, 2)
 #test(v3, 3)
-│ #document[
-│   #par[One]
-│   #par[Two]
-│   #par[Three]
-│ ]
+│ #document[#par[One]#par[Two]#par[Three]]
 
 --- let-valid-idents ---
 // Test what constitutes a valid Typst identifier.

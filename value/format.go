@@ -233,12 +233,26 @@ func (n *Sequence) Format(f *formatter.Formatter) {
 }
 
 func (n *Heading) Format(f *formatter.Formatter) {
-	f.FuncCall("heading", []formatter.Arg{formatter.NamedArg("level", n.Depth)})
+	f.FuncCall("heading", []formatter.Arg{formatter.NamedArg("level", n.Depth)}, contentBlock{n.Body})
 }
 
-// contentBlock wraps a Content value so FuncCall renders it as [...]. It is used
-// for element bodies, which are inline: a multi-child sequence is rendered with
-// its children concatenated on one line (no line breaks between them).
+// contentItems flattens a content value into the items of a content block: a
+// sequence contributes its children, anything else is a single item.
+func contentItems(c Content) []formatter.Formattable {
+	if seq, ok := c.(*Sequence); ok {
+		items := make([]formatter.Formattable, len(seq.Children))
+		for i, ch := range seq.Children {
+			items[i] = ch
+		}
+		return items
+	}
+	return []formatter.Formattable{c}
+}
+
+// contentBlock wraps a Content value so FuncCall renders it as [...]. Its
+// children stay concatenated inline when short, and break one-per-line when the
+// block would otherwise be too long or contain a multi-line child (see
+// [formatter.Formatter.BracketedList]).
 type contentBlock struct{ c Content }
 
 func (b contentBlock) Format(f *formatter.Formatter) {
@@ -247,15 +261,7 @@ func (b contentBlock) Format(f *formatter.Formatter) {
 	}
 	prev := f.Mode()
 	f.SetMode(syntax.ModeMarkup)
-	f.Str("[")
-	if seq, ok := b.c.(*Sequence); ok {
-		for _, c := range seq.Children {
-			c.Format(f)
-		}
-	} else {
-		b.c.Format(f)
-	}
-	f.Str("]")
+	f.BracketedList(contentItems(b.c))
 	f.SetMode(prev)
 }
 
@@ -367,6 +373,136 @@ func (n *TermItem) Format(f *formatter.Formatter) {
 	f.FuncCall("terms.item", nil, contentBlock{n.Term}, contentBlock{n.Description})
 }
 
+func (n *Equation) Format(f *formatter.Formatter) {
+	f.FuncCall("math.equation", []formatter.Arg{formatter.NamedArg("block", n.Block)}, contentBlock{n.Body})
+}
+
+// styleArg renders one of MathText's optional font-style properties. Their
+// values are only ever booleans or strings (the equation element's parameter
+// types enforce it), so they print as plain `bold: true` / `variant: "sans"`
+// rather than the code-mode `#true` / `#"sans"` a Value would produce — matching
+// how `math.equation(block: true)` already reads. ok is false when unset.
+func styleArg(name string, v Value) (formatter.Arg, bool) {
+	switch x := v.(type) {
+	case nil:
+		return formatter.Arg{}, false
+	case Bool:
+		return formatter.NamedArg(name, bool(x)), true
+	case Str:
+		return formatter.NamedArg(name, string(x)), true
+	default:
+		return formatter.NamedArg(name, v), true
+	}
+}
+
+func (n *MathText) Format(f *formatter.Formatter) {
+	args := []formatter.Arg{formatter.PositionalArg(n.Text)}
+	for _, s := range []struct {
+		name string
+		val  Value
+	}{{"bold", n.Bold}, {"italic", n.Italic}, {"variant", n.Variant}} {
+		if a, ok := styleArg(s.name, s.val); ok {
+			args = append(args, a)
+		}
+	}
+	f.FuncCall("math.text", args)
+}
+
+func (n *MathAttach) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	if n.Top != nil {
+		args = append(args, formatter.NamedArg("t", contentBlock{n.Top}))
+	}
+	if n.Bottom != nil {
+		args = append(args, formatter.NamedArg("b", contentBlock{n.Bottom}))
+	}
+	f.FuncCall("math.attach", args, contentBlock{n.Base})
+}
+
+func (n *MathFrac) Format(f *formatter.Formatter) {
+	f.FuncCall("math.frac", nil, contentBlock{n.Num}, contentBlock{n.Denom})
+}
+
+func (n *MathRoot) Format(f *formatter.Formatter) {
+	var blocks []formatter.Formattable
+	if n.Index != nil {
+		blocks = append(blocks, contentBlock{n.Index})
+	}
+	blocks = append(blocks, contentBlock{n.Radicand})
+	f.FuncCall("math.root", nil, blocks...)
+}
+
+func (n *MathPrimes) Format(f *formatter.Formatter) {
+	f.FuncCall("math.primes", []formatter.Arg{formatter.NamedArg("count", n.Count)}, contentBlock{n.Base})
+}
+
+func (n *MathAlignPoint) Format(f *formatter.Formatter) {
+	f.FuncCall("math.align-point", nil)
+}
+
+func (n *MathDelimited) Format(f *formatter.Formatter) {
+	f.FuncCall("math.lr", nil, contentBlock{n.Open}, contentBlock{n.Body}, contentBlock{n.Close})
+}
+
+func (n *MathUnderline) Format(f *formatter.Formatter) {
+	f.FuncCall("math.underline", nil, contentBlock{n.Body})
+}
+
+func (n *MathAccent) Format(f *formatter.Formatter) {
+	args := []formatter.Arg{formatter.NamedArg("accent", n.Accent)}
+	if n.Size != nil {
+		args = append(args, formatter.NamedArg("size", n.Size))
+	}
+	// dotless defaults to true; only a disabling override is worth showing.
+	if !n.Dotless {
+		args = append(args, formatter.NamedArg("dotless", false))
+	}
+	f.FuncCall("math.accent", args, contentBlock{n.Base})
+}
+
+func (n *MathCancel) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	if n.Angle != nil {
+		args = append(args, formatter.NamedArg("angle", n.Angle))
+	}
+	f.FuncCall("math.cancel", args, contentBlock{n.Body})
+}
+
+// mathCellBlocks renders each content cell as its own `[…]` block.
+func mathCellBlocks(cells []Content) []formatter.Formattable {
+	blocks := make([]formatter.Formattable, len(cells))
+	for i, c := range cells {
+		blocks[i] = contentBlock{c}
+	}
+	return blocks
+}
+
+func (n *MathVec) Format(f *formatter.Formatter) {
+	f.FuncCall("math.vec", nil, mathCellBlocks(n.Children)...)
+}
+
+func (n *MathCases) Format(f *formatter.Formatter) {
+	f.FuncCall("math.cases", nil, mathCellBlocks(n.Children)...)
+}
+
+func (n *MathMat) Format(f *formatter.Formatter) {
+	// Each row is one content block, its cells rendered as a sequence.
+	blocks := make([]formatter.Formattable, len(n.Rows))
+	for i, row := range n.Rows {
+		blocks[i] = contentBlock{rowContent(row)}
+	}
+	f.FuncCall("math.mat", nil, blocks...)
+}
+
+// rowContent collapses a matrix row into a single content value for rendering
+// as one block.
+func rowContent(row []Content) Content {
+	if len(row) == 1 {
+		return row[0]
+	}
+	return &Sequence{Children: row}
+}
+
 func (n *Table) Format(f *formatter.Formatter) {
 	var args []formatter.Arg
 	for i := range n.Children {
@@ -385,20 +521,11 @@ func (n *Document) Format(f *formatter.Formatter) {
 	}
 	prev := f.Mode()
 	f.SetMode(syntax.ModeMarkup)
-	f.Str("[")
-	if seq, ok := n.Body.(*Sequence); ok && len(seq.Children) > 1 {
-		// Multi-block body: one block per indented line.
-		f.IncreaseIndent()
-		for _, c := range seq.Children {
-			f.Linebreak()
-			c.Format(f)
-		}
-		f.DecreaseIndent()
-		f.Linebreak()
-	} else if n.Body != nil {
-		n.Body.Format(f)
+	if n.Body != nil {
+		f.BracketedList(contentItems(n.Body))
+	} else {
+		f.Str("[]")
 	}
-	f.Str("]")
 	f.SetMode(prev)
 }
 

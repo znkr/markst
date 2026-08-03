@@ -13,13 +13,13 @@ import (
 // dedicated content type.
 
 // Emph is the emphasis element; it builds a [value.Emph].
-var Emph = &value.Element{
+var Emph = value.NewElement[*value.Emph](value.Function{
 	Name: "emph",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
 	},
 	F: emphImpl,
-}
+})
 
 func emphImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	content := args[0].(value.Content)
@@ -28,14 +28,14 @@ func emphImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 
 // Table is the table element; it builds a [value.Table] from its content
 // children.
-var Table = &value.Element{
+var Table = value.NewElement[*value.Table](value.Function{
 	Name: "table",
 	Positional: []value.Param{
 		{Name: "children", Type: types.SetOf(types.Content)},
 	},
 	Sink: new(0),
 	F:    tableImpl,
-}
+})
 
 func tableImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	sink := args[0].(*value.Arguments)
@@ -51,7 +51,7 @@ func tableImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedAr
 }
 
 // Heading is the heading element; it builds a [value.Heading].
-var Heading = &value.Element{
+var Heading = value.NewElement[*value.Heading](value.Function{
 	Name: "heading",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
@@ -60,7 +60,7 @@ var Heading = &value.Element{
 		names.Level: {Name: "level", Type: types.SetOf(types.Int), Default: value.Int(1)},
 	},
 	F: headingImpl,
-}
+})
 
 func headingImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Heading{
@@ -70,46 +70,46 @@ func headingImpl(_ *value.FunctionCallContext, args []value.Value, named value.N
 }
 
 // Text is the text element; it builds a [value.Text].
-var Text = &value.Element{
+var Text = value.NewElement[*value.Text](value.Function{
 	Name: "text",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Str)},
 	},
 	F: textImpl,
-}
+})
 
 func textImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Text{Text: string(args[0].(value.Str))}, nil
 }
 
 // Strong is the strong-emphasis element; it builds a [value.Strong].
-var Strong = &value.Element{
+var Strong = value.NewElement[*value.Strong](value.Function{
 	Name: "strong",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
 	},
 	F: strongImpl,
-}
+})
 
 func strongImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Strong{Body: args[0].(value.Content)}, nil
 }
 
 // Par is the paragraph element; it builds a [value.Par].
-var Par = &value.Element{
+var Par = value.NewElement[*value.Par](value.Function{
 	Name: "par",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
 	},
 	F: parImpl,
-}
+})
 
 func parImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Par{Body: args[0].(value.Content)}, nil
 }
 
 // Raw is inline or block raw text; it builds a [value.Raw].
-var Raw = &value.Element{
+var Raw = value.NewElement[*value.Raw](value.Function{
 	Name: "raw",
 	Positional: []value.Param{
 		{Name: "text", Type: types.SetOf(types.Str)},
@@ -119,7 +119,7 @@ var Raw = &value.Element{
 		names.Lang:  {Name: "lang", Type: types.SetOf(types.Str), Default: value.Str("")},
 	},
 	F: rawImpl,
-}
+})
 
 func rawImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Raw{
@@ -130,47 +130,47 @@ func rawImpl(_ *value.FunctionCallContext, args []value.Value, named value.Named
 }
 
 // Linebreak forces a line break; it builds a [value.Linebreak].
-var Linebreak = &value.Element{
+var Linebreak = value.NewElement[*value.Linebreak](value.Function{
 	Name: "linebreak",
 	F:    linebreakImpl,
-}
+})
 
 func linebreakImpl(_ *value.FunctionCallContext, _ []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Linebreak{}, nil
 }
 
 // Parbreak forces a paragraph break; it builds a [value.Parbreak].
-var Parbreak = &value.Element{
+var Parbreak = value.NewElement[*value.Parbreak](value.Function{
 	Name: "parbreak",
 	F:    parbreakImpl,
-}
+})
 
 func parbreakImpl(_ *value.FunctionCallContext, _ []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Parbreak{}, nil
 }
 
 // Link is a hyperlink; it builds a [value.Link].
-var Link = &value.Element{
+var Link = value.NewElement[*value.Link](value.Function{
 	Name: "link",
 	Positional: []value.Param{
 		{Name: "dest", Type: types.SetOf(types.Str)},
 		{Name: "body", Type: types.SetOf(types.Content)},
 	},
 	F: linkImpl,
-}
+})
 
 func linkImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Link{Dest: string(args[0].(value.Str)), Body: args[1].(value.Content)}, nil
 }
 
 // Ref is a cross-reference to a label; it builds a [value.Ref].
-var Ref = &value.Element{
+var Ref = value.NewElement[*value.Ref](value.Function{
 	Name: "ref",
 	Positional: []value.Param{
 		{Name: "target", Type: types.SetOf(types.Label)},
 	},
 	F: refImpl,
-}
+})
 
 func refImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.Ref{Target: args[0].(*value.Label).Name}, nil
@@ -178,7 +178,7 @@ func refImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgs
 
 // List is a bullet list; it builds a [value.List]. Content children are wrapped
 // in list items; `list.item` results are used as-is.
-var List = &value.Element{
+var List = value.NewElement[*value.List](value.Function{
 	Name: "list",
 	Positional: []value.Param{
 		{Name: "children", Type: types.SetOf(types.Content)},
@@ -186,7 +186,7 @@ var List = &value.Element{
 	Sink:  new(0),
 	Scope: map[name.Name]value.Value{names.Item: ListItem},
 	F:     listImpl,
-}
+})
 
 func listImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	sink := args[0].(*value.Arguments)
@@ -207,13 +207,13 @@ func listImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 
 // ListItem is a single bullet-list entry (`list.item`); it builds a
 // [value.ListItem].
-var ListItem = &value.Element{
+var ListItem = value.NewElement[*value.ListItem](value.Function{
 	Name: "list.item",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
 	},
 	F: listItemImpl,
-}
+})
 
 func listItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.ListItem{Body: args[0].(value.Content)}, nil
@@ -221,7 +221,7 @@ func listItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.Name
 
 // Enum is a numbered list; it builds a [value.Enum]. Content children are
 // wrapped and auto-numbered; `enum.item` results are used as-is.
-var Enum = &value.Element{
+var Enum = value.NewElement[*value.Enum](value.Function{
 	Name: "enum",
 	Positional: []value.Param{
 		{Name: "children", Type: types.SetOf(types.Content)},
@@ -229,7 +229,7 @@ var Enum = &value.Element{
 	Sink:  new(0),
 	Scope: map[name.Name]value.Value{names.Item: EnumItem},
 	F:     enumImpl,
-}
+})
 
 func enumImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	sink := args[0].(*value.Arguments)
@@ -250,7 +250,7 @@ func enumImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 
 // EnumItem is a single numbered-list entry (`enum.item`); it builds a
 // [value.EnumItem].
-var EnumItem = &value.Element{
+var EnumItem = value.NewElement[*value.EnumItem](value.Function{
 	Name: "enum.item",
 	Positional: []value.Param{
 		{Name: "body", Type: types.SetOf(types.Content)},
@@ -259,7 +259,7 @@ var EnumItem = &value.Element{
 		names.Number: {Name: "number", Type: types.SetOf(types.Int), Default: value.Int(1)},
 	},
 	F: enumItemImpl,
-}
+})
 
 func enumItemImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.EnumItem{
@@ -270,7 +270,7 @@ func enumItemImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 
 // Terms is a term/description list; it builds a [value.Terms] from `terms.item`
 // children.
-var Terms = &value.Element{
+var Terms = value.NewElement[*value.Terms](value.Function{
 	Name: "terms",
 	Positional: []value.Param{
 		{Name: "children", Type: types.SetOf(types.Content)},
@@ -278,7 +278,7 @@ var Terms = &value.Element{
 	Sink:  new(0),
 	Scope: map[name.Name]value.Value{names.Item: TermItem},
 	F:     termsImpl,
-}
+})
 
 func termsImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	sink := args[0].(*value.Arguments)
@@ -295,14 +295,14 @@ func termsImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedAr
 
 // TermItem is a single term/description entry (`terms.item`); it builds a
 // [value.TermItem].
-var TermItem = &value.Element{
+var TermItem = value.NewElement[*value.TermItem](value.Function{
 	Name: "terms.item",
 	Positional: []value.Param{
 		{Name: "term", Type: types.SetOf(types.Content)},
 		{Name: "description", Type: types.SetOf(types.Content)},
 	},
 	F: termItemImpl,
-}
+})
 
 func termItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	return &value.TermItem{
@@ -315,9 +315,9 @@ func termItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.Name
 // configures the realized [value.Document]. It has no constructor (F == nil) —
 // the root is assembled by the realization pass, not called — so `#document(…)`
 // reports "not callable".
-var Document = &value.Element{
+var Document = value.NewElement[*value.Document](value.Function{
 	Name: "document",
 	Named: value.NamedParams{
 		names.Title: {Name: "title", Type: types.Any},
 	},
-}
+})

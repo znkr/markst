@@ -1,0 +1,451 @@
+// End-to-end tests for math mode ($...$): scanning, parsing, analysis, and
+// evaluation into content. Math-specific to this implementation.
+
+--- inline-equation ---
+$x$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("x")]
+│   ]
+│ ]
+
+--- block-equation ---
+$ x + 1 $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("x")
+│     #math.text("+")
+│     #math.text("1")
+│   ]
+│ ]
+
+--- superscript ---
+$x^2$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(t: [#math.text("2")])[#math.text("x")]
+│     ]
+│   ]
+│ ]
+
+--- subscript-superscript ---
+$a_1^2$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(
+│         t: [#math.text("2")],
+│         b: [#math.text("1")],
+│       )[#math.text("a")]
+│     ]
+│   ]
+│ ]
+
+--- fraction ---
+$x/2$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.frac[#math.text("x")][#math.text("2")]
+│     ]
+│   ]
+│ ]
+
+--- fraction-parens ---
+$(a + b)/2$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.frac[
+│         #math.text("a")
+│         #math.text("+")
+│         #math.text("b")
+│       ][
+│         #math.text("2")
+│       ]
+│     ]
+│   ]
+│ ]
+
+--- sqrt ---
+$sqrt(x)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.root[#math.text("x")]]
+│   ]
+│ ]
+
+--- root ---
+$root(3, x)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.root[#math.text("3")][#math.text("x")]
+│     ]
+│   ]
+│ ]
+
+--- primes ---
+$a'''$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.primes(count: 3)[#math.text("a")]
+│     ]
+│   ]
+│ ]
+
+--- symbol ---
+$pi$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("π")]
+│   ]
+│ ]
+
+--- unresolved-ident-is-text ---
+$foo$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("foo")]
+│   ]
+│ ]
+
+--- frac-call ---
+$frac(a, b)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.frac[#math.text("a")][#math.text("b")]
+│     ]
+│   ]
+│ ]
+
+--- lr-delimited ---
+$[|x|]$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.lr[#math.text("⟦")][#math.text("x")][#math.text("⟧")]
+│     ]
+│   ]
+│ ]
+
+--- align-point ---
+$a & b$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("b")
+│     ]
+│   ]
+│ ]
+
+--- embedded-code ---
+#let n = 2
+$x^#n$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(t: [#math.text("2")])[#math.text("x")]
+│     ]
+│   ]
+│ ]
+
+--- equation-in-text ---
+The value $x$ is here.
+│ #document[
+│   #par[
+│     The value
+│     #math.equation(block: false)[#math.text("x")]
+│     is here.
+│   ]
+│ ]
+
+--- code-math-module-frac ---
+#math.frac([1], [2])
+│ #document[#par[#math.frac[1][2]]]
+
+--- code-sym-module-symbol ---
+#sym.pi
+│ #document[#par[π]]
+
+--- code-math-equation ---
+#math.equation(block: true)[x]
+│ #document[#math.equation(block: true)[x]]
+
+--- shorthand-glyph ---
+$a <= b -> c$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("a")
+│       #math.text("≤")
+│       #math.text("b")
+│       #math.text("→")
+│       #math.text("c")
+│     ]
+│   ]
+│ ]
+
+--- matrix ---
+$mat(a, b; c, d)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.mat[#math.text("a")#math.text("b")][#math.text("c")#math.text("d")]
+│     ]
+│   ]
+│ ]
+
+--- matrix-single-row ---
+$mat(a, b)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.mat[#math.text("a")#math.text("b")]
+│     ]
+│   ]
+│ ]
+
+--- vector ---
+$vec(a, b, c)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.vec[#math.text("a")][#math.text("b")][#math.text("c")]
+│     ]
+│   ]
+│ ]
+
+--- cases ---
+$cases(a, b)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.cases[#math.text("a")][#math.text("b")]
+│     ]
+│   ]
+│ ]
+
+--- embedded-code-statement ---
+$#let foo = 7; foo$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("7")]
+│   ]
+│ ]
+
+--- embedded-code-semicolon-in-attach ---
+#let b = 2
+$a^#b;$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.attach(t: [#math.text("2")])[#math.text("a")]
+│     ]
+│   ]
+│ ]
+
+--- embedded-code-row-separator ---
+#let b = 2
+$mat(a; #b)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.mat[#math.text("a")][#math.text("2")]
+│     ]
+│   ]
+│ ]
+
+--- math-style-each ---
+// Each font-style function records its own property.
+$bold(a), italic(b), upright(c), serif(d), sans(e), cal(f), frak(g), mono(h), bb(i)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("a", bold: true)
+│       #math.text(",")
+│       #math.text("b", italic: true)
+│       #math.text(",")
+│       #math.text("c", italic: false)
+│       #math.text(",")
+│       #math.text("d", variant: "serif")
+│       #math.text(",")
+│       #math.text("e", variant: "sans")
+│       #math.text(",")
+│       #math.text("f", variant: "cal")
+│       #math.text(",")
+│       #math.text("g", variant: "frak")
+│       #math.text(",")
+│       #math.text("h", variant: "mono")
+│       #math.text(",")
+│       #math.text("i", variant: "bb")
+│     ]
+│   ]
+│ ]
+
+--- math-style-combined ---
+// Independent properties accumulate on the same leaf.
+$bold(upright(sans(x)))$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text(
+│         "x",
+│         bold: true,
+│         italic: false,
+│         variant: "sans",
+│       )
+│     ]
+│   ]
+│ ]
+
+--- math-style-nearest-wins ---
+// The innermost style function wins for a property set by both.
+$sans(frak(x)) bold(bold(y))$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("x", variant: "frak")
+│       #math.text("y", bold: true)
+│     ]
+│   ]
+│ ]
+
+--- math-style-whole-subtree ---
+// A style applies to every math leaf in its body, not just the first.
+$bold(x + y/z)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("x", bold: true)
+│       #math.text("+", bold: true)
+│       #math.frac[#math.text("y", bold: true)][#math.text("z", bold: true)]
+│     ]
+│   ]
+│ ]
+
+--- math-style-code-mode ---
+// The style functions are reachable through the math module in code mode.
+#math.bold($x$)
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("x", bold: true)]
+│   ]
+│ ]
+
+--- math-style-equation-set ---
+// Unlike Typst, where these are internal properties, a set rule can drive them
+// directly. It applies to the whole scope, and an explicit style still wins.
+#set math.equation(variant: "bb")
+$x, sans(y)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("x", variant: "bb")
+│       #math.text(",", variant: "bb")
+│       #math.text("y", variant: "sans")
+│     ]
+│   ]
+│ ]
+
+--- math-style-not-in-markup ---
+// The style functions live in the math module only.
+// Error: 2-6 unknown variable: bold
+#bold[x]
+
+--- math-style-symbol-in-run ---
+// A symbol or string sitting in a run is math text just like a letter is, so a
+// style reaches it too (a lone one skips the joiner and must agree).
+$bold(alpha + beta) upright("s" + t)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.text("α", bold: true)
+│       #math.text("+", bold: true)
+│       #math.text("β", bold: true)
+│       #math.text("s", italic: false)
+│       #math.text("+", italic: false)
+│       #math.text("t", italic: false)
+│     ]
+│   ]
+│ ]
+
+--- math-style-through-cancel ---
+// cancel is a container like every other math element: a style reaches into it,
+// and a scope inside it is resolved rather than left in the output.
+$bold(cancel(x)) cancel(bold(y))$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.cancel[#math.text("x", bold: true)]
+│       #math.cancel[#math.text("y", bold: true)]
+│     ]
+│   ]
+│ ]
+
+--- math-args-trailing-empty-cell ---
+// A cell the parser leaves between two adjacent separators is dropped when it
+// trails its row; one with a cell behind it is a real empty column.
+$mat(a,;b) mat(1,,2) vec(a,)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.mat[#math.text("a")][#math.text("b")]
+│       #math.mat[#math.text("1")#math.text("2")]
+│       #math.vec[#math.text("a")]
+│     ]
+│   ]
+│ ]
+
+--- math-code-mode-number ---
+// A number given to a math element in code mode reads as math text, the same as
+// writing it in an equation.
+#math.frac(1, 2) $1/2$
+│ #document[
+│   #par[
+│     #math.frac[#math.text("1")][#math.text("2")]
+│     #math.equation(block: false)[
+│       #math.frac[#math.text("1")][#math.text("2")]
+│     ]
+│   ]
+│ ]
+
+--- math-accent-degree ---
+// The degree sign denotes the ring accent, like the other three spellings do.
+$degree(a) accent(b, °) accent(c, degree) circle(d)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.accent(accent: "̊")[#math.text("a")]
+│       #math.accent(accent: "̊")[#math.text("b")]
+│       #math.accent(accent: "̊")[#math.text("c")]
+│       #math.accent(accent: "̊")[#math.text("d")]
+│     ]
+│   ]
+│ ]
+
+--- math-equation-style-arg-rejected ---
+// The font-style properties are only meaningful as a set rule; an equation has
+// nowhere to keep one of its own (see math-style-equation-set).
+// Error: 21-31 bold is only settable with a set rule
+#math.equation("x", bold: true)
+
+--- math-lr-functions-are-not-elements ---
+// floor, ceil, abs and norm all build a `math.lr`, and root and sqrt both build
+// a `math.root`, so only `lr` and `root` can be set/show targets — matching
+// Typst, where the others are plain functions. Were they elements, a show rule
+// on one of them would rewrite all of its siblings too.
+// Error: 2-32 expected selector, found function
+#show math.floor: it => [FLOOR]
+$floor(x) abs(y)$
+
+--- math-show-root-matches-sqrt ---
+// sqrt produces an index-less math.root, so a show rule on root matches it.
+#show math.root: [R]
+$root(3, x) sqrt(y)$
+│ #document[#par[#math.equation(block: false)[RR]]]

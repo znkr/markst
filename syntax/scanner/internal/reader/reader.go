@@ -48,7 +48,7 @@ func (b *Reader) Column() int {
 		b.col = 0
 		for cur := b.cur; cur > 0; {
 			ch, chw := utf8.DecodeLastRuneInString(b.src[:cur])
-			if ch == '\n' {
+			if ch == '\n' || ch == '\r' {
 				break
 			}
 			b.col++
@@ -69,7 +69,10 @@ func (b *Reader) Next() rune {
 	r := b.ch
 	n := b.chw
 	b.cur += n
-	if r == '\n' || r == EOF {
+	b.fill()
+	// A lone CR terminates a line just like LF (the scanner's isNewline accepts
+	// both); in a CRLF pair only the LF counts, so the pair is one line break.
+	if r == '\n' || r == EOF || (r == '\r' && b.ch != '\n') {
 		b.col = 0
 		if len(b.newlines) == 0 || b.newlines[len(b.newlines)-1] < uint32(b.cur) {
 			b.newlines = append(b.newlines, uint32(b.cur))
@@ -78,7 +81,6 @@ func (b *Reader) Next() rune {
 		// Only update column if valid.
 		b.col++
 	}
-	b.fill()
 	return r
 }
 

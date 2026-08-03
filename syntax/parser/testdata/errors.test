@@ -97,9 +97,9 @@ _hello
 │       Space: " "
 │       ShowRule
 │         Show: "show"
-│         Error: " "
-│           Msg: "expected colon, found space"
-│         Ident: "heading"
+│         Space: " "
+│         Error: "heading"
+│           Msg: "expected colon, found identifier"
 │       Error
 │         Msg: "expected semicolon or line break"
 │       Space: " "
@@ -1274,4 +1274,85 @@ v in iter {}
 │         Space: " "
 │         Ident: "y"
 │     RightBrace: "}"
+│   Space: "\n"
+
+--- missing-operand-before-field-access ---
+#(1 + .b)
+│ Markup
+│   Hash: "#"
+│   Parenthesized
+│     LeftParen: "("
+│     Binary
+│       Int: "1"
+│       Space: " "
+│       Plus: "+"
+│       FieldAccess
+│         Error
+│           Msg: "expected expression"
+│         Space: " "
+│         Dot: "."
+│         Ident: "b"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- item-in-empty-dict ---
+#(:0)
+│ Markup
+│   Hash: "#"
+│   Dict
+│     LeftParen: "("
+│     Colon: ":"
+│     Int: "0"
+│     RightParen: ")"
+│   Space: "\n"
+
+--- missing-ident-in-set-rule-with-field-access ---
+#set .A
+│ Markup
+│   Hash: "#"
+│   SetRule
+│     Set: "set"
+│     FieldAccess
+│       Error
+│         Msg: "expected identifier"
+│       Space: " "
+│       Dot: "."
+│       Ident: "A"
+│     Error
+│       Msg: "expected argument list"
+│   Space: "\n"
+
+--- missing-in-keyword-in-for-loop ---
+#for A!*0[]{
+│ Markup
+│   Hash: "#"
+│   ForLoop
+│     For: "for"
+│     Space: " "
+│     Ident: "A"
+│     Error: "!"
+│       Msg: "unexpected character: !"
+│     Binary
+│       Star: "*"
+│       FuncCall
+│         Int: "0"
+│         Args
+│           ContentBlock
+│             LeftBracket: "["
+│             Markup
+│             RightBracket: "]"
+│     CodeBlock
+│       Error: "{"
+│         Msg: "unclosed delimiter"
+│       Code
+│         Space: "\n"
+
+--- missing-colon-after-show-rule-binary-selector ---
+#show *
+│ Markup
+│   Hash: "#"
+│   ShowRule
+│     Show: "show"
+│     Error: " *"
+│       Msg: "expected colon, found binary"
 │   Space: "\n"

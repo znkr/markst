@@ -119,6 +119,118 @@ type Table struct {
 	Label    *Label
 }
 
+// Equation is a mathematical equation, produced by `$...$`. Block reports
+// whether it is displayed on its own line (block) or inline.
+type Equation struct {
+	Block bool    `writst:"required"`
+	Body  Content `writst:"required"`
+	Label *Label
+}
+
+// MathText is a text fragment inside math: a variable, number, or symbol. Bold,
+// Italic, and Variant carry the font style folded in from an enclosing style
+// function (`bold(x)`, `sans(x)`, …); each is nil when the style was never set,
+// so a nearer style function always wins over an outer one.
+type MathText struct {
+	Text    string `writst:"required"`
+	Bold    Value
+	Italic  Value
+	Variant Value
+	Label   *Label
+}
+
+// MathAttach is a base with optional sub-/superscripts: a_1^2. Top and Bottom
+// are optional.
+type MathAttach struct {
+	Base   Content `writst:"required"`
+	Top    Content
+	Bottom Content
+	Label  *Label
+}
+
+// MathFrac is a fraction: x/2.
+type MathFrac struct {
+	Num   Content `writst:"required"`
+	Denom Content `writst:"required"`
+	Label *Label
+}
+
+// MathRoot is a root: √x or root(3, x). Index is optional (nil for a square
+// root).
+type MathRoot struct {
+	Index    Content
+	Radicand Content `writst:"required"`
+	Label    *Label
+}
+
+// MathPrimes is a run of prime marks attached to a base (a with three primes).
+type MathPrimes struct {
+	Base  Content `writst:"required"`
+	Count int     `writst:"required"`
+	Label *Label
+}
+
+// MathAlignPoint is an alignment point in math: &.
+type MathAlignPoint struct {
+	Label *Label
+}
+
+// MathDelimited is a delimited group in math: [x + y] or (a). Open and Close
+// hold the delimiter content.
+type MathDelimited struct {
+	Open  Content `writst:"required"`
+	Body  Content `writst:"required"`
+	Close Content `writst:"required"`
+	Label *Label
+}
+
+// MathUnderline is an underlined expression in math: underline(x).
+type MathUnderline struct {
+	Body  Content `writst:"required"`
+	Label *Label
+}
+
+// MathAccent is an accented expression in math: hat(x) or accent(x, \u{0302}).
+// Accent holds the accent's combining codepoint — the accent argument is
+// normalized to its combining form, so `hat(x)` and `accent(x, \u{0302})` are
+// the same node. Size holds the user-supplied size override (nil when unset),
+// retained so field access can retrieve it.
+type MathAccent struct {
+	Base    Content `writst:"required"`
+	Accent  string  `writst:"required"`
+	Size    Value
+	Dotless bool `writst:"required"`
+	Label   *Label
+}
+
+// MathCancel is a cancellation line over an expression in math:
+// cancel(x, angle: ...). Angle holds the value passed for the `angle` field (a
+// user-supplied angle or function), retained so field access can retrieve it.
+type MathCancel struct {
+	Body  Content `writst:"required"`
+	Angle Value
+	Label *Label
+}
+
+// MathVec is a column vector in math: vec(a, b, c).
+type MathVec struct {
+	Children []Content `writst:"required"`
+	Label    *Label
+}
+
+// MathCases is a cases construct in math: cases(a, b).
+type MathCases struct {
+	Children []Content `writst:"required"`
+	Label    *Label
+}
+
+// MathMat is a matrix in math: mat(a, b; c, d). Rows holds the rows, each a
+// slice of cells.
+type MathMat struct {
+	Rows  [][]Content `writst:"required"`
+	Label *Label
+}
+
 // Document is the realized document root, produced by the realization pass (it
 // has no constructor). Title is populated from a `set document(title: …)` rule.
 type Document struct {
@@ -146,6 +258,21 @@ func (*TermItem) aValue()  {}
 func (*Table) aValue()     {}
 func (*Document) aValue()  {}
 
+func (*Equation) aValue()       {}
+func (*MathText) aValue()       {}
+func (*MathAttach) aValue()     {}
+func (*MathFrac) aValue()       {}
+func (*MathRoot) aValue()       {}
+func (*MathPrimes) aValue()     {}
+func (*MathAlignPoint) aValue() {}
+func (*MathDelimited) aValue()  {}
+func (*MathUnderline) aValue()  {}
+func (*MathAccent) aValue()     {}
+func (*MathCancel) aValue()     {}
+func (*MathVec) aValue()        {}
+func (*MathCases) aValue()      {}
+func (*MathMat) aValue()        {}
+
 func (Sequence) aContent()   {}
 func (*Heading) aContent()   {}
 func (*Text) aContent()      {}
@@ -165,6 +292,21 @@ func (*Terms) aContent()     {}
 func (*TermItem) aContent()  {}
 func (*Table) aContent()     {}
 func (*Document) aContent()  {}
+
+func (*Equation) aContent()       {}
+func (*MathText) aContent()       {}
+func (*MathAttach) aContent()     {}
+func (*MathFrac) aContent()       {}
+func (*MathRoot) aContent()       {}
+func (*MathPrimes) aContent()     {}
+func (*MathAlignPoint) aContent() {}
+func (*MathDelimited) aContent()  {}
+func (*MathUnderline) aContent()  {}
+func (*MathAccent) aContent()     {}
+func (*MathCancel) aContent()     {}
+func (*MathVec) aContent()        {}
+func (*MathCases) aContent()      {}
+func (*MathMat) aContent()        {}
 
 // Name returns the element name, matching the constructor function used to
 // build it. Table has no dedicated diagnostic name and reports the generic
@@ -189,6 +331,21 @@ func (*TermItem) Name() string  { return "terms.item" }
 func (*Table) Name() string     { return "table" }
 func (*Document) Name() string  { return "document" }
 
+func (*Equation) Name() string       { return "equation" }
+func (*MathText) Name() string       { return "math.text" }
+func (*MathAttach) Name() string     { return "math.attach" }
+func (*MathFrac) Name() string       { return "math.frac" }
+func (*MathRoot) Name() string       { return "math.root" }
+func (*MathPrimes) Name() string     { return "math.primes" }
+func (*MathAlignPoint) Name() string { return "math.align-point" }
+func (*MathDelimited) Name() string  { return "math.lr" }
+func (*MathUnderline) Name() string  { return "math.underline" }
+func (*MathAccent) Name() string     { return "math.accent" }
+func (*MathCancel) Name() string     { return "cancel" }
+func (*MathVec) Name() string        { return "math.vec" }
+func (*MathCases) Name() string      { return "math.cases" }
+func (*MathMat) Name() string        { return "math.mat" }
+
 func (Sequence) Type() types.Type   { return types.Content }
 func (*Heading) Type() types.Type   { return types.Content }
 func (*Text) Type() types.Type      { return types.Content }
@@ -208,3 +365,18 @@ func (*Terms) Type() types.Type     { return types.Content }
 func (*TermItem) Type() types.Type  { return types.Content }
 func (*Table) Type() types.Type     { return types.Content }
 func (*Document) Type() types.Type  { return types.Content }
+
+func (*Equation) Type() types.Type       { return types.Content }
+func (*MathText) Type() types.Type       { return types.Content }
+func (*MathAttach) Type() types.Type     { return types.Content }
+func (*MathFrac) Type() types.Type       { return types.Content }
+func (*MathRoot) Type() types.Type       { return types.Content }
+func (*MathPrimes) Type() types.Type     { return types.Content }
+func (*MathAlignPoint) Type() types.Type { return types.Content }
+func (*MathDelimited) Type() types.Type  { return types.Content }
+func (*MathUnderline) Type() types.Type  { return types.Content }
+func (*MathAccent) Type() types.Type     { return types.Content }
+func (*MathCancel) Type() types.Type     { return types.Content }
+func (*MathVec) Type() types.Type        { return types.Content }
+func (*MathCases) Type() types.Type      { return types.Content }
+func (*MathMat) Type() types.Type        { return types.Content }

@@ -177,6 +177,51 @@ func (n *EnumItem) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Equation) Field(name name.Name) Value {
+	switch name {
+	case names.Block:
+		return Bool(n.Block)
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Equation) HasField(name name.Name) bool {
+	switch name {
+	case names.Block:
+		return true
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Equation) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Block.String()), n.Field(names.Block))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Equation) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
 func (n *Heading) Field(name name.Name) Value {
 	switch name {
 	case names.Depth:
@@ -362,6 +407,647 @@ func (n *ListItem) Fields() *Dict {
 }
 
 func (n *ListItem) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathAccent) Field(name name.Name) Value {
+	switch name {
+	case names.Base:
+		return n.Base
+	case names.Accent:
+		return Str(n.Accent)
+	case names.Size:
+		if n.Size == nil {
+			return nil
+		}
+		return n.Size
+	case names.Dotless:
+		return Bool(n.Dotless)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathAccent) HasField(name name.Name) bool {
+	switch name {
+	case names.Base:
+		return true
+	case names.Accent:
+		return true
+	case names.Size:
+		return n.Size != nil
+	case names.Dotless:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathAccent) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Base.String()), n.Field(names.Base))
+	fields.Elems.Put(Str(names.Accent.String()), n.Field(names.Accent))
+	if f := n.Field(names.Size); f != nil {
+		fields.Elems.Put(Str(names.Size.String()), f)
+	}
+	fields.Elems.Put(Str(names.Dotless.String()), n.Field(names.Dotless))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathAccent) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathAlignPoint) Field(name name.Name) Value {
+	switch name {
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathAlignPoint) HasField(name name.Name) bool {
+	switch name {
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathAlignPoint) Fields() *Dict {
+	fields := new(Dict)
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathAlignPoint) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathAttach) Field(name name.Name) Value {
+	switch name {
+	case names.Base:
+		return n.Base
+	case names.Top:
+		if n.Top == nil {
+			return nil
+		}
+		return n.Top
+	case names.Bottom:
+		if n.Bottom == nil {
+			return nil
+		}
+		return n.Bottom
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathAttach) HasField(name name.Name) bool {
+	switch name {
+	case names.Base:
+		return true
+	case names.Top:
+		return n.Top != nil
+	case names.Bottom:
+		return n.Bottom != nil
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathAttach) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Base.String()), n.Field(names.Base))
+	if f := n.Field(names.Top); f != nil {
+		fields.Elems.Put(Str(names.Top.String()), f)
+	}
+	if f := n.Field(names.Bottom); f != nil {
+		fields.Elems.Put(Str(names.Bottom.String()), f)
+	}
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathAttach) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathCancel) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Angle:
+		if n.Angle == nil {
+			return nil
+		}
+		return n.Angle
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathCancel) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Angle:
+		return n.Angle != nil
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathCancel) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Angle); f != nil {
+		fields.Elems.Put(Str(names.Angle.String()), f)
+	}
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathCancel) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathCases) Field(name name.Name) Value {
+	switch name {
+	case names.Children:
+		vs := make([]Value, len(n.Children))
+		for i, v := range n.Children {
+			vs[i] = v
+		}
+		return &Array{Elems: vs}
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathCases) HasField(name name.Name) bool {
+	switch name {
+	case names.Children:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathCases) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathCases) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathDelimited) Field(name name.Name) Value {
+	switch name {
+	case names.Open:
+		return n.Open
+	case names.Body:
+		return n.Body
+	case names.Close:
+		return n.Close
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathDelimited) HasField(name name.Name) bool {
+	switch name {
+	case names.Open:
+		return true
+	case names.Body:
+		return true
+	case names.Close:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathDelimited) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Open.String()), n.Field(names.Open))
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	fields.Elems.Put(Str(names.Close.String()), n.Field(names.Close))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathDelimited) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathFrac) Field(name name.Name) Value {
+	switch name {
+	case names.Num:
+		return n.Num
+	case names.Denom:
+		return n.Denom
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathFrac) HasField(name name.Name) bool {
+	switch name {
+	case names.Num:
+		return true
+	case names.Denom:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathFrac) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Num.String()), n.Field(names.Num))
+	fields.Elems.Put(Str(names.Denom.String()), n.Field(names.Denom))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathFrac) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathMat) Field(name name.Name) Value {
+	switch name {
+	case names.Rows:
+		vs := make([]Value, len(n.Rows))
+		for i, row := range n.Rows {
+			rvs := make([]Value, len(row))
+			for j, v := range row {
+				rvs[j] = v
+			}
+			vs[i] = &Array{Elems: rvs}
+		}
+		return &Array{Elems: vs}
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathMat) HasField(name name.Name) bool {
+	switch name {
+	case names.Rows:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathMat) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Rows.String()), n.Field(names.Rows))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathMat) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathPrimes) Field(name name.Name) Value {
+	switch name {
+	case names.Base:
+		return n.Base
+	case names.Count:
+		return Int(n.Count)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathPrimes) HasField(name name.Name) bool {
+	switch name {
+	case names.Base:
+		return true
+	case names.Count:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathPrimes) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Base.String()), n.Field(names.Base))
+	fields.Elems.Put(Str(names.Count.String()), n.Field(names.Count))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathPrimes) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathRoot) Field(name name.Name) Value {
+	switch name {
+	case names.Index:
+		if n.Index == nil {
+			return nil
+		}
+		return n.Index
+	case names.Radicand:
+		return n.Radicand
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathRoot) HasField(name name.Name) bool {
+	switch name {
+	case names.Index:
+		return n.Index != nil
+	case names.Radicand:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathRoot) Fields() *Dict {
+	fields := new(Dict)
+	if f := n.Field(names.Index); f != nil {
+		fields.Elems.Put(Str(names.Index.String()), f)
+	}
+	fields.Elems.Put(Str(names.Radicand.String()), n.Field(names.Radicand))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathRoot) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathText) Field(name name.Name) Value {
+	switch name {
+	case names.Text:
+		return Str(n.Text)
+	case names.Bold:
+		if n.Bold == nil {
+			return nil
+		}
+		return n.Bold
+	case names.Italic:
+		if n.Italic == nil {
+			return nil
+		}
+		return n.Italic
+	case names.Variant:
+		if n.Variant == nil {
+			return nil
+		}
+		return n.Variant
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathText) HasField(name name.Name) bool {
+	switch name {
+	case names.Text:
+		return true
+	case names.Bold:
+		return n.Bold != nil
+	case names.Italic:
+		return n.Italic != nil
+	case names.Variant:
+		return n.Variant != nil
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathText) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Text.String()), n.Field(names.Text))
+	if f := n.Field(names.Bold); f != nil {
+		fields.Elems.Put(Str(names.Bold.String()), f)
+	}
+	if f := n.Field(names.Italic); f != nil {
+		fields.Elems.Put(Str(names.Italic.String()), f)
+	}
+	if f := n.Field(names.Variant); f != nil {
+		fields.Elems.Put(Str(names.Variant.String()), f)
+	}
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathText) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathUnderline) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathUnderline) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathUnderline) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathUnderline) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathVec) Field(name name.Name) Value {
+	switch name {
+	case names.Children:
+		vs := make([]Value, len(n.Children))
+		for i, v := range n.Children {
+			vs[i] = v
+		}
+		return &Array{Elems: vs}
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathVec) HasField(name name.Name) bool {
+	switch name {
+	case names.Children:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathVec) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathVec) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old

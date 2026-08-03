@@ -373,6 +373,16 @@ func TestColumn(t *testing.T) {
 			[]int{0, 1, 0, 0},
 		},
 		{
+			"carriage return",
+			"a\rb",
+			[]int{0, 1, 0},
+		},
+		{
+			"crlf",
+			"a\r\nb",
+			[]int{0, 1, 2, 0}, // the CR of a CRLF pair does not end the line
+		},
+		{
 			"chinese",
 			"世界",
 			[]int{0, 1},
@@ -582,6 +592,16 @@ func TestNewlines(t *testing.T) {
 			name: "unicode_with_newlines",
 			in:   "世\n界",
 			want: []uint32{4, 7}, // '\n' after 世 (3 bytes) at 4, EOF at 7
+		},
+		{
+			name: "carriage_return",
+			in:   "a\rb",
+			want: []uint32{2, 3}, // lone CR ends a line, EOF at 3
+		},
+		{
+			name: "crlf",
+			in:   "a\r\nb",
+			want: []uint32{3, 4}, // CRLF is one line break, EOF at 4
 		},
 	}
 

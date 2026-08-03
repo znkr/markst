@@ -1,6 +1,6 @@
 // Test labels.
 
---- label-show-where-selector (skip: show rules not implemented yet) ---
+--- label-show-where-selector (skip: needs the underline element and a text(size:) set rule) ---
 // Test labelled headings.
 #show heading: set text(10pt)
 #show heading.where(label: <intro>): underline
@@ -11,7 +11,7 @@ The beginning.
 = Conclusion
 The end.
 
---- label-after-expression (skip: show rules not implemented yet) ---
+--- label-after-expression (skip: needs color values (red)) ---
 // Test label after expression.
 #show strong.where(label: <v>): set text(red)
 
@@ -19,14 +19,14 @@ The end.
 #let b = [*B*]
 #a <v> #b
 
---- label-dynamic-show-set (skip: show rules not implemented yet) ---
+--- label-dynamic-show-set (skip: needs color values (red, blue)) ---
 // Test abusing dynamic labels for styling.
 #show <red>: set text(red)
 #show <blue>: set text(blue)
 
 *A* *B* <red> *C* #label("bl" + "ue") *D*
 
---- label-after-parbreak (skip: show rules not implemented yet) ---
+--- label-after-parbreak (skip: show rules with a label selector (`#show <label>:`) are not applied yet) ---
 // Test that label ignores parbreak.
 #show <hide>: none
 
@@ -38,7 +38,7 @@ _Hidden_
 <hide>
 _Visible_
 
---- label-in-block (skip: show rules not implemented yet) ---
+--- label-in-block (skip: needs the strike element) ---
 // Test that label only works within one content block.
 #show <strike>: strike
 // Warning: 13-21 label `<strike>` is not attached to anything

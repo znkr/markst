@@ -37,7 +37,21 @@
 #f(1, a: 2)
 │ #document[
 │   #par[Name:Typst.Age:#raw("2").]
-│   #par[\[#raw("1")st,#raw("2")nd,#raw("3")rd,#raw("4")th\]]
+│   #par[
+│     \[
+│     #raw("1")
+│     st
+│     ,
+│     #raw("2")
+│     nd
+│     ,
+│     #raw("3")
+│     rd
+│     ,
+│     #raw("4")
+│     th
+│     \]
+│   ]
 │   #par[2345]
 │   #par[1, "a": 2]
 │ ]

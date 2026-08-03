@@ -19,6 +19,12 @@ func TestUnquote(t *testing.T) {
 		{`"\u{61}"`, "a"},
 		{`"\u{1F600}"`, "😀"},
 		{`"a\u{20}b"`, "a b"},
+		{`"\'"`, "'"},
+		// Escapes the scanner rejects never reach unquote; it keeps them as
+		// written rather than panicking.
+		{`"\z"`, `\z`},
+		{`"\u{}"`, `\u{}`},
+		{`"\u"`, `\u`},
 	}
 
 	for _, tt := range tests {

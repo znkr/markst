@@ -264,7 +264,11 @@ func (f *formatter) formatInst(inst Instruction) {
 			sb.WriteString("]")
 		}
 	case *ContentResult:
-		sb.WriteString("content_result [")
+		if i.Math {
+			sb.WriteString("content_result math [")
+		} else {
+			sb.WriteString("content_result [")
+		}
 		for j, r := range i.Items {
 			if j > 0 {
 				sb.WriteString(", ")
@@ -312,6 +316,32 @@ func (f *formatter) formatInst(inst Instruction) {
 		}
 	case *TermItem:
 		fmt.Fprintf(sb, "term_item %s, %s", f.ref(i.Term), f.ref(i.Description))
+	case *Equation:
+		if i.Block {
+			fmt.Fprintf(sb, "equation block %s", f.ref(i.Body))
+		} else {
+			fmt.Fprintf(sb, "equation %s", f.ref(i.Body))
+		}
+	case *MathAttach:
+		fmt.Fprintf(sb, "math_attach %s", f.ref(i.Base))
+		if i.Top != NoRef {
+			fmt.Fprintf(sb, " top=%s", f.ref(i.Top))
+		}
+		if i.Bottom != NoRef {
+			fmt.Fprintf(sb, " bottom=%s", f.ref(i.Bottom))
+		}
+	case *MathFrac:
+		fmt.Fprintf(sb, "math_frac %s, %s", f.ref(i.Num), f.ref(i.Denom))
+	case *MathRoot:
+		if i.Index != NoRef {
+			fmt.Fprintf(sb, "math_root index=%s %s", f.ref(i.Index), f.ref(i.Radicand))
+		} else {
+			fmt.Fprintf(sb, "math_root %s", f.ref(i.Radicand))
+		}
+	case *MathPrimes:
+		fmt.Fprintf(sb, "math_primes count=%d %s", i.Count, f.ref(i.Base))
+	case *MathDelimited:
+		fmt.Fprintf(sb, "math_delimited %s, %s, %s", f.ref(i.Open), f.ref(i.Body), f.ref(i.Close))
 	case *SetRule:
 		fmt.Fprintf(sb, "set_rule %s", f.ref(i.Target))
 	case *ShowRule:
@@ -322,6 +352,11 @@ func (f *formatter) formatInst(inst Instruction) {
 		fmt.Fprintf(sb, ": %s", f.ref(i.Transform))
 	case *DiscardCheck:
 		fmt.Fprintf(sb, "discard_check %s", f.ref(i.Value))
+	case *Warn:
+		fmt.Fprintf(sb, "warn msg=%q", i.Msg)
+		for _, h := range i.Hints {
+			fmt.Fprintf(sb, " hint=%q", h)
+		}
 	case *Contextual:
 		fmt.Fprintf(sb, "contextual %s", f.ref(i.Body))
 	case *ModuleInclude:
@@ -429,6 +464,15 @@ func formatConst(v any) string {
 			return "<function " + v.Name + ">"
 		}
 		return "<function>"
+	case *value.Element:
+		if v.Name != "" {
+			return "<function " + v.Name + ">"
+		}
+		return "<function>"
+	case *value.MathText:
+		return fmt.Sprintf("math_text %q", v.Text)
+	case *value.MathAlignPoint:
+		return "math_align_point"
 	case *value.Type:
 		return "<type " + v.Reflected.String() + ">"
 	case *value.Module:

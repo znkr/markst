@@ -59,28 +59,33 @@ func (v *Leaf) aNode()       {}
 // and last children. Its [Text] is the concatenation of all children's text.
 type Inner struct {
 	kind     Kind
+	span     Span
 	children []Node
 }
 
 var _ Node = (*Inner)(nil)
 
 // NewInner creates a new non-terminal node with the given kind and children.
+// The children must not be mutated afterwards: the node's span is derived from
+// them once, here, rather than on every [Inner.Span] call — recomputing it would
+// recurse into both the first and the last child, which costs 2^depth for a
+// deeply nested tree.
 func NewInner(kind Kind, children []Node) *Inner {
+	var span Span
+	if len(children) > 0 {
+		span = Span{
+			Start: children[0].Span().Start,
+			End:   children[len(children)-1].Span().End,
+		}
+	}
 	return &Inner{
 		kind:     kind,
+		span:     span,
 		children: children,
 	}
 }
 func (v *Inner) Kind() Kind { return v.kind }
-func (v *Inner) Span() Span {
-	if len(v.children) == 0 {
-		return Span{}
-	}
-	return Span{
-		Start: v.children[0].Span().Start,
-		End:   v.children[len(v.children)-1].Span().End,
-	}
-}
+func (v *Inner) Span() Span { return v.span }
 func (v *Inner) Text() string {
 	var sb strings.Builder
 	for _, child := range v.children {

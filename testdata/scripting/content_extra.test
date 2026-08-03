@@ -17,11 +17,13 @@
 
 --- element-raw-block-lang ---
 #raw("fn main() {}", block: true, lang: "rust")
-│ #document[#raw(
-│   block: true,
-│   lang: "rust",
-│   "fn main() {}",
-│ )]
+│ #document[
+│   #raw(
+│     block: true,
+│     lang: "rust",
+│     "fn main() {}",
+│   )
+│ ]
 
 --- element-strong ---
 #strong[bold]
@@ -33,7 +35,7 @@
 
 --- element-heading ---
 #heading(level: 2)[Title]
-│ #document[#heading(level: 2)]
+│ #document[#heading(level: 2)[Title]]
 
 --- element-text ---
 #text("hello")
@@ -45,7 +47,11 @@
 
 --- element-link ---
 #link("https://example.com")[a site]
-│ #document[#par[#link(dest: "https://example.com")[a site]]]
+│ #document[
+│   #par[
+│     #link(dest: "https://example.com")[a site]
+│   ]
+│ ]
 
 --- element-ref ---
 #ref(<intro>)
@@ -53,7 +59,12 @@
 
 --- element-list ---
 #list([apples], [oranges])
-│ #document[#list(#list.item[apples], #list.item[oranges])]
+│ #document[
+│   #list(
+│     #list.item[apples],
+│     #list.item[oranges],
+│   )
+│ ]
 
 --- element-list-item ---
 #list.item([a single item])
@@ -61,11 +72,21 @@
 
 --- element-list-of-items ---
 #list(list.item([first]), list.item([second]))
-│ #document[#list(#list.item[first], #list.item[second])]
+│ #document[
+│   #list(
+│     #list.item[first],
+│     #list.item[second],
+│   )
+│ ]
 
 --- element-enum ---
 #enum([one], [two])
-│ #document[#enum(#enum.item(1)[one], #enum.item(2)[two])]
+│ #document[
+│   #enum(
+│     #enum.item(1)[one],
+│     #enum.item(2)[two],
+│   )
+│ ]
 
 --- element-enum-item ---
 #enum.item([numbered], number: 5)
@@ -77,7 +98,12 @@
 
 --- element-terms ---
 #terms(terms.item([apple], [a fruit]), terms.item([oak], [a tree]))
-│ #document[#terms(#terms.item[apple][a fruit], #terms.item[oak][a tree])]
+│ #document[
+│   #terms(
+│     #terms.item[apple][a fruit],
+│     #terms.item[oak][a tree],
+│   )
+│ ]
 
 --- element-table ---
 #table([a], [b])

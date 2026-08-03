@@ -1,0 +1,395 @@
+--- inline-equation ---
+$x$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "x"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- block-equation ---
+$ x^2 + 1 $
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Space: " "
+│     Math
+│       MathAttach
+│         MathText: "x"
+│         Hat: "^"
+│         MathText: "2"
+│       Space: " "
+│       MathText: "+"
+│       Space: " "
+│       MathText: "1"
+│     Space: " "
+│     Dollar: "$"
+│   Space: "\n"
+
+--- superscript ---
+$x^2$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathAttach
+│         MathText: "x"
+│         Hat: "^"
+│         MathText: "2"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- subscript-and-superscript ---
+$a_1^2$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathAttach
+│         MathText: "a"
+│         Underscore: "_"
+│         MathText: "1"
+│         Hat: "^"
+│         MathText: "2"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- fraction ---
+$x/2$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathFrac
+│         MathText: "x"
+│         Slash: "/"
+│         MathText: "2"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- fraction-parens ---
+$(a + b)/2$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathFrac
+│         Math
+│           LeftParen: "("
+│           Math
+│             MathText: "a"
+│             Space: " "
+│             MathText: "+"
+│             Space: " "
+│             MathText: "b"
+│           RightParen: ")"
+│         Slash: "/"
+│         MathText: "2"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- root ---
+$sqrt(x)$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathCall
+│         MathIdent: "sqrt"
+│         MathArgs
+│           LeftParen: "("
+│           MathText: "x"
+│           RightParen: ")"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- unicode-root ---
+$√x$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathRoot
+│         Root: "√"
+│         MathText: "x"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- primes ---
+$a'''$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathAttach
+│         MathText: "a"
+│         MathPrimes: "'''"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- ident ---
+$pi$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathIdent: "pi"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- field-access ---
+$arrow.r$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       FieldAccess
+│         MathIdent: "arrow"
+│         Dot: "."
+│         Ident: "r"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- shorthand ---
+$a <= b$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "a"
+│       Space: " "
+│       MathShorthand: "<="
+│       Space: " "
+│       MathText: "b"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- align-point ---
+$a & b$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "a"
+│       Space: " "
+│       MathAlignPoint: "&"
+│       Space: " "
+│       MathText: "b"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- math-call ---
+$f(x)$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       Math
+│         MathText: "f"
+│         MathDelimited
+│           MathText: "("
+│           Math
+│             MathText: "x"
+│           MathText: ")"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- math-call-multiple-args ---
+$frac(a, b)$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathCall
+│         MathIdent: "frac"
+│         MathArgs
+│           LeftParen: "("
+│           MathText: "a"
+│           Comma: ","
+│           Space: " "
+│           MathText: "b"
+│           RightParen: ")"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- math-matrix ---
+$mat(a, b; c, d)$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathCall
+│         MathIdent: "mat"
+│         MathArgs
+│           LeftParen: "("
+│           MathText: "a"
+│           Comma: ","
+│           Space: " "
+│           MathText: "b"
+│           Semicolon: ";"
+│           Space: " "
+│           MathText: "c"
+│           Comma: ","
+│           Space: " "
+│           MathText: "d"
+│           RightParen: ")"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- named-arg ---
+$vec(a, b, delim: "[")$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathCall
+│         MathIdent: "vec"
+│         MathArgs
+│           LeftParen: "("
+│           MathText: "a"
+│           Comma: ","
+│           Space: " "
+│           MathText: "b"
+│           Comma: ","
+│           Space: " "
+│           Named
+│             Ident: "delim"
+│             Colon: ":"
+│             Space: " "
+│             Str: "\"[\""
+│           RightParen: ")"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- lr-delimited ---
+$[|x|]$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathDelimited
+│         MathShorthand: "[|"
+│         Math
+│           MathText: "x"
+│         MathShorthand: "|]"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- delimited ---
+$[x + y]$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "["
+│       MathText: "x"
+│       Space: " "
+│       MathText: "+"
+│       Space: " "
+│       MathText: "y"
+│       MathText: "]"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- embedded-code ---
+$#value$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       Hash: "#"
+│       Ident: "value"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- number ---
+$123.45$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "123.45"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- linebreak ---
+$a \ b$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathText: "a"
+│       Space: " "
+│       Linebreak: "\\"
+│       Space: " "
+│       MathText: "b"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- text-in-math ---
+$"hello"$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       Str: "\"hello\""
+│     Dollar: "$"
+│   Space: "\n"
+
+--- attach-operator-without-operand ---
+$0^ ^0$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathAttach
+│         MathText: "0"
+│         Hat: "^"
+│         MathAttach
+│           Error
+│             Msg: "expected expression"
+│           Space: " "
+│           Hat: "^"
+│           MathText: "0"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- attach-operator-without-operand-subscript ---
+$a_ _b$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathAttach
+│         MathText: "a"
+│         Underscore: "_"
+│         MathAttach
+│           Error
+│             Msg: "expected expression"
+│           Space: " "
+│           Underscore: "_"
+│           MathText: "b"
+│     Dollar: "$"
+│   Space: "\n"
+
+--- named-math-arg-without-value ---
+$frac(a: )$
+│ Markup
+│   Equation
+│     Dollar: "$"
+│     Math
+│       MathCall
+│         MathIdent: "frac"
+│         MathArgs
+│           LeftParen: "("
+│           Named
+│             Ident: "a"
+│             Colon: ":"
+│             Math
+│               Error
+│                 Msg: "expected expression"
+│           Space: " "
+│           RightParen: ")"
+│     Dollar: "$"
+│   Space: "\n"

@@ -1,0 +1,154 @@
+--- inline-equation ---
+$x$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = equation v0
+│     return v1
+
+--- block-equation ---
+$ x + 1 $
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = const math_text "+"
+│     v2 = const math_text "1"
+│     v3 = content_result math [v0, v1, v2]
+│     v4 = equation block v3
+│     return v4
+
+--- superscript ---
+$x^2$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = const math_text "2"
+│     v2 = math_attach v0 top=v1
+│     v3 = equation v2
+│     return v3
+
+--- attach ---
+$a_1^2$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "a"
+│     v1 = const math_text "1"
+│     v2 = const math_text "2"
+│     v3 = math_attach v0 top=v2 bottom=v1
+│     v4 = equation v3
+│     return v4
+
+--- fraction ---
+$x/2$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = const math_text "2"
+│     v2 = math_frac v0, v1
+│     v3 = equation v2
+│     return v3
+
+--- root ---
+$sqrt(x)$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = call <function math.sqrt>(v0)
+│     v2 = equation v1
+│     return v2
+
+--- primes ---
+$a'''$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "a"
+│     v1 = math_primes count=3 v0
+│     v2 = equation v1
+│     return v2
+
+--- symbol ---
+$pi$
+│ fn $top:
+│   b0:
+│     v0 = const π
+│     v1 = equation v0
+│     return v1
+
+--- unresolved-ident ---
+$foo$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "foo"
+│     v1 = equation v0
+│     return v1
+
+--- frac-call ---
+$frac(a, b)$
+│ fn $top:
+│   b0:
+│     v0 = const <function math.frac>
+│     v1 = const math_text "a"
+│     v2 = const math_text "b"
+│     v3 = call v0(v1, v2)
+│     v4 = equation v3
+│     return v4
+
+--- delimited ---
+$[|x|]$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "⟦"
+│     v1 = const math_text "x"
+│     v2 = const math_text "⟧"
+│     v3 = math_delimited v0, v1, v2
+│     v4 = equation v3
+│     return v4
+
+--- embedded-code ---
+#let v = 3
+$#v$
+│ fn $top:
+│   b0:
+│     v0 = equation 3
+│     return v0
+
+--- embedded-code-semicolon ---
+$#let x = 1; x$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = equation v0
+│     return v1
+
+--- embedded-code-semicolon-in-attach ---
+#let b = 2
+$a^#b;$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "a"
+│     v1 = math_attach v0 top=2
+│     v2 = equation v1
+│     return v2
+
+--- embedded-code-semicolon-in-frac ---
+#let a = 1
+$#a;/b$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "b"
+│     v1 = math_frac 1, v0
+│     v2 = equation v1
+│     return v2
+
+--- math-args-row-separator ---
+#let b = 2
+$mat(a; #b)$
+│ fn $top:
+│   b0:
+│     v0 = const <function math.mat>
+│     v1 = const math_text "a"
+│     v2 = make_array [v1]
+│     v3 = make_array [2]
+│     v4 = call v0(v2, v3)
+│     v5 = equation v4
+│     return v5

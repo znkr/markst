@@ -85,7 +85,11 @@ func (pc *patternCtx) bindLeaf(n syntax.Node, rhs expr.Ref) {
 			a.checkIdent(source, n.Span())
 			return
 		}
-		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), rhs)
+		v, _, ok := a.assignVar(bnd, source, n.Span())
+		if !ok {
+			return
+		}
+		a.b.WriteVar(v, a.b.CurrentBlock(), rhs)
 		return
 	}
 	if _, dup := pc.seen[source]; dup {

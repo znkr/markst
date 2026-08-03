@@ -101,7 +101,37 @@
 #float.inf \
 #(-float.inf) \
 #float.nan
-│ #document[#par[#raw("12")#linebreak()#raw("3.14")#linebreak()#raw("1234567890")#linebreak()#raw("123456789")#linebreak()#raw("0")#linebreak()#raw("-0")#linebreak()#raw("-1")#linebreak()#raw("-9876543210")#linebreak()#raw("-987654321")#linebreak()#raw("-3.14")#linebreak()#raw("-4")#linebreak()#raw("float.inf")#linebreak()#raw("float.-inf")#linebreak()#raw("nan")]]
+│ #document[
+│   #par[
+│     #raw("12")
+│     #linebreak()
+│     #raw("3.14")
+│     #linebreak()
+│     #raw("1234567890")
+│     #linebreak()
+│     #raw("123456789")
+│     #linebreak()
+│     #raw("0")
+│     #linebreak()
+│     #raw("-0")
+│     #linebreak()
+│     #raw("-1")
+│     #linebreak()
+│     #raw("-9876543210")
+│     #linebreak()
+│     #raw("-987654321")
+│     #linebreak()
+│     #raw("-3.14")
+│     #linebreak()
+│     #raw("-4")
+│     #linebreak()
+│     #raw("float.inf")
+│     #linebreak()
+│     #raw("float.-inf")
+│     #linebreak()
+│     #raw("nan")
+│   ]
+│ ]
 
 --- float-syntax-edge-cases ---
 // Test float syntax edge cases and which spans of text are highlighted. Valid

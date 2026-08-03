@@ -39,6 +39,11 @@ type Scanner struct {
 	mode    syntax.Mode
 	newline bool
 	err     *protoerr
+
+	// node holds a composite node produced by the current scan (used by math
+	// mode to emit a FieldAccess node for `a.b`). It is consumed and cleared by
+	// [Next].
+	node syntax.Node
 }
 
 type protoerr struct {
@@ -103,7 +108,11 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	span := s.spanFrom(start)
 	if err := s.err; err != nil {
 		s.err = nil
+		s.node = nil
 		return syntax.KindError, syntax.NewError(span, err.message, text, err.hints...)
+	} else if node := s.node; node != nil {
+		s.node = nil
+		return kind, node
 	} else {
 		return kind, syntax.NewLeaf(kind, span, text)
 	}
@@ -164,7 +173,7 @@ func (s *Scanner) scan(ch rune, start int) syntax.Kind {
 	case syntax.ModeMarkup:
 		return s.scanMarkup(start, ch)
 	case syntax.ModeMath:
-		panic("math mode not implemented")
+		return s.scanMath(start, ch)
 	case syntax.ModeCode:
 		return s.scanCode(start, ch)
 	default:
@@ -598,6 +607,207 @@ func (s *Scanner) scanBackslash() syntax.Kind {
 	}
 }
 
+// scanMath tokenizes a single token in math mode. It mirrors Typst's math
+// lexer: shorthands, single-character operators, primes, delimiters, and math
+// identifiers/text. Delimiters are lexed as `{Left,Right}{Brace,Paren}` and
+// converted back to text/shorthand by the parser.
+func (s *Scanner) scanMath(start int, ch rune) syntax.Kind {
+	switch ch {
+	case '\\':
+		return s.scanBackslash()
+	case '"':
+		return s.scanString()
+
+	// Multi-character (and lone `* - ~`) shorthands.
+	case '-':
+		_ = s.r.ConsumeIf(">>") || s.r.ConsumeIf(">") || s.r.ConsumeIf("->")
+		return syntax.KindMathShorthand
+	case '~':
+		_ = s.r.ConsumeIf("~>") || s.r.ConsumeIf(">")
+		return syntax.KindMathShorthand
+	case '*':
+		return syntax.KindMathShorthand
+	case ':':
+		if s.r.ConsumeIf("=") || s.r.ConsumeIf(":=") {
+			return syntax.KindMathShorthand
+		}
+		return s.scanMathText(start, ch)
+	case '<':
+		if s.r.ConsumeIf("==>") || s.r.ConsumeIf("-->") || s.r.ConsumeIf("--") ||
+			s.r.ConsumeIf("-<") || s.r.ConsumeIf("->") || s.r.ConsumeIf("<-") ||
+			s.r.ConsumeIf("<<") || s.r.ConsumeIf("=>") || s.r.ConsumeIf("==") ||
+			s.r.ConsumeIf("~~") || s.r.ConsumeIf("=") || s.r.ConsumeIf("<") ||
+			s.r.ConsumeIf("-") || s.r.ConsumeIf("~") {
+			return syntax.KindMathShorthand
+		}
+		return s.scanMathText(start, ch)
+	case '>':
+		if s.r.ConsumeIf("->") || s.r.ConsumeIf(">>") || s.r.ConsumeIf("=") || s.r.ConsumeIf(">") {
+			return syntax.KindMathShorthand
+		}
+		return s.scanMathText(start, ch)
+	case '=':
+		if s.r.ConsumeIf("=>") || s.r.ConsumeIf(">") || s.r.ConsumeIf(":") {
+			return syntax.KindMathShorthand
+		}
+		return s.scanMathText(start, ch)
+	case '|':
+		if s.r.ConsumeIf("->") || s.r.ConsumeIf("=>") || s.r.ConsumeIf("|") {
+			return syntax.KindMathShorthand
+		}
+		if s.r.ConsumeIf("]") {
+			return syntax.KindRightBrace
+		}
+		return s.scanMathText(start, ch)
+
+	// Single-character tokens.
+	case '.':
+		if s.r.ConsumeIf("..") {
+			return syntax.KindMathShorthand
+		}
+		return syntax.KindDot
+	case ',':
+		return syntax.KindComma
+	case ';':
+		return syntax.KindSemicolon
+	case '#':
+		return syntax.KindHash
+	case '_':
+		return syntax.KindUnderscore
+	case '$':
+		return syntax.KindDollar
+	case '/':
+		return syntax.KindSlash
+	case '^':
+		return syntax.KindHat
+	case '&':
+		return syntax.KindMathAlignPoint
+	case '√', '∛', '∜':
+		return syntax.KindRoot
+	case '!':
+		if s.r.ConsumeIf("=") {
+			return syntax.KindMathShorthand
+		}
+		return syntax.KindBang
+
+	case '\'':
+		s.r.ConsumeWhile(func(c rune) bool { return c == '\'' })
+		return syntax.KindMathPrimes
+
+	// Delimiters: lexed as braces/parens, converted back by the parser.
+	case '(':
+		return syntax.KindLeftParen
+	case ')':
+		return syntax.KindRightParen
+	case '[':
+		if s.r.ConsumeIf("|") {
+			return syntax.KindLeftBrace
+		}
+		return s.scanMathText(start, ch)
+
+	default:
+		// Identifiers require an id-start followed by at least one id-continue;
+		// a lone letter is math text (rendered italic).
+		if isMathIDStart(ch) && isMathIDContinue(s.r.Peek()) {
+			s.r.ConsumeWhile(isMathIDContinue)
+			return s.scanMathIdentOrField(start)
+		}
+		return s.scanMathText(start, ch)
+	}
+}
+
+// scanMathIdentOrField returns a MathIdent, or a FieldAccess node (stashed in
+// s.node) if the identifier is followed by one or more `.field` accesses.
+func (s *Scanner) scanMathIdentOrField(start int) syntax.Kind {
+	kind := syntax.KindMathIdent
+	var node syntax.Node = syntax.NewLeaf(kind, s.spanFrom(start), s.r.From(start))
+	for {
+		identStart, ok := s.maybeDotIdent()
+		if !ok {
+			break
+		}
+		identEnd := s.r.Offset()
+		dot := syntax.NewLeaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, ".")
+		ident := syntax.NewLeaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, s.r.From(identStart))
+		kind = syntax.KindFieldAccess
+		node = syntax.NewInner(kind, []syntax.Node{node, dot, ident})
+	}
+	if kind == syntax.KindFieldAccess {
+		s.node = node
+	}
+	return kind
+}
+
+// maybeDotIdent, when positioned at a `.` directly followed by a math
+// identifier, consumes `.ident` and returns the byte offset where the
+// identifier begins. Otherwise it consumes nothing.
+func (s *Scanner) maybeDotIdent() (int, bool) {
+	if next, ok := s.r.Scout(1); ok && isMathIDStart(next) && s.r.ConsumeIf(".") {
+		identStart := s.r.Offset()
+		s.r.Next()
+		s.r.ConsumeWhile(isMathIDContinue)
+		return identStart, true
+	}
+	return 0, false
+}
+
+// scanMathText consumes a math text atom: a run of digits (optionally with a
+// fractional part), or a single character.
+func (s *Scanner) scanMathText(start int, ch rune) syntax.Kind {
+	if unicode.IsNumber(ch) {
+		s.r.ConsumeWhile(unicode.IsNumber)
+		if s.r.Peek() == '.' {
+			if next, ok := s.r.Scout(1); ok && unicode.IsNumber(next) {
+				s.r.Next()
+				s.r.ConsumeWhile(unicode.IsNumber)
+			}
+		}
+	}
+	// Otherwise the single rune ch is already consumed.
+	return syntax.KindMathText
+}
+
+// MaybeMathNamedArg probes for a named argument (`name:`) starting at the byte
+// offset start. On a match it consumes the identifier and returns its node,
+// leaving the reader positioned at the `:`. On no match it restores the reader
+// and returns nil. Used by the parser for math argument lists.
+func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
+	cursor := s.r.Offset()
+	s.r.Seek(start)
+	if isIDStart(s.r.Peek()) {
+		s.r.Next()
+		s.r.ConsumeWhile(isIDContinue)
+		// A colon must directly follow, and not the `:=`/`::=` shorthands.
+		if s.r.Peek() == ':' && !s.r.ContinuesWith(":=") && !s.r.ContinuesWith("::=") {
+			text := s.r.From(start)
+			if text != "_" {
+				return syntax.NewLeaf(syntax.KindIdent, s.spanFrom(start), text)
+			}
+			return syntax.NewError(s.spanFrom(start), "expected identifier, found underscore", text)
+		}
+	}
+	s.r.Seek(cursor)
+	return nil
+}
+
+// MaybeMathSpreadArg probes for a spread argument (`..`) starting at the byte
+// offset start. On a match it consumes `..` and returns a Dots node; otherwise
+// it restores the reader and returns nil. Used by the parser for math argument
+// lists.
+func (s *Scanner) MaybeMathSpreadArg(start int) syntax.Node {
+	cursor := s.r.Offset()
+	s.r.Seek(start)
+	if s.r.ConsumeIf("..") {
+		// Don't infer a spread before trivia/end, a dot (`...` shorthand), or an
+		// argument terminator (spreads nothing).
+		if ch := s.r.Peek(); !s.spaceOrEnd() && ch != '.' && ch != ',' && ch != ';' && ch != ')' && ch != '$' {
+			return syntax.NewLeaf(syntax.KindDots, s.spanFrom(start), s.r.From(start))
+		}
+	}
+	s.r.Seek(cursor)
+	return nil
+}
+
 func (s *Scanner) scanLink() syntax.Kind {
 	var brackets []byte
 	s.r.ConsumeWhile(func(ch rune) bool {
@@ -832,11 +1042,20 @@ func (s *Scanner) scanString() syntax.Kind {
 					}
 					continue
 				}
-				s.r.ConsumeWhile(isASCIIAlphanumeric)
+				seq := s.r.ConsumeWhile(isASCIIAlphanumeric)
 				if !s.r.ConsumeIf("}") {
 					if err == "" {
 						err = "invalid unicode escape sequence"
 						hints = []string{"expected '}'"}
+					}
+					continue
+				}
+				// Validate the code point itself, not just the shape, so the
+				// analyzer never has to decode an escape that isn't a
+				// character (mirrors [Scanner.scanBackslash] for markup).
+				if x, perr := strconv.ParseInt(seq, 16, 64); perr != nil || x > unicode.MaxRune || (0xD800 <= x && x < 0xE000) {
+					if err == "" {
+						err = "invalid unicode escape sequence"
 					}
 					continue
 				}
@@ -1024,6 +1243,18 @@ func isIDStart(ch rune) bool {
 func isIDContinue(ch rune) bool {
 	// TODO: Use unicode XID_Continue property?
 	return isAlphanumeric(ch) || ch == '-' || ch == '_'
+}
+
+// isMathIDStart reports whether ch can start a math identifier. Unlike code
+// identifiers, `_` is excluded (it is the subscript operator in math).
+func isMathIDStart(ch rune) bool {
+	return unicode.IsLetter(ch)
+}
+
+// isMathIDContinue reports whether ch can continue a math identifier. Unlike
+// code identifiers, `_` and `-` are excluded (they are math operators).
+func isMathIDContinue(ch rune) bool {
+	return isAlphanumeric(ch)
 }
 
 func isASCIIAlphanumeric(ch rune) bool {

@@ -32,6 +32,15 @@ func contentEqual(a, b Content) bool {
 	return a.Equal(b)
 }
 
+// optEqual compares two optional field values, where nil means "unset". An
+// unset field is equal only to another unset field.
+func optEqual(a, b Value) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(b)
+}
+
 // Type ////////////////////////////////////////////////////////////////////////
 
 func (n *Type) Equal(other Value) bool {
@@ -321,6 +330,102 @@ func (n *Terms) Equal(other Value) bool {
 func (n *TermItem) Equal(other Value) bool {
 	o, ok := other.(*TermItem)
 	return ok && n.Term.Equal(o.Term) && n.Description.Equal(o.Description) && labelEqual(n.Label, o.Label)
+}
+
+func (n *Equation) Equal(other Value) bool {
+	o, ok := other.(*Equation)
+	return ok && n.Block == o.Block && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathText) Equal(other Value) bool {
+	o, ok := other.(*MathText)
+	return ok && n.Text == o.Text &&
+		optEqual(n.Bold, o.Bold) && optEqual(n.Italic, o.Italic) && optEqual(n.Variant, o.Variant) &&
+		labelEqual(n.Label, o.Label)
+}
+
+func (n *MathAttach) Equal(other Value) bool {
+	o, ok := other.(*MathAttach)
+	return ok && n.Base.Equal(o.Base) && contentEqual(n.Top, o.Top) && contentEqual(n.Bottom, o.Bottom) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathFrac) Equal(other Value) bool {
+	o, ok := other.(*MathFrac)
+	return ok && n.Num.Equal(o.Num) && n.Denom.Equal(o.Denom) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathRoot) Equal(other Value) bool {
+	o, ok := other.(*MathRoot)
+	return ok && contentEqual(n.Index, o.Index) && n.Radicand.Equal(o.Radicand) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathPrimes) Equal(other Value) bool {
+	o, ok := other.(*MathPrimes)
+	return ok && n.Base.Equal(o.Base) && n.Count == o.Count && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathAlignPoint) Equal(other Value) bool {
+	o, ok := other.(*MathAlignPoint)
+	return ok && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathDelimited) Equal(other Value) bool {
+	o, ok := other.(*MathDelimited)
+	return ok && n.Open.Equal(o.Open) && n.Body.Equal(o.Body) && n.Close.Equal(o.Close) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathUnderline) Equal(other Value) bool {
+	o, ok := other.(*MathUnderline)
+	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathAccent) Equal(other Value) bool {
+	o, ok := other.(*MathAccent)
+	if !ok || n.Accent != o.Accent || n.Dotless != o.Dotless {
+		return false
+	}
+	return n.Base.Equal(o.Base) && optEqual(n.Size, o.Size) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathCancel) Equal(other Value) bool {
+	o, ok := other.(*MathCancel)
+	return ok && n.Body.Equal(o.Body) && optEqual(n.Angle, o.Angle) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathVec) Equal(other Value) bool {
+	o, ok := other.(*MathVec)
+	return ok && contentSliceEqual(n.Children, o.Children) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathCases) Equal(other Value) bool {
+	o, ok := other.(*MathCases)
+	return ok && contentSliceEqual(n.Children, o.Children) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathMat) Equal(other Value) bool {
+	o, ok := other.(*MathMat)
+	if !ok || len(n.Rows) != len(o.Rows) || !labelEqual(n.Label, o.Label) {
+		return false
+	}
+	for i := range n.Rows {
+		if !contentSliceEqual(n.Rows[i], o.Rows[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// contentSliceEqual reports whether two content slices are element-wise equal.
+func contentSliceEqual(a, b []Content) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !a[i].Equal(b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (n *Table) Equal(other Value) bool {

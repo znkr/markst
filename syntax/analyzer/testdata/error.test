@@ -396,3 +396,99 @@ v in iter {}
 │     v2 = error msg="cannot mutate a temporary value"
 │     v3 = array_elem v1[1]
 │     return none
+
+--- assign-to-universe-constant ---
+#(emph = 1)
+│ fn $top:
+│   b0:
+│     v0 = error msg="cannot mutate a constant: emph"
+│     return v0
+
+--- compound-assign-to-universe-constant ---
+#(emph += 1)
+│ fn $top:
+│   b0:
+│     v0 = error msg="cannot mutate a constant: emph"
+│     return v0
+
+--- destructuring-assign-to-universe-constant ---
+#{
+  let a = 1
+    (a, emph) = (1, 2)
+}
+│ fn $top:
+│   b0:
+│     v0 = make_array [1, 2]
+│     v1 = destruct_array v0, before=2, after=0
+│     v2 = array_elem v1[0]
+│     v3 = error msg="cannot mutate a constant: emph"
+│     return none
+
+--- assign-to-math-constant ---
+$#(pi = 1)$
+│ fn $top:
+│   b0:
+│     v0 = error msg="cannot mutate a constant: pi"
+│     v1 = equation v0
+│     return v1
+
+--- non-pair-item-in-dict ---
+#(:0)
+│ fn $top:
+│   b0:
+│     v0 = error msg="expected named or keyed pair"
+│     v1 = make_dict ()
+│     return v1
+
+--- unclosed-strong-delimiter ---
+*a
+│ fn $top:
+│   b0:
+│     v0 = error msg="unclosed delimiter"
+│     v1 = const text "a"
+│     v2 = strong v1
+│     return v2
+
+--- unclosed-emph-delimiter ---
+_a
+│ fn $top:
+│   b0:
+│     v0 = error msg="unclosed delimiter"
+│     v1 = const text "a"
+│     v2 = emph v1
+│     return v2
+
+--- unclosed-strong-delimiter-in-math ---
+$#0[*]$
+│ fn $top:
+│   b0:
+│     v0 = error msg="unclosed delimiter"
+│     v1 = strong none
+│     v2 = content_result [v1]
+│     v3 = call 0()[v2]
+│     v4 = equation v3
+│     return v4
+
+--- string-escaped-single-quote ---
+#"\'"
+│ fn $top:
+│   b0:
+│     return '
+
+--- term-item-parbreak-before-colon ---
+/ 
+
+  :
+│ fn $top:
+│   b0:
+│     v0 = term_item none, none
+│     return v0
+
+--- set-rule-without-argument-list ---
+#(set!if
+│ fn $top:
+│   b0:
+│     v0 = error msg="unclosed delimiter"
+│     v1 = error msg="unexpected character: !"
+│     v2 = error msg="expected argument list"
+│     return none

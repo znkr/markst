@@ -16,19 +16,29 @@ Second paragraph.
 
 Body text.
 │ #document[
-│   #heading(level: 1)
+│   #heading(level: 1)[Title]
 │   #par[Body text.]
 │ ]
 
 --- realize-markup-list ---
 - apples
 - pears
-│ #document[#list(#list.item[apples], #list.item[pears])]
+│ #document[
+│   #list(
+│     #list.item[apples],
+│     #list.item[pears],
+│   )
+│ ]
 
 --- realize-markup-enum ---
 + first
 + second
-│ #document[#enum(#enum.item(-1)[first], #enum.item(-1)[second])]
+│ #document[
+│   #enum(
+│     #enum.item(-1)[first],
+│     #enum.item(-1)[second],
+│   )
+│ ]
 
 --- realize-list-then-paragraph ---
 - item
@@ -42,11 +52,13 @@ After the list.
 --- realize-document-title ---
 #set document(title: "My Document")
 = Hello
-│ #document(title: [My Document])[#heading(level: 1)]
+│ #document(title: [My Document])[#heading(level: 1)[Hello]]
 
 --- realize-inline-not-paragraphed-in-heading ---
 = A *bold* title
-│ #document[#heading(level: 1)]
+│ #document[
+│   #heading(level: 1)[A#strong[bold]title]
+│ ]
 
 --- realize-document-not-callable ---
 // Error: 2-10 element document is not callable

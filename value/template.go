@@ -2,6 +2,7 @@ package value
 
 import (
 	"znkr.io/writst/internal/formatter"
+	"znkr.io/writst/internal/names"
 	"znkr.io/writst/name"
 	"znkr.io/writst/types"
 )
@@ -16,13 +17,21 @@ import (
 // content nodes — TemplateUpdate and Templated — are hand-written like
 // [StateUpdate] and opt out of the fieldaccessgen generator.
 
-// Element is a set/show target such as `heading` or `text`. An element *is* a
-// function — it shares [Function]'s shape and doubles as its own constructor —
-// but is a distinct type so the evaluator can tell set/show/`.where` targets
-// apart from ordinary functions. It reports [types.Function] so
-// `type(heading) == function` (matching Typst). Convert with
-// `(*Function)(elem)` to call it.
-type Element Function
+// Element is a constructor function for elements and a set/show target such as
+// `heading` or `text`.
+type Element struct {
+	Function
+	produces func(Content) bool
+}
+
+// NewElement builds an element whose constructor is fn and whose content is the
+// Go type T. T is the single source of truth for what the element matches.
+func NewElement[T Content](fn Function) *Element {
+	return &Element{
+		Function: fn,
+		produces: func(c Content) bool { _, ok := c.(T); return ok },
+	}
+}
 
 func (*Element) aValue()          {}
 func (*Element) Type() types.Type { return types.Function }
@@ -39,6 +48,11 @@ func (n *Element) Format(f *formatter.Formatter) {
 	f.Str(n.Name)
 }
 
+// produced reports whether content c is an instance of element n.
+func (n *Element) produced(c Content) bool {
+	return n.produces != nil && n.produces(c)
+}
+
 // BindTemplateSet validates a set-rule's arguments against the element's own
 // signature and, on success, collects the named arguments into a [Set]. It uses
 // [Function.bind] — which rejects unknown arguments and type mismatches but,
@@ -47,7 +61,7 @@ func (n *Element) Format(f *formatter.Formatter) {
 // arguments are dropped from the recorded [Set]: an element's properties are its
 // named parameters.
 func (n *Element) BindTemplateSet(args *Arguments) (*Set, error) {
-	if _, _, err := (*Function)(n).bind(args); err != nil {
+	if _, _, err := n.Function.bind(args); err != nil {
 		return nil, err
 	}
 	set := &Set{Element: n}
@@ -128,6 +142,15 @@ func (n *Recipe) equal(o *Recipe) bool {
 type Selector interface {
 	Value
 	aSelector()
+
+	// Match reports whether v is content this selector matches.
+	Match(v Value) bool
+}
+
+// contentHasLabel reports whether c carries the label l.
+func contentHasLabel(c Content, l name.Name) bool {
+	lbl, ok := c.Field(names.Label).(*Label)
+	return ok && lbl.Name == l
 }
 
 // ElementSelector matches every instance of an element (`show heading: ...`).
@@ -144,6 +167,10 @@ func (n *ElementSelector) Format(f *formatter.Formatter) {
 func (n *ElementSelector) Equal(other Value) bool {
 	o, ok := other.(*ElementSelector)
 	return ok && n.Element == o.Element
+}
+func (n *ElementSelector) Match(v Value) bool {
+	c, ok := v.(Content)
+	return ok && n.Element.produced(c)
 }
 
 // LabelSelector matches content carrying a label (`show <intro>: ...`).
@@ -162,6 +189,10 @@ func (n *LabelSelector) Format(f *formatter.Formatter) {
 func (n *LabelSelector) Equal(other Value) bool {
 	o, ok := other.(*LabelSelector)
 	return ok && n.Label == o.Label
+}
+func (n *LabelSelector) Match(v Value) bool {
+	c, ok := v.(Content)
+	return ok && contentHasLabel(c, n.Label)
 }
 
 // WhereSelector matches an element carrying a label
@@ -183,6 +214,10 @@ func (n *WhereSelector) Format(f *formatter.Formatter) {
 func (n *WhereSelector) Equal(other Value) bool {
 	o, ok := other.(*WhereSelector)
 	return ok && n.Element == o.Element && n.Label == o.Label
+}
+func (n *WhereSelector) Match(v Value) bool {
+	c, ok := v.(Content)
+	return ok && n.Element.produced(c) && contentHasLabel(c, n.Label)
 }
 
 // TemplateUpdate is the transient content node a set/show rule evaluates to. It

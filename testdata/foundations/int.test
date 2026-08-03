@@ -180,7 +180,27 @@
 #(-9876543210) \
 #(-0987654321) \
 #(4 - 8)
-│ #document[#par[#raw("12")#linebreak()#raw("1234567890")#linebreak()#raw("123456789")#linebreak()#raw("0")#linebreak()#raw("0")#linebreak()#raw("-1")#linebreak()#raw("-9876543210")#linebreak()#raw("-987654321")#linebreak()#raw("-4")]]
+│ #document[
+│   #par[
+│     #raw("12")
+│     #linebreak()
+│     #raw("1234567890")
+│     #linebreak()
+│     #raw("123456789")
+│     #linebreak()
+│     #raw("0")
+│     #linebreak()
+│     #raw("0")
+│     #linebreak()
+│     #raw("-1")
+│     #linebreak()
+│     #raw("-9876543210")
+│     #linebreak()
+│     #raw("-987654321")
+│     #linebreak()
+│     #raw("-4")
+│   ]
+│ ]
 
 --- issue-int-constructor ---
 // Test that integer -> integer conversion doesn't do a roundtrip through float.

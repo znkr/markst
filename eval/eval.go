@@ -446,7 +446,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.FieldRead:
 		fr.vals[r] = fr.evalFieldRead(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan)
 	case *expr.MethodField:
-		fr.vals[r] = fr.evalMethodField(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan, i.TargetText)
+		fr.vals[r] = fr.evalMethodField(fr.get(i.Target), i.Field, fr.span(r), i.FieldSpan, i.TargetText, i.Math)
 	case *expr.Call:
 		fr.vals[r] = fr.evalCall(i)
 	case *expr.CallSet:
@@ -461,6 +461,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			}
 			fr.warn(i.Span(), "this return unconditionally discards the content before it", hints...)
 		}
+	case *expr.Warn:
+		fr.warn(i.Span(), i.Msg, i.Hints...)
 	case *expr.MakeClosure:
 		fr.vals[r] = makeClosureWithFrame(fr, i)
 	case *expr.DestructArray:
@@ -650,6 +652,82 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			return
 		}
 		fr.vals[r] = &value.TermItem{Term: term, Description: desc}
+	case *expr.Equation:
+		if body, e := fr.mathContentOf(fr.get(i.Body), fr.span(r)); e == nil {
+			fr.vals[r] = &value.Equation{Block: i.Block, Body: body}
+		} else {
+			fr.vals[r] = e
+		}
+	case *expr.MathAttach:
+		base, e := fr.mathContentOf(fr.get(i.Base), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		var top, bottom value.Content
+		if i.Top != expr.NoRef {
+			if top, e = fr.mathContentOf(fr.get(i.Top), fr.span(r)); e != nil {
+				fr.vals[r] = e
+				return
+			}
+		}
+		if i.Bottom != expr.NoRef {
+			if bottom, e = fr.mathContentOf(fr.get(i.Bottom), fr.span(r)); e != nil {
+				fr.vals[r] = e
+				return
+			}
+		}
+		fr.vals[r] = &value.MathAttach{Base: base, Top: top, Bottom: bottom}
+	case *expr.MathFrac:
+		num, e := fr.mathContentOf(fr.get(i.Num), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		denom, e := fr.mathContentOf(fr.get(i.Denom), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		fr.vals[r] = &value.MathFrac{Num: num, Denom: denom}
+	case *expr.MathRoot:
+		var index value.Content
+		var e *value.Error
+		if i.Index != expr.NoRef {
+			if index, e = fr.mathContentOf(fr.get(i.Index), fr.span(r)); e != nil {
+				fr.vals[r] = e
+				return
+			}
+		}
+		radicand, e := fr.mathContentOf(fr.get(i.Radicand), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		fr.vals[r] = &value.MathRoot{Index: index, Radicand: radicand}
+	case *expr.MathPrimes:
+		if base, e := fr.mathContentOf(fr.get(i.Base), fr.span(r)); e == nil {
+			fr.vals[r] = &value.MathPrimes{Base: base, Count: i.Count}
+		} else {
+			fr.vals[r] = e
+		}
+	case *expr.MathDelimited:
+		open, e := fr.mathContentOf(fr.get(i.Open), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		body, e := fr.mathContentOf(fr.get(i.Body), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		clos, e := fr.mathContentOf(fr.get(i.Close), fr.span(r))
+		if e != nil {
+			fr.vals[r] = e
+			return
+		}
+		fr.vals[r] = &value.MathDelimited{Open: open, Body: body, Close: clos}
 	case *expr.SetRule:
 		fr.vals[r] = fr.evalSetRule(i)
 	case *expr.ShowRule:
@@ -676,6 +754,22 @@ func containsStateUpdate(c value.Content) bool {
 		}
 	}
 	return false
+}
+
+// mathContentOf coerces a value to content in math context: [value.ToContent]
+// with symbols, strings and numbers turned into [value.MathText] rather than
+// upright text, so that, e.g., `$s$` and `$sym.basic$` — a letter and a symbol
+// resolving to the same character — compare equal. Error reporting and the
+// empty-Sequence normalization match [frame.contentOf].
+func (fr *frame) mathContentOf(v value.Value, span syntax.Span) (value.Content, *value.Error) {
+	c, err := value.ToMathContent(v)
+	if err != nil {
+		return nil, fr.error(span, err.Error())
+	}
+	if c == nil {
+		return &value.Sequence{}, nil
+	}
+	return c, nil
 }
 
 // contentOf coerces a value to content. Returns (nil-content, error) when
@@ -821,7 +915,7 @@ func (fr *frame) evalSetRule(i *expr.SetRule) value.Value {
 	}
 	set, err := elem.BindTemplateSet(&args)
 	if err != nil {
-		return fr.applyErr((*value.Function)(elem), fr.span(i.Result()), i.Args, err)
+		return fr.applyErr(&elem.Function, fr.span(i.Result()), i.Args, err)
 	}
 	return &value.TemplateUpdate{Set: set}
 }
@@ -937,6 +1031,13 @@ func foldTemplates(v value.Value) value.Value {
 func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 	ret := make([]value.Content, 0, len(c.Items))
 	var lastSpan syntax.Span
+	// Inside an equation the joiner is the math one, so that a symbol or string
+	// in a run renders like the same character written on its own (which skips
+	// the joiner entirely, see analyzer.lowerMathContent).
+	toContent := value.ToContent
+	if c.Math {
+		toContent = value.ToMathContent
+	}
 	for _, r := range c.Items {
 		v := fr.get(r)
 		if _, ok := value.IsError(v); ok {
@@ -959,7 +1060,7 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 			fr.attachLabel(ret[len(ret)-1], lbl, lastSpan)
 			continue
 		}
-		cv, err := value.ToContent(v)
+		cv, err := toContent(v)
 		if err != nil {
 			fr.error(fr.span(c.Result()), err.Error())
 			continue
@@ -1116,7 +1217,7 @@ func dictExcluding(d *value.Dict, exclude []name.Name) *value.Dict {
 // directly, and a missing field on a content element or a method-bearing type
 // is reported as a missing method rather than a missing field. targetText is the
 // source text of the target expression, used to build the dictionary-key hints.
-func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fieldSpan syntax.Span, targetText string) value.Value {
+func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fieldSpan syntax.Span, targetText string, math bool) value.Value {
 	// Symbols, modules, and reflected types resolve identically to a plain
 	// field read (a symbol modifier or module definition is legitimately
 	// callable; a type's method table is the same).
@@ -1177,10 +1278,15 @@ func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fiel
 			conflict := "dictionary keys cannot be used with method syntax as keys could conflict with built-in method names"
 			var hints []string
 			if _, isFunc := val.(*value.Function); isFunc {
-				hints = []string{
-					fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s.%s)(..)`", targetText, fname),
-					conflict,
+				var call string
+				if math {
+					call = fmt.Sprintf("to call the stored function, use code mode and wrap the field access in parentheses: `#(%s.%s)(..)`", targetText, fname)
+				} else {
+					call = fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s.%s)(..)`", targetText, fname)
 				}
+				hints = []string{call, conflict}
+			} else if math {
+				hints = []string{conflict, "try adding a space before the parentheses"}
 			} else {
 				hints = []string{
 					conflict,
@@ -1195,9 +1301,15 @@ func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fiel
 		if t.HasField(fname) {
 			// The field exists but holds a value, not a method — calling it
 			// with method syntax would be ambiguous.
+			var hint string
+			if math {
+				hint = fmt.Sprintf("to call the stored function, use code mode and wrap the field access in parentheses: `#(%s.%s)(..)`", targetText, fname)
+			} else {
+				hint = fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s([], %s: x => x + 1).%s)(..)`", name, fname, fname)
+			}
 			return fr.error(span,
 				fmt.Sprintf("`%s` is not a valid method for element `%s`", fname, name),
-				fmt.Sprintf("to call the stored function, wrap the field access in parentheses: `(%s([], %s: x => x + 1).%s)(..)`", name, fname, fname))
+				hint)
 		}
 		return fr.errorf(span, "element %s has no method `%s`", name, fname.String())
 	case *value.Function:
@@ -1307,7 +1419,15 @@ func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Fun
 		if cc.F == nil {
 			return nil, fr.errorf(span, "element %s is not callable", cc.Name)
 		}
-		return (*value.Function)(cc), nil
+		return &cc.Function, nil
+	case *value.Symbol:
+		// An accent symbol applies itself: `hat(f)` is `accent(f, hat)`. Every
+		// other symbol is not callable.
+		f, err := builtin.SymbolFunc(cc)
+		if err != nil {
+			return nil, fr.error(span, err.Error())
+		}
+		return f, nil
 	default:
 		return nil, fr.errorf(span, "expected function, found %s", callee.Type())
 	}
@@ -1394,11 +1514,19 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 	if e != nil {
 		return e
 	}
-	// A mutating method (Impure) needs a mutable place to write back; a mutating
-	// call on a temporary is an error. Both mutating-ness and the receiver's
-	// place-ness are resolved here at runtime — see [expr.MutCheck].
-	if c.Mut != nil && fn.Impure && !fr.receiverIsPlace(c.Mut) {
-		return fr.error(c.Mut.RecvSpan, "cannot mutate a temporary value")
+	// A mutating method (Impure) needs a mutable place to write back. In math
+	// mode there is none, so a resolved mutating method is rejected outright.
+	// Otherwise, a mutating call on a temporary is an error. Both mutating-ness
+	// and the receiver's place-ness are resolved here at runtime — see
+	// [expr.MutCheck].
+	if c.Mut != nil && fn.Impure {
+		if c.Mut.Math {
+			return fr.error(c.Mut.RecvSpan, "cannot call mutating methods in math",
+				"try using code mode to call the method: `#"+c.Mut.MathCall+"`")
+		}
+		if !fr.receiverIsPlace(c.Mut) {
+			return fr.error(c.Mut.RecvSpan, "cannot mutate a temporary value")
+		}
 	}
 	args, e := fr.buildCallArgs(fr.span(c.Result()), c.Args, c.Blocks)
 	if e != nil {

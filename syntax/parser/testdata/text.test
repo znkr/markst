@@ -142,3 +142,15 @@ Star NOT in word - after space: a *b
 │     Markup
 │       Text: "b"
 │       Space: "\n"
+
+--- enum-item-terminated-by-carriage-return-parbreak ---
++ ab
+│ Markup
+│   EnumItem
+│     EnumMarker: "+"
+│     Space: " "
+│     Markup
+│       Text: "a"
+│   Parbreak: "\r\r"
+│   Text: "b"
+│   Space: "\n"

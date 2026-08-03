@@ -183,11 +183,11 @@
 )
 │ #document[]
 
---- symbol-sect-deprecated (skip: equation parsing not implemented yet) ---
+--- symbol-sect-deprecated (skip: symbol deprecation warnings not implemented yet) ---
 // Warning: 3-7 `join` is deprecated, use `bowtie.big` instead
 $ join_x x = bowtie.big_x x $
 
---- symbol-modifier-deprecated (skip: equation parsing not implemented yet) ---
+--- symbol-modifier-deprecated (skip: symbol deprecation warnings not implemented yet) ---
 // Warning: 6-9 `gt.tri` is deprecated, use `gt.closed` instead
 $ gt.tri $
 
@@ -206,4 +206,6 @@ $ gt.tri $
 // See: https://github.com/typst/typst/pull/6875.
 #sym.copyright #emoji.copyright \
 #sym.suit.heart #emoji.suit.heart
-│ #document[#par[©︎©️#linebreak()♥︎♥️]]
+│ #document[
+│   #par[©︎©️#linebreak()♥︎♥️]
+│ ]

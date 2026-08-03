@@ -64,6 +64,8 @@ const (
 	KindMathPrimes     // Grouped primes in math: a'''.
 	KindMathFrac       // A fraction in math: x/2.
 	KindMathRoot       // A root in math: √x, ∛x or ∜x.
+	KindMathCall       // A function call in math: f(x).
+	KindMathArgs       // A math function call's argument list: (a, b; c, d).
 
 	KindHash         // A hash that switches into code mode: #.
 	KindLeftBrace    // A left curly brace, starting a code block: {.
@@ -215,6 +217,8 @@ var kinds = [...]string{
 	KindMathPrimes:     "primes",
 	KindMathFrac:       "frac",
 	KindMathRoot:       "root",
+	KindMathCall:       "math call",
+	KindMathArgs:       "math arguments",
 
 	KindHash:         "#",
 	KindLeftBrace:    "opening brace",

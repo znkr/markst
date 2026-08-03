@@ -30,6 +30,15 @@ func (s Set) add(k ...Kind) Set {
 	return s
 }
 
+// Remove returns a copy of the set with the given kinds removed.
+func (s Set) Remove(k ...Kind) Set {
+	for _, kind := range k {
+		i, bit := kind/64, kind%64
+		s[i] &^= 1 << bit
+	}
+	return s
+}
+
 func (s Set) union(o Set) Set {
 	return Set{
 		s[0] | o[0],
@@ -153,5 +162,29 @@ var (
 		KindRightBrace,
 		KindRightBracket,
 		KindRightParen,
+	)
+
+	// MathExpr contains the kinds that can start a math expression. Used by the
+	// parser to drive the loop over math contents.
+	MathExpr = SetOf(
+		KindHash,
+		KindMathIdent,
+		KindFieldAccess,
+		KindDot,
+		KindComma,
+		KindSemicolon,
+		KindLeftBrace,
+		KindRightBrace,
+		KindLeftParen,
+		KindRightParen,
+		KindMathText,
+		KindMathShorthand,
+		KindLinebreak,
+		KindMathAlignPoint,
+		KindMathPrimes,
+		KindEscape,
+		KindStr,
+		KindRoot,
+		KindBang,
 	)
 )

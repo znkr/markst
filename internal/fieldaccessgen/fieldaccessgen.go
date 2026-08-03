@@ -155,12 +155,23 @@ func generate(filename string) ([]byte, error) {
 					fmt.Fprintf(&buf, "\t\tvs := make([]Value, len(n.%s))\n", f.Name)
 					fmt.Fprintf(&buf, "\t\tfor i, v := range n.%s { vs[i] = v }\n", f.Name)
 					fmt.Fprintf(&buf, "\t\treturn &Array{Elems: vs}\n")
+				case "[][]Content":
+					if !f.Required {
+						fmt.Fprintf(&buf, "\t\tif len(n.%s) == 0 { return nil }\n", f.Name)
+					}
+					fmt.Fprintf(&buf, "\t\tvs := make([]Value, len(n.%s))\n", f.Name)
+					fmt.Fprintf(&buf, "\t\tfor i, row := range n.%s {\n", f.Name)
+					fmt.Fprintf(&buf, "\t\t\trvs := make([]Value, len(row))\n")
+					fmt.Fprintf(&buf, "\t\t\tfor j, v := range row { rvs[j] = v }\n")
+					fmt.Fprintf(&buf, "\t\t\tvs[i] = &Array{Elems: rvs}\n")
+					fmt.Fprintf(&buf, "\t\t}\n")
+					fmt.Fprintf(&buf, "\t\treturn &Array{Elems: vs}\n")
 				case "*Label":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
 					}
 					fmt.Fprintf(&buf, "\t\treturn n.%s\n", f.Name)
-				case "Content":
+				case "Content", "Value":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
 					}
@@ -198,13 +209,13 @@ func generate(filename string) ([]byte, error) {
 					} else {
 						fmt.Fprintf(&buf, "\t\treturn true\n")
 					}
-				case "[]string", "[]Content", "[]*ListItem", "[]*EnumItem", "[]*TermItem":
+				case "[]string", "[]Content", "[]*ListItem", "[]*EnumItem", "[]*TermItem", "[][]Content":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\treturn len(n.%s) > 0\n", f.Name)
 					} else {
 						fmt.Fprintf(&buf, "\t\treturn true\n")
 					}
-				case "*Label", "Content":
+				case "*Label", "Content", "Value":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\treturn n.%s != nil\n", f.Name)
 					} else {

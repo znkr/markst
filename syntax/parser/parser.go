@@ -27,6 +27,7 @@ package parser
 import (
 	"fmt"
 	"slices"
+	"unicode"
 
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/scanner"
@@ -102,7 +103,16 @@ type parser struct {
 	newlineMode    nlMode
 	memos          map[int]memo
 	bracketNesting int
+
+	// errAnchor is the node index of the error most recently produced by
+	// [parser.expected] or [parser.errorf], or noAnchor when the last such call
+	// only reused an error node that was already there. Read through
+	// [parser.errorMarker]; meaningful only immediately after the call.
+	errAnchor int
 }
+
+// noAnchor marks the absence of a fresh error node; see [parser.errAnchor].
+const noAnchor = -1
 
 type token struct {
 	kind     syntax.Kind
@@ -117,8 +127,9 @@ type token struct {
 
 func newParser(src string) *parser {
 	p := &parser{
-		s:     scanner.New(src),
-		memos: make(map[int]memo),
+		s:         scanner.New(src),
+		memos:     make(map[int]memo),
+		errAnchor: noAnchor,
 	}
 	p.next()
 	return p
@@ -189,11 +200,15 @@ func (p *parser) expected(expected string) *syntax.Error {
 		p.trimErrors()
 		e := p.cur.node.(*syntax.Error)
 		p.consume()
+		p.errAnchor = len(p.nodes) - p.cur.trivia - 1
 		return e
 	}
 	at := len(p.nodes) - p.cur.trivia
 	if at > 0 && p.nodes[at-1].Kind() == syntax.KindError {
-		// Already have an error at this position.
+		// Already have an error at this position. It belongs to whatever was
+		// parsed before, so a caller repairing the current construct must not
+		// pull it in.
+		p.errAnchor = noAnchor
 		return p.nodes[at-1].(*syntax.Error)
 	}
 	var span syntax.Span
@@ -206,7 +221,24 @@ func (p *parser) expected(expected string) *syntax.Error {
 		"",
 	)
 	p.nodes = slices.Insert(p.nodes, at, syntax.Node(n))
+	p.errAnchor = at
 	return n
+}
+
+// errorMarker re-anchors a wrap marker after an error-recovery call.
+//
+// [parser.expected] inserts its zero-width error *before* the trivia that
+// [parser.next] already appended, which shifts every index at or after it — so
+// a marker taken at entry to the current construct no longer points at that
+// construct's first node. When a fresh error node was produced it is the only
+// thing the construct parsed, so the marker moves onto it and the error ends up
+// inside the wrapped node. When [parser.expected] merely reused an error that
+// was already there, that error belongs to an earlier construct and m is kept.
+func (p *parser) errorMarker(m int) int {
+	if p.errAnchor == noAnchor {
+		return m
+	}
+	return p.errAnchor
 }
 
 // errorf converts the current token into an error node with the given message,
@@ -217,6 +249,7 @@ func (p *parser) errorf(format string, args ...any) *syntax.Error {
 	err := asErrorNode(p.cur.node, format, args...)
 	p.nodes = append(p.nodes, syntax.Node(err))
 	p.next()
+	p.errAnchor = len(p.nodes) - p.cur.trivia - 1
 	return err
 }
 
@@ -243,6 +276,7 @@ func (p *parser) assert(expected syntax.Kind) {
 func (p *parser) expect(kind syntax.Kind) bool {
 	if p.cur.kind == kind {
 		p.consume()
+		p.errAnchor = noAnchor
 		return true
 	} else if kind == syntax.KindIdent && syntax.Keywords.Contains(p.cur.kind) {
 		p.trimErrors()
@@ -417,7 +451,12 @@ const (
 
 func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 	start := len(p.nodes)
-	if flags&mfWrapTrivia != 0 {
+	if flags&mfWrapTrivia != 0 || p.cur.parbreak {
+		// A parbreak is markup content, not trivia. When one was buffered
+		// before the body even starts — a list or enum item whose content
+		// begins on a later line, as in "- \n\n  x" — it belongs inside the
+		// body rather than beside it, where the analyzer would find it in
+		// place of the body's Markup node.
 		start -= p.cur.trivia
 	}
 	atStart := p.cur.newline || flags&mfAtStart != 0
@@ -598,8 +637,342 @@ func (p *parser) parseReference() {
 	p.wrap(start, syntax.KindRef)
 }
 
+var mathStops = syntax.SetOf(syntax.KindDollar, syntax.KindEnd)
+
+// parseEquation parses a mathematical equation: `$x$`, `$ x^2 $`.
 func (p *parser) parseEquation() {
-	panic("equation parsing not implemented yet")
+	start := len(p.nodes)
+	p.withMode(syntax.ModeMath, nlContinue, func() {
+		p.assert(syntax.KindDollar)
+		p.parseMath(mathStops)
+		p.expectClosing(start, syntax.KindDollar)
+	})
+	p.wrap(start, syntax.KindEquation)
+}
+
+// parseMath parses the contents of an equation, wrapping them in a Math node.
+func (p *parser) parseMath(stops syntax.Set) {
+	start := len(p.nodes)
+	p.parseMathExprs(stops)
+	p.wrap(start, syntax.KindMath)
+}
+
+// parseMathExprs parses a sequence of math expressions, returning the count
+// parsed (including errors).
+func (p *parser) parseMathExprs(stops syntax.Set) int {
+	count := 0
+	for !p.atSet(stops) {
+		if p.atSet(syntax.MathExpr) {
+			p.parseMathExpr()
+		} else {
+			p.unexpected()
+		}
+		count++
+	}
+	return count
+}
+
+func (p *parser) parseMathExpr() {
+	p.parseMathExprPrec(0, syntax.Set{})
+}
+
+const (
+	mathFuncPrec = 2
+	mathRootPrec = 2
+)
+
+type mathAssoc int
+
+const (
+	mathAssocNone  mathAssoc = iota // postfix operator: no right operand
+	mathAssocLeft                   // left-associative infix operator
+	mathAssocRight                  // right-associative infix operator
+)
+
+// mathOp reports the wrapper kind, associativity and precedence of the math
+// operator kind, or ok=false if the kind is not a math operator.
+func mathOp(kind syntax.Kind, hadTrivia bool) (wrapper syntax.Kind, assoc mathAssoc, prec int, ok bool) {
+	switch kind {
+	case syntax.KindSlash:
+		return syntax.KindMathFrac, mathAssocLeft, 1, true
+	case syntax.KindUnderscore, syntax.KindHat:
+		return syntax.KindMathAttach, mathAssocRight, 2, true
+	case syntax.KindMathPrimes:
+		if !hadTrivia {
+			return syntax.KindMathAttach, mathAssocNone, 2, true
+		}
+	case syntax.KindBang:
+		if !hadTrivia {
+			return syntax.KindMath, mathAssocNone, 3, true
+		}
+	}
+	return syntax.KindInvalid, 0, 0, false
+}
+
+// attachChainSet returns the set of attachment operators that may chain after
+// op (`^` chains with `_`, `_` with `^`, primes with either).
+func attachChainSet(op syntax.Kind) syntax.Set {
+	switch op {
+	case syntax.KindHat:
+		return syntax.SetOf(syntax.KindUnderscore)
+	case syntax.KindUnderscore:
+		return syntax.SetOf(syntax.KindHat)
+	default: // primes
+		return syntax.SetOf(syntax.KindHat, syntax.KindUnderscore)
+	}
+}
+
+// parseMathExprPrec parses a math expression with at least the given
+// precedence, chaining infix and postfix operators (attachment, fraction,
+// root). stopSet holds kinds at which to stop (used to constrain attachment
+// chains).
+func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
+	m := len(p.nodes)
+	continuable := false
+	switch p.cur.kind {
+	case syntax.KindHash:
+		p.parseEmbeddedCodeExpr()
+
+	// The scanner produces full FieldAccess nodes where needed.
+	case syntax.KindMathIdent, syntax.KindFieldAccess:
+		continuable = true
+		p.consume()
+		// A function call for an identifier or field access.
+		if mathFuncPrec >= minPrec && p.directlyAt(syntax.KindLeftParen) {
+			p.parseMathArgs()
+			p.wrap(m, syntax.KindMathCall)
+			continuable = false
+		}
+
+	case syntax.KindLeftBrace, syntax.KindLeftParen:
+		p.parseMathDelimited()
+
+	case syntax.KindRightBrace:
+		if p.cur.node.Text() == "|]" {
+			p.consumeAs(syntax.KindMathShorthand)
+		} else {
+			p.consumeAs(syntax.KindMathText)
+		}
+
+	case syntax.KindDot, syntax.KindBang, syntax.KindComma, syntax.KindSemicolon, syntax.KindRightParen:
+		p.consumeAs(syntax.KindMathText)
+
+	case syntax.KindMathText:
+		continuable = isMathAlphabetic(p.cur.node.Text())
+		p.consume()
+
+	case syntax.KindLinebreak, syntax.KindMathAlignPoint, syntax.KindMathShorthand:
+		p.consume()
+
+	case syntax.KindMathPrimes, syntax.KindEscape, syntax.KindStr:
+		continuable = true
+		p.consume()
+
+	case syntax.KindRoot:
+		p.consume()
+		m2 := len(p.nodes)
+		p.parseMathExprPrec(mathRootPrec, syntax.Set{})
+		p.mathUnparen(m2)
+		p.wrap(m, syntax.KindMathRoot)
+
+	default:
+		p.expected("expression")
+		m = p.errorMarker(m)
+	}
+
+	// Recognize an implicit function call: a 'continuable' token directly
+	// followed by delimiters groups with function precedence. E.g. `a(b)/c`
+	// parses as `(a(b))/c` when `a` is continuable.
+	if continuable && mathFuncPrec >= minPrec && p.cur.trivia == 0 &&
+		(p.at(syntax.KindLeftBrace) || p.at(syntax.KindLeftParen)) {
+		p.parseMathDelimited()
+		p.wrap(m, syntax.KindMath)
+	}
+
+	// Parse infix and postfix operators.
+	for !p.atSet(stopSet) {
+		opKind := p.cur.kind
+		hadTrivia := p.cur.trivia > 0
+		wrapper, assoc, prec, ok := mathOp(opKind, hadTrivia)
+		if !ok || prec < minPrec {
+			break
+		}
+
+		var chainSet syntax.Set
+		if wrapper == syntax.KindMathAttach {
+			chainSet = attachChainSet(opKind)
+		}
+
+		// Eat the operator.
+		if opKind == syntax.KindBang {
+			p.consumeAs(syntax.KindMathText)
+		} else {
+			p.consume()
+		}
+
+		// Slash removes parens from its left operand.
+		if wrapper == syntax.KindMathFrac {
+			p.mathUnparen(m)
+		}
+
+		// Parse the right operand.
+		if assoc != mathAssocNone {
+			rprec := prec
+			if assoc == mathAssocLeft {
+				rprec = prec + 1
+			}
+			mRhs := len(p.nodes)
+			p.parseMathExprPrec(rprec, chainSet)
+			p.mathUnparen(mRhs)
+		}
+
+		// Avoid interrupting a chain when initially parsing a prime: for
+		// `a^b'_c^d` the grouping is `(a^(b')_c)^d`, not `a^(b'_c^d)`.
+		if !(opKind == syntax.KindMathPrimes && p.atSet(stopSet)) {
+			for p.atSet(chainSet) {
+				chainSet = chainSet.Remove(p.cur.kind)
+				p.consume()
+				mChainRhs := len(p.nodes)
+				p.parseMathExprPrec(prec, chainSet)
+				p.mathUnparen(mChainRhs)
+			}
+		}
+
+		p.wrap(m, wrapper)
+	}
+}
+
+// isMathAlphabetic reports whether text counts as alphabetic in math, which
+// causes it to group with parens as an implicit function call.
+func isMathAlphabetic(text string) bool {
+	if text == "" {
+		return false
+	}
+	for _, r := range text {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
+
+var mathDelimitedStops = syntax.SetOf(syntax.KindDollar, syntax.KindEnd, syntax.KindRightBrace, syntax.KindRightParen)
+
+// parseMathDelimited parses matched delimiters in math: `[x + y]`. The scanner
+// produces `{Left,Right}{Brace,Paren}` for delimiters, which are converted back
+// to MathText or MathShorthand before being eaten.
+func (p *parser) parseMathDelimited() {
+	m := len(p.nodes)
+	if p.cur.node.Text() == "[|" {
+		p.consumeAs(syntax.KindMathShorthand)
+	} else {
+		p.consumeAs(syntax.KindMathText)
+	}
+	mBody := len(p.nodes)
+	p.parseMathExprs(mathDelimitedStops)
+	if p.at(syntax.KindRightBrace) || p.at(syntax.KindRightParen) {
+		p.wrap(mBody, syntax.KindMath)
+		if p.cur.node.Text() == "|]" {
+			p.consumeAs(syntax.KindMathShorthand)
+		} else {
+			p.consumeAs(syntax.KindMathText)
+		}
+		p.wrap(m, syntax.KindMathDelimited)
+	} else {
+		// No closing delimiter: just produce a math sequence.
+		p.wrap(m, syntax.KindMath)
+	}
+}
+
+// mathUnparen removes one set of parentheses (if any) from a previously parsed
+// expression at marker m by converting the delimited node to a Math node with
+// its `(`/`)` re-kinded as parens.
+func (p *parser) mathUnparen(m int) {
+	if m >= len(p.nodes) {
+		return
+	}
+	inner, ok := p.nodes[m].(*syntax.Inner)
+	if !ok || inner.Kind() != syntax.KindMathDelimited {
+		return
+	}
+	children := inner.Children()
+	if len(children) < 2 {
+		return
+	}
+	first, last := children[0], children[len(children)-1]
+	if first.Text() == "(" && last.Text() == ")" {
+		newChildren := slices.Clone(children)
+		newChildren[0] = syntax.ConvertNode(first, syntax.KindLeftParen)
+		newChildren[len(newChildren)-1] = syntax.ConvertNode(last, syntax.KindRightParen)
+		p.nodes[m] = syntax.NewInner(syntax.KindMath, newChildren)
+	}
+}
+
+var mathArgsStops = syntax.SetOf(syntax.KindEnd, syntax.KindDollar, syntax.KindRightParen)
+var mathArgStops = syntax.SetOf(syntax.KindEnd, syntax.KindDollar, syntax.KindComma, syntax.KindSemicolon, syntax.KindRightParen)
+
+// parseMathArgs parses an argument list in math: `(a, b; c, d; size: #50%)`.
+func (p *parser) parseMathArgs() {
+	m := len(p.nodes)
+	p.assert(syntax.KindLeftParen)
+
+	seen := make(map[string]bool)
+	for !p.atSet(mathArgsStops) {
+		p.parseMathArg(seen)
+		switch p.cur.kind {
+		case syntax.KindEnd, syntax.KindDollar, syntax.KindRightParen:
+			// Terminator: handled by the loop condition.
+		case syntax.KindSemicolon, syntax.KindComma:
+			p.consume()
+		default:
+			p.expected("comma or semicolon")
+		}
+	}
+
+	p.expectClosing(m, syntax.KindRightParen)
+	p.wrap(m, syntax.KindMathArgs)
+}
+
+// parseMathArg parses a single argument in a math argument list, handling
+// spread (`..x`) and named (`name: value`) arguments.
+func (p *parser) parseMathArg(seen map[string]bool) {
+	m := len(p.nodes)
+	start := p.cur.start
+	argKind := syntax.KindInvalid
+
+	if node := p.s.MaybeMathSpreadArg(start); node != nil {
+		argKind = syntax.KindSpread
+		p.cur.node = node
+		p.cur.kind = syntax.KindDots
+		p.consume()
+	} else if node := p.s.MaybeMathNamedArg(start); node != nil {
+		argKind = syntax.KindNamed
+		p.cur.node = node
+		p.cur.kind = node.Kind()
+		text := node.Text()
+		p.consume()
+		p.consumeAs(syntax.KindColon)
+		if seen[text] {
+			prev := p.nodes[m]
+			p.nodes[m] = syntax.NewError(prev.Span(), fmt.Sprintf("duplicate argument: %s", text), prev.Text())
+		}
+		seen[text] = true
+	}
+
+	mArg := len(p.nodes)
+	count := p.parseMathExprs(mathArgStops)
+	if count == 0 && argKind == syntax.KindNamed {
+		p.expected("expression")
+		mArg = p.errorMarker(mArg)
+	}
+	// Wrap to join adjacent math content, but not when count == 1 (wrapping
+	// would change the type of a non-content expression, e.g. `func(#12pt)`).
+	if count != 1 {
+		p.wrap(mArg, syntax.KindMath)
+	}
+	if argKind != syntax.KindInvalid {
+		p.wrap(m, argKind)
+	}
 }
 
 func (p *parser) parseBlock() {
@@ -645,7 +1018,7 @@ func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
 		p.parseCodeExprPrec(atomic, op.Precedence())
 		p.wrap(start, syntax.KindUnary)
 	} else {
-		p.parseCodePrimary(atomic)
+		start = p.parseCodePrimary(atomic)
 	}
 
 	for {
@@ -709,7 +1082,10 @@ func (p *parser) parseCodeExpr() {
 	p.parseCodeExprPrec(false, 0)
 }
 
-func (p *parser) parseCodePrimary(atomic bool) {
+// parseCodePrimary parses a primary code expression and returns the marker at
+// which it starts. The marker is returned rather than recomputed by the caller
+// because an error-recovery path may have shifted it (see [parser.errorMarker]).
+func (p *parser) parseCodePrimary(atomic bool) int {
 	start := len(p.nodes)
 	switch p.cur.kind {
 	case syntax.KindIdent:
@@ -800,7 +1176,9 @@ func (p *parser) parseCodePrimary(atomic bool) {
 		} else {
 			p.expected("expression")
 		}
+		start = p.errorMarker(start)
 	}
+	return start
 }
 
 // parseSingleParamClosure wraps the already-consumed parameter as KindParams,
@@ -1059,7 +1437,11 @@ func (p *parser) parseParenthesizedOrArrayOrDict() syntax.Kind {
 	p.withNewlineMode(nlContinue, func() {
 		p.assert(syntax.KindLeftParen)
 		if p.consumeIf(syntax.KindColon) {
+			// `(:` opens a dictionary by construction, so it must never be
+			// downgraded to a parenthesized expression below — that would leave
+			// the bare `:` as a child of the parenthesized node (e.g. `(:0)`).
 			state.kind = syntax.KindDict
+			state.notJustParens = true
 		}
 
 		for !p.atSet(syntax.Terminator) {
@@ -1241,7 +1623,11 @@ func (p *parser) parseSetRule() {
 	p.assert(syntax.KindSet)
 
 	inner := len(p.nodes)
-	p.expect(syntax.KindIdent)
+	if !p.expect(syntax.KindIdent) {
+		// The target is an error node, which the field-access wrap below must
+		// still contain (see [parser.errorMarker]).
+		inner = p.errorMarker(inner)
+	}
 	for p.consumeIf(syntax.KindDot) {
 		p.expect(syntax.KindIdent)
 		p.wrap(inner, syntax.KindFieldAccess)
@@ -1259,16 +1645,21 @@ func (p *parser) parseShowRule() {
 	start := len(p.nodes)
 	p.assert(syntax.KindShow)
 
-	inner := len(p.nodes) - p.cur.trivia
-
-	if !p.at(syntax.KindColon) {
-		p.parseCodeExpr()
-	}
-
 	if p.consumeIf(syntax.KindColon) {
+		// `show: transform` — no selector.
 		p.parseCodeExpr()
 	} else {
-		p.expectedAt(inner, "colon")
+		p.parseCodeExpr()
+		// Index of the selector, taken *after* parsing it: parseCodeExpr wraps
+		// its result into a single node and error recovery may insert nodes, so
+		// a marker taken beforehand would point at the wrong node — or past the
+		// end. It is the last node before any pending trivia.
+		selector := len(p.nodes) - p.cur.trivia - 1
+		if p.consumeIf(syntax.KindColon) {
+			p.parseCodeExpr()
+		} else {
+			p.expectedAt(selector, "colon")
+		}
 	}
 
 	p.wrap(start, syntax.KindShowRule)

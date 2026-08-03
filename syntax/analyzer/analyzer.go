@@ -152,6 +152,11 @@ type analyzer struct {
 	// always aliases the innermost frame's builder, and [a.scope] is the
 	// current lexical scope within it.
 	frames []*frame
+
+	// mathDepth is >0 while lowering math content, so an escape like `\(`
+	// lowers to a math [value.Symbol] rather than markup text. Content blocks
+	// reset it, since their bodies are markup even inside an equation.
+	mathDepth int
 }
 
 // frame is one nesting level of SSA construction. Pushed at closure entry by
@@ -265,6 +270,13 @@ type scope struct {
 	// nested scopes doesn't collide with outer bindings in the Builder's flat
 	// currentDef table.
 	bindings map[name.Name]binding
+
+	// mathScope, when set, is a module consulted as a low-precedence fallback
+	// during name resolution: it is checked only after the entire scope chain's
+	// bindings miss. The analyzer installs it on the scope wrapping an equation
+	// body so math identifiers (`pi`, `frac`, …) resolve through the normal
+	// resolution machinery while still being shadowed by any local binding.
+	mathScope value.ModuleDef
 }
 
 // binding is the kind of in-scope association recorded for a source name. The
@@ -319,6 +331,20 @@ func (a *analyzer) checkIdent(n name.Name, span syntax.Span) expr.Ref {
 	return a.emitError(span, fmt.Sprintf("unknown variable: %s", n.String()), hints...)
 }
 
+// assignVar resolves an assignment target's binding to the SSA variable it
+// names. A [valueBinding] — a constant resolved at analysis time, either from
+// the universe (`emph = 1`) or from the math module reached through
+// [scope.mathScope] (`$#(pi = 1)$`) — names no variable and cannot be assigned
+// to; it reports the error and returns its Ref so callers in expression
+// position can use it as the value of the failing assignment.
+func (a *analyzer) assignVar(bnd binding, source name.Name, span syntax.Span) (expr.Var, expr.Ref, bool) {
+	vb, ok := bnd.(varBinding)
+	if !ok {
+		return expr.Var{}, a.emitError(span, fmt.Sprintf("cannot mutate a constant: %s", source.String())), false
+	}
+	return vb.v, expr.NoRef, true
+}
+
 // SSA variable allocation /////////////////////////////////////////////////////
 //
 // Source-level names can shadow each other (`let x = 1; { let x = 2; ... }`).
@@ -351,11 +377,21 @@ func (a *analyzer) bind(source name.Name, val value.Value) {
 	a.scope.bindings[source] = valueBinding{val: val}
 }
 
-// lookup walks the scope chain for source's current mangled name.
+// lookup walks the scope chain for source's current mangled name. If no
+// binding is found, an in-scope [scope.mathScope] fallback is consulted last.
 func (a *analyzer) lookup(source name.Name) (binding, bool) {
+	var fallback value.ModuleDef
 	for s := a.scope; s != nil; s = s.parent {
 		if m, ok := s.bindings[source]; ok {
 			return m, true
+		}
+		if s.mathScope != nil {
+			fallback = s.mathScope
+		}
+	}
+	if fallback != nil {
+		if v := fallback.Get(source); v != nil {
+			return valueBinding{val: v}, true
 		}
 	}
 	return nil, false

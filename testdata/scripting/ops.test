@@ -157,7 +157,9 @@
 #(float("inf") * 1pt)
 #(float("inf") * 1em)
 #(float("inf") * (1pt + 1em))
-│ #document[#par[#raw("inf")#raw("inf")#raw("inf")]]
+│ #document[
+│   #par[#raw("inf")#raw("inf")#raw("inf")]
+│ ]
 
 --- ops-attempt-nan-length ---
 // Test that trying to produce a NaN scalar (such as in lengths) does not crash.
@@ -166,7 +168,9 @@
 #(infpt - infpt)
 #(infpt + (-infpt))
 #(infpt / float("inf"))
-│ #document[#par[#raw("nan")#raw("nan")#raw("nan")]]
+│ #document[
+│   #par[#raw("nan")#raw("nan")#raw("nan")]
+│ ]
 
 --- ops-unary-bool ---
 // Test boolean operators.
@@ -306,7 +310,9 @@ Apply arguments to an argument sink.
 #test((times.with(2).with(5).with(negate: true))(), -10)
 #test((times.with(2).with(5, negate: true))(), -10)
 #test((times.with(2).with(negate: true))(5), -10)
-│ #document[#par[Apply arguments to an argument sink.]]
+│ #document[
+│   #par[Apply arguments to an argument sink.]
+│ ]
 
 --- ops-precedence-basic ---
 // Multiplication binds stronger than addition.

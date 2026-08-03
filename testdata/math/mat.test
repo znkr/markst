@@ -1,0 +1,829 @@
+// Test matrices.
+
+--- math-mat-semicolon (skip: align element not implemented) ---
+// Test semicolon syntax.
+#set align(center)
+$mat() dot
+ mat(;) dot
+ mat(1, 2) dot
+ mat(1, 2;) \
+ mat(1; 2) dot
+ mat(1, 2; 3, 4) dot
+ mat(1 + &2, 1/2; &3, 4)$
+
+--- math-mat-sparse ---
+// Test sparse matrix.
+$ mat(
+  1, 2, ..., 10;
+  2, 2, ..., 10;
+  dots.v, dots.v, dots.down, dots.v;
+  10, 10, ..., 10;
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("1")
+│       #math.text("2")
+│       #math.text("…")
+│       #math.text("10")
+│     ][
+│       #math.text("2")
+│       #math.text("2")
+│       #math.text("…")
+│       #math.text("10")
+│     ][
+│       #math.text("⋮")
+│       #math.text("⋮")
+│       #math.text("⋱")
+│       #math.text("⋮")
+│     ][
+│       #math.text("10")
+│       #math.text("10")
+│       #math.text("…")
+│       #math.text("10")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-baseline ---
+// Test baseline alignment.
+$ mat(
+  a, b^2;
+  sum_(x \ y) x, a^(1/2);
+  zeta, alpha;
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("a")
+│       #math.attach(t: [#math.text("2")])[#math.text("b")]
+│     ][
+│       #math.attach(
+│         b: [
+│           #math.text("x")
+│           #linebreak()
+│           #math.text("y")
+│         ],
+│       )[#math.text("∑")]
+│       #math.text("x")
+│       #math.attach(
+│         t: [
+│           #math.frac[#math.text("1")][#math.text("2")]
+│         ],
+│       )[#math.text("a")]
+│     ][
+│       #math.text("ζ")
+│       #math.text("α")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-delim-set ---
+// Test alternative delimiter with set rule.
+#set math.mat(delim: "[")
+$ mat(1, 2; 3, 4) $
+$ a + mat(delim: #none, 1, 2; 3, 4) + b $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.text("a")
+│     #math.text("+")
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│     #math.text("+")
+│     #math.text("b")
+│   ]
+│ ]
+
+--- math-mat-delim-direct (skip: align and grid elements not implemented) ---
+// Test alternative math delimiter directly in call.
+#set align(center)
+#grid(
+  columns: 3,
+  gutter: 10pt,
+
+  $ mat(1, 2, delim: "[") $,
+  $ mat(1, 2; delim: "[") $,
+  $ mat(delim: "[", 1, 2) $,
+
+  $ mat(1; 2; delim: "[") $,
+  $ mat(1; delim: "[", 2) $,
+  $ mat(delim: "[", 1; 2) $,
+
+  $ mat(1, 2; delim: "[", 3, 4) $,
+  $ mat(delim: "[", 1, 2; 3, 4) $,
+  $ mat(1, 2; 3, 4; delim: "[") $,
+)
+
+--- math-mat-spread ---
+// Test argument spreading in matrix.
+$ mat(..#range(1, 5).chunks(2))
+  mat(#(..range(2).map(_ => range(2)))) $
+
+#let nums = ((1,) * 5).intersperse(0).chunks(3)
+$ mat(..nums, delim: "[") $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│     #math.mat[
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("0")
+│       #math.text("1")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("1")
+│       #math.text("0")
+│       #math.text("1")
+│     ][
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("0")
+│     ][
+│       #math.text("1")
+│       #math.text("0")
+│       #math.text("1")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-spread-1d ---
+$ mat(..#range(1, 5) ; 1, ..#range(2, 5))
+  mat(..#range(1, 3), ..#range(3, 5) ; ..#range(1, 4), 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")][#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")]
+│     #math.mat[#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")][#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-spread-2d ---
+#let nums = range(0, 2).map(i => (i, i+1))
+$ mat(..nums, delim: "|",)
+  mat(..nums; delim: "|",) $
+$ mat(..nums) mat(..nums;) \
+  mat(..nums;,) mat(..nums,) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #linebreak()
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│   ]
+│ ]
+
+--- math-mat-spread-expected-array-error (skip: mat spread type error differs from typst) ---
+#let nums = range(0, 2).map(i => (i, i+1))
+// Error: 15-16 expected array, found content
+$ mat(..nums, 0, 1) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#raw("0")#raw("1")][#raw("1")#raw("2")][#math.text("0")][#math.text("1")]
+│   ]
+│ ]
+
+--- math-mat-gap ---
+#set math.mat(gap: 1em)
+$ mat(1, 2; 3, 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-gaps ---
+#set math.mat(row-gap: 1em, column-gap: 2em)
+$ mat(1, 2; 3, 4) $
+$ mat(column-gap: #1em, 1, 2; 3, 4)
+  mat(row-gap: #2em, 1, 2; 3, 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-augment (skip: mat augment not implemented) ---
+// Test matrix line drawing (augmentation).
+#grid(
+  columns: 2,
+  gutter: 10pt,
+  $ mat(10, 2, 3, 4; 5, 6, 7, 8; augment: #3) $,
+  $ mat(10, 2, 3, 4; 5, 6, 7, 8; augment: #4) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(hline: 0)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(hline: 2)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(hline: 3)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(hline: 1, vline: 1)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(hline: -1, vline: -1)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(vline: 2, stroke: 1pt + blue)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(vline: 3, stroke: 1pt + blue)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(vline: 3, stroke: 1pt + blue)) $,
+  $ mat(100, 2, 3; 4, 5, 6; 7, 8, 9; augment: #(vline: 0, stroke: 1pt + blue)) $,
+  $ mat(10, 2, 3, 4; 5, 6, 7, 8; augment: #(vline: -4, stroke: 1pt + blue)) $,
+)
+
+--- math-mat-augment-set (skip: mat augment not implemented) ---
+// Test using matrix line drawing with a set rule.
+#set math.mat(augment: (hline: 2, vline: 1, stroke: 2pt + green))
+$ mat(1, 0, 0, 0; 0, 1, 0, 0; 0, 0, 1, 1) $
+
+#set math.mat(augment: 2)
+$ mat(1, 0, 0, 0; 0, 1, 0, 0; 0, 0, 1, 1) $
+
+#set math.mat(augment: none)
+
+--- math-mat-augment-line-out-of-bounds (skip: mat augment not implemented) ---
+// Error: 3-37 cannot draw a vertical line at offset 4 in a matrix with 3 columns
+$ mat(1, 0, 0; 0, 1, 1; augment: #4) $,
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("1")
+│       #math.text("0")
+│       #math.text("0")
+│     ][
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("1")
+│     ]
+│   ]
+│   #par[,]
+│ ]
+
+--- math-mat-align (skip: align values not implemented) ---
+$ mat(-1, 1, 1; 1, -1, 1; 1, 1, -1; align: #left) $
+$ mat(-1, 1, 1; 1, -1, 1; 1, 1, -1; align: #center) $
+$ mat(-1, 1, 1; 1, -1, 1; 1, 1, -1; align: #right) $
+
+--- math-mat-align-explicit-alternating ---
+// Test alternating explicit alignment in a matrix.
+$ mat(
+  "a" & "a a a" & "a a";
+  "a a" & "a a" & "a";
+  "a a a" & "a" & "a a a";
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a a")
+│     ][
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a")
+│     ][
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-align-implicit ---
+// Test alignment in a matrix.
+$ mat(
+  "a", "a a a", "a a";
+  "a a", "a a", "a";
+  "a a a", "a", "a a a";
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("a")
+│       #math.text("a a a")
+│       #math.text("a a")
+│     ][
+│       #math.text("a a")
+│       #math.text("a a")
+│       #math.text("a")
+│     ][
+│       #math.text("a a a")
+│       #math.text("a")
+│       #math.text("a a a")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-align-explicit-left ---
+// Test explicit left alignment in a matrix.
+$ mat(
+  &"a", &"a a a", &"a a";
+  &"a a", &"a a", &"a";
+  &"a a a", &"a", &"a a a";
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.align-point()
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a a")
+│     ][
+│       #math.align-point()
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a")
+│     ][
+│       #math.align-point()
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-align-explicit-right ---
+// Test explicit right alignment in a matrix.
+$ mat(
+  "a"&, "a a a"&, "a a"&;
+  "a a"&, "a a"&, "a"&;
+  "a a a"&, "a"&, "a a a"&;
+) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a a")
+│       #math.align-point()
+│     ][
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a a")
+│       #math.align-point()
+│       #math.text("a")
+│       #math.align-point()
+│     ][
+│       #math.text("a a a")
+│       #math.align-point()
+│       #math.text("a")
+│       #math.align-point()
+│       #math.text("a a a")
+│       #math.align-point()
+│     ]
+│   ]
+│ ]
+
+--- math-mat-align-explicit-mixed (skip: align values not implemented) ---
+// Test explicit alignment in some columns with align parameter in a matrix.
+#let data = (
+  ($&18&&.02$, $1$, $+1$),
+  ($-&9&&.3$, $-1$, $-&21$),
+  ($&&&.011$, $1$, $&0$)
+)
+$ #math.mat(align: left, ..data) $
+$ #math.mat(align: center, ..data) $
+$ #math.mat(align: right, ..data) $
+
+--- math-mat-align-complex (skip: math.class not implemented) ---
+// Test #460 equations.
+#let stop = {
+  math.class("punctuation",$.$)
+}
+$ mat(&a+b,c;&d, e) $
+$ mat(&a+b&,c;&d&, e) $
+$ mat(&&&a+b,c;&&&d, e) $
+$ mat(stop &a+b&stop,c;...stop stop&d&...stop stop, e) $
+
+--- math-mat-align-signed-numbers ---
+// Test #454 equations.
+$ mat(-1, 1, 1; 1, -1, 1; 1, 1, -1) $
+$ mat(-1&, 1&, 1&; 1&, -1&, 1&; 1&, 1&, -1&) $
+$ mat(-1&, 1&, 1&; 1, -1, 1; 1, 1, -1) $
+$ mat(&-1, &1, &1; 1, -1, 1; 1, 1, -1) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("−")
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("1")
+│     ][
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│       #math.text("1")
+│     ][
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("−")
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│     ][
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("−")
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│     ][
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("−")
+│       #math.text("1")
+│       #math.align-point()
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("−")
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│     ][
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│       #math.text("1")
+│     ][
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.align-point()
+│       #math.text("−")
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│       #math.align-point()
+│       #math.text("1")
+│     ][
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│       #math.text("1")
+│     ][
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("1")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-bad-comma ---
+// Test an old issue with 2d args and named args in math.
+$ mat(1, 2; 3, 4, delim: "[") $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- issue-852-mat-type ---
+$ mat(B, A B) $
+$ mat(B, A B, dots) $
+$ mat(B, A B, dots;) $
+$ mat(#1, #(foo: "bar")) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("B")
+│       #math.text("A")
+│       #math.text("B")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("B")
+│       #math.text("A")
+│       #math.text("B")
+│       #math.text("⋯")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("B")
+│       #math.text("A")
+│       #math.text("B")
+│       #math.text("⋯")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.text("1")
+│       #raw("(\"foo\": \"bar\")\n")
+│     ]
+│   ]
+│ ]
+
+--- issue-2268-mat-augment-color (skip: color values not implemented) ---
+// The augment line should be of the same color as the text
+#set text(
+  font: "New Computer Modern",
+  lang: "en",
+  fill: yellow,
+)
+
+$mat(augment: #1, M, v) arrow.r.squiggly mat(augment: #1, R, b)$
+
+--- math-mat-delims ---
+$ mat(delim: #none, 1, 2; 3, 4) $
+
+$ mat(delim: "(", 1, 2; 3, 4) $
+$ mat(delim: \(, 1, 2; 3, 4) $
+$ mat(delim: paren.l, 1, 2; 3, 4) $
+
+$ mat(delim: "[", 1, 2; 3, 4) $
+$ mat(delim: \[, 1, 2; 3, 4) $
+$ mat(delim: bracket.l, 1, 2; 3, 4) $
+
+$ mat(delim: "⟦", 1, 2; 3, 4) $
+$ mat(delim: bracket.stroked.l, 1, 2; 3, 4) $
+
+$ mat(delim: "{", 1, 2; 3, 4) $
+$ mat(delim: \{, 1, 2; 3, 4) $
+$ mat(delim: brace.l, 1, 2; 3, 4) $
+
+$ mat(delim: "|", 1, 2; 3, 4) $
+$ mat(delim: \|, 1, 2; 3, 4) $
+$ mat(delim: bar.v, 1, 2; 3, 4) $
+
+$ mat(delim: "‖", 1, 2; 3, 4) $
+$ mat(delim: bar.v.double, 1, 2; 3, 4) $
+
+$ mat(delim: "⟨", 1, 2; 3, 4) $
+$ mat(delim: chevron.l, 1, 2; 3, 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-delims-inverted ---
+$ mat(delim: ")", 1, 2; 3, 4) $
+$ mat(delim: \), 1, 2; 3, 4) $
+$ mat(delim: paren.r, 1, 2; 3, 4) $
+
+$ mat(delim: "]", 1, 2; 3, 4) $
+$ mat(delim: \], 1, 2; 3, 4) $
+$ mat(delim: bracket.r, 1, 2; 3, 4) $
+
+$ mat(delim: "⟧", 1, 2; 3, 4) $
+$ mat(delim: bracket.stroked.r, 1, 2; 3, 4) $
+
+$ mat(delim: "}", 1, 2; 3, 4) $
+$ mat(delim: \}, 1, 2; 3, 4) $
+$ mat(delim: brace.r, 1, 2; 3, 4) $
+
+$ mat(delim: "⟩", 1, 2; 3, 4) $
+$ mat(delim: chevron.r, 1, 2; 3, 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-delims-pair ---
+$ mat(delim: #(none, "["), 1, 2; 3, 4) $
+$ mat(delim: #(sym.chevron.r, sym.bracket.stroked.r), 1, 2; 3, 4) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")#math.text("2")][#math.text("3")#math.text("4")]
+│   ]
+│ ]
+
+--- math-mat-linebreaks ---
+// Warning: 20-29 linebreaks are ignored in cells
+// Hint: 20-29 use commas instead to separate each line
+$ mat(a; b; c) mat(a \ b \ c) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("a")][#math.text("b")][#math.text("c")]
+│     #math.mat[
+│       #math.text("a")
+│       #linebreak()
+│       #math.text("b")
+│       #linebreak()
+│       #math.text("c")
+│     ]
+│   ]
+│ ]
+
+--- math-mat-linebreaks-trailing ---
+// Warning: 7-10 linebreaks are ignored in cells
+// Hint: 7-10 use commas instead to separate each line
+$ mat(a \ ) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("a")#linebreak()]
+│   ]
+│ ]
+
+--- math-mat-vec-cases-unity ---
+// Test that matrices, vectors, and cases are all laid out the same.
+$ mat(z_(n_p); a^2)
+  vec(z_(n_p), a^2)
+  cases(reverse: #true, delim: \(, z_(n_p), a^2)
+  cases(delim: \(, z_(n_p), a^2) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.mat[
+│       #math.attach(
+│         b: [
+│           #math.attach(b: [#math.text("p")])[#math.text("n")]
+│         ],
+│       )[#math.text("z")]
+│     ][
+│       #math.attach(t: [#math.text("2")])[#math.text("a")]
+│     ]
+│     #math.vec[
+│       #math.attach(
+│         b: [
+│           #math.attach(b: [#math.text("p")])[#math.text("n")]
+│         ],
+│       )[#math.text("z")]
+│     ][
+│       #math.attach(t: [#math.text("2")])[#math.text("a")]
+│     ]
+│     #math.cases[
+│       #math.attach(
+│         b: [
+│           #math.attach(b: [#math.text("p")])[#math.text("n")]
+│         ],
+│       )[#math.text("z")]
+│     ][
+│       #math.attach(t: [#math.text("2")])[#math.text("a")]
+│     ]
+│     #math.cases[
+│       #math.attach(
+│         b: [
+│           #math.attach(b: [#math.text("p")])[#math.text("n")]
+│         ],
+│       )[#math.text("z")]
+│     ][
+│       #math.attach(t: [#math.text("2")])[#math.text("a")]
+│     ]
+│   ]
+│ ]
+
+--- issue-1617-mat-align (skip: page element not implemented) ---
+#set page(width: auto)
+$ mat(a, b; c, d) mat(x; y) $
+
+$ x mat(a; c) + y mat(b; d)
+  = mat(a x+b y; c x+d y) $
+
+$ mat(
+    -d_0, lambda_0, 0, 0, dots;
+    mu_1, -d_1, lambda_1, 0, dots;
+    0, mu_2, -d_2, lambda_2, dots;
+    dots.v, dots.v, dots.v, dots.v, dots.down;
+  )
+  mat(p_0; p_1; p_2; dots.v) $
+
+--- math-mat-delim-class ---
+// Test that delimiters have opening and closing math class.
+$ 2mat(a, delim: bar.v) 2 $
+$ 2 mat(a, delim: bar.v)2 $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("2")
+│     #math.mat[#math.text("a")]
+│     #math.text("2")
+│   ]
+│   #math.equation(block: true)[
+│     #math.text("2")
+│     #math.mat[#math.text("a")]
+│     #math.text("2")
+│   ]
+│ ]

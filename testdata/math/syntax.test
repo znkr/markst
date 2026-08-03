@@ -1,0 +1,149 @@
+// Test math syntax.
+
+--- math-unicode ---
+// Test Unicode math.
+$ ∑_(i=0)^ℕ a ∘ b = \u{2211}_(i=0)^NN a compose b $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(
+│       t: [#math.text("ℕ")],
+│       b: [
+│         #math.text("i")
+│         #math.text("=")
+│         #math.text("0")
+│       ],
+│     )[#math.text("∑")]
+│     #math.text("a")
+│     #math.text("∘")
+│     #math.text("b")
+│     #math.text("=")
+│     #math.attach(
+│       t: [#math.text("ℕ")],
+│       b: [
+│         #math.text("i")
+│         #math.text("=")
+│         #math.text("0")
+│       ],
+│     )[#math.text("∑")]
+│     #math.text("a")
+│     #math.text("∘")
+│     #math.text("b")
+│   ]
+│ ]
+
+--- math-shorthands ---
+// Test a few shorthands.
+$ underline(f' : NN -> RR) \
+  n |-> cases(
+    [|1|] &"if" n >>> 10,
+    2 * 3 &"if" n != 5,
+    1 - 0 thick &...,
+  ) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.underline[
+│       #math.primes(count: 1)[#math.text("f")]
+│       #math.text(":")
+│       #math.text("ℕ")
+│       #math.text("→")
+│       #math.text("ℝ")
+│     ]
+│     #linebreak()
+│     #math.text("n")
+│     #math.text("↦")
+│     #math.cases[
+│       #math.lr[#math.text("⟦")][#math.text("1")][#math.text("⟧")]
+│       #math.align-point()
+│       #math.text("if")
+│       #math.text("n")
+│       #math.text("⋙")
+│       #math.text("10")
+│     ][
+│       #math.text("2")
+│       #math.text("∗")
+│       #math.text("3")
+│       #math.align-point()
+│       #math.text("if")
+│       #math.text("n")
+│       #math.text("≠")
+│       #math.text("5")
+│     ][
+│       #math.text("1")
+│       #math.text("−")
+│       #math.text("0")
+│       #math.text("thick")
+│       #math.align-point()
+│       #math.text("…")
+│     ]
+│   ]
+│ ]
+
+--- math-shorthands-noncontinuable ---
+// Test that shorthands are not continuable.
+$ x >=(y) / z \
+  x >= (y) / z $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("x")
+│     #math.text("≥")
+│     #math.frac[#math.text("y")][#math.text("z")]
+│     #linebreak()
+│     #math.text("x")
+│     #math.text("≥")
+│     #math.frac[#math.text("y")][#math.text("z")]
+│   ]
+│ ]
+
+--- math-common-symbols ---
+// Test common symbols.
+$ dot \ dots \ ast \ tilde \ star $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("⋅")
+│     #linebreak()
+│     #math.text("⋯")
+│     #linebreak()
+│     #math.text("∗")
+│     #linebreak()
+│     #math.text("∼")
+│     #linebreak()
+│     #math.text("⋆")
+│   ]
+│ ]
+
+--- issue-2044-invalid-parsed-ident ---
+// In this bug, the dot at the end was causing the right parenthesis to be
+// parsed as an identifier instead of the closing right parenthesis.
+$floor(phi.alt.)$
+$floor(phi.alt. )$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.lr[#math.text("⌊")][#math.text("ϕ")#math.text(".")][#math.text("⌋")]
+│     ]
+│     #math.equation(block: false)[
+│       #math.lr[#math.text("⌊")][#math.text("ϕ")#math.text(".")][#math.text("⌋")]
+│     ]
+│   ]
+│ ]
+
+--- issue-4828-math-number-multi-char ---
+// Numbers should parse the same regardless of number of characters.
+$1/2(x)$ vs. $1/10(x)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.frac[#math.text("1")][#math.text("2")]
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│     vs.
+│     #math.equation(block: false)[
+│       #math.frac[#math.text("1")][#math.text("10")]
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│   ]
+│ ]
+
+--- math-unclosed ---
+// Error: 1-2 unclosed delimiter
+$a

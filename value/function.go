@@ -25,7 +25,9 @@ type Function struct {
 	// Sink, if set, marks Positional[*Sink] as a sink parameter. Pre-sink
 	// params consume from the front of call args, post-sink params from the
 	// back, and everything in between (plus unmatched named args) is packed
-	// into a *Arguments passed at that index.
+	// into a *Arguments passed at that index. A function whose sink should not
+	// silently swallow stray named args inspects the sink's Named itself (see
+	// e.g. math.vec/mat/cases and array.zip).
 	Sink *int
 
 	// Named describes the allowed named parameters.
@@ -39,6 +41,13 @@ type Function struct {
 	// fully merged arguments (pre-bound + call-site) and returns the result or
 	// an error.
 	F func(call *FunctionCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
+
+	// Validate, if set, runs after the generic bind checks succeed, receiving
+	// the merged named arguments. It performs value-level validation the coarse
+	// type system can't express (e.g. a `delim` that must be a single valid
+	// delimiter character) and returns a spanned error on failure. It runs for
+	// both direct calls and `#set` rules, since both bind through [bind].
+	Validate func(named NamedArgs) *FunctionCallError
 
 	// Impure marks the function as having observable side effects beyond its
 	// return value (mutating an operand, touching session-global state, etc.).
@@ -285,7 +294,8 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 				}
 				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name)
 			}
-			// When a sink exists, unknown named args go to the sink.
+			// When a sink exists, unknown named args go to the sink; a function
+			// that doesn't want to accept them rejects them from the sink itself.
 			continue
 		}
 		coerced, ok := callableAsFunction(n.Named[name].Type, val)
@@ -298,6 +308,11 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	}
 	for _, c := range namedCoercions {
 		merged.Named.Put(c.key, c.val)
+	}
+	if n.Validate != nil {
+		if err := n.Validate(merged.Named); err != nil {
+			return nil, nil, err
+		}
 	}
 	return merged, mapping, nil
 }

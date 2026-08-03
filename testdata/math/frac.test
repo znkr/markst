@@ -1,0 +1,328 @@
+// Test fractions.
+
+--- math-frac-baseline ---
+// Test that denominator baseline matches in the common case.
+$ x = 1/2 = a/(a h) = a/a = a/(1/2) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("x")
+│     #math.text("=")
+│     #math.frac[#math.text("1")][#math.text("2")]
+│     #math.text("=")
+│     #math.frac[#math.text("a")][#math.text("a")#math.text("h")]
+│     #math.text("=")
+│     #math.frac[#math.text("a")][#math.text("a")]
+│     #math.text("=")
+│     #math.frac[
+│       #math.text("a")
+│     ][
+│       #math.frac[#math.text("1")][#math.text("2")]
+│     ]
+│   ]
+│ ]
+
+--- math-frac-paren-removal ---
+// Test parenthesis removal.
+$ (|x| + |y|)/2 < [1+2]/3 $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.frac[
+│       #math.text("|")
+│       #math.text("x")
+│       #math.text("|")
+│       #math.text("+")
+│       #math.text("|")
+│       #math.text("y")
+│       #math.text("|")
+│     ][
+│       #math.text("2")
+│     ]
+│     #math.text("<")
+│     #math.text("[")
+│     #math.text("1")
+│     #math.text("+")
+│     #math.text("2")
+│     #math.frac[#math.text("]")][#math.text("3")]
+│   ]
+│ ]
+
+--- math-frac-large ---
+// Test large fraction.
+$ x = (-b plus.minus sqrt(b^2 - 4a c))/(2a) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("x")
+│     #math.text("=")
+│     #math.frac[
+│       #math.text("−")
+│       #math.text("b")
+│       #math.text("±")
+│       #math.root[
+│         #math.attach(t: [#math.text("2")])[#math.text("b")]
+│         #math.text("−")
+│         #math.text("4")
+│         #math.text("a")
+│         #math.text("c")
+│       ]
+│     ][
+│       #math.text("2")
+│       #math.text("a")
+│     ]
+│   ]
+│ ]
+
+--- math-binom (skip: binom not implemented) ---
+// Test binomial.
+$ binom(circle, square) $
+
+--- math-binom-multiple (skip: binom not implemented) ---
+// Test multinomial coefficients.
+$ binom(n, k_1, k_2, k_3) $
+
+--- math-binom-missing-lower (skip: binom not implemented) ---
+// Error: 3-13 missing argument: lower
+$ binom(x^2) $
+
+--- math-dif ---
+// Test dif.
+$ (dif y)/(dif x), dif/x, x/dif, dif/dif \
+  frac(dif y, dif x), frac(dif, x), frac(x, dif), frac(dif, dif) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.frac[#math.text("dif")#math.text("y")][#math.text("dif")#math.text("x")]
+│     #math.text(",")
+│     #math.frac[#math.text("dif")][#math.text("x")]
+│     #math.text(",")
+│     #math.frac[#math.text("x")][#math.text("dif")]
+│     #math.text(",")
+│     #math.frac[#math.text("dif")][#math.text("dif")]
+│     #linebreak()
+│     #math.frac[#math.text("dif")#math.text("y")][#math.text("dif")#math.text("x")]
+│     #math.text(",")
+│     #math.frac[#math.text("dif")][#math.text("x")]
+│     #math.text(",")
+│     #math.frac[#math.text("x")][#math.text("dif")]
+│     #math.text(",")
+│     #math.frac[#math.text("dif")][#math.text("dif")]
+│   ]
+│ ]
+
+--- math-frac-associativity ---
+// Test associativity.
+$ 1/2/3 = (1/2)/3 = 1/(2/3) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.frac[
+│       #math.frac[#math.text("1")][#math.text("2")]
+│     ][
+│       #math.text("3")
+│     ]
+│     #math.text("=")
+│     #math.frac[
+│       #math.frac[#math.text("1")][#math.text("2")]
+│     ][
+│       #math.text("3")
+│     ]
+│     #math.text("=")
+│     #math.frac[
+│       #math.text("1")
+│     ][
+│       #math.frac[#math.text("2")][#math.text("3")]
+│     ]
+│   ]
+│ ]
+
+--- math-frac-tan-sin-cos (skip: math function application not implemented) ---
+// A nice simple example of a simple trig property.
+$ tan(x) = sin(x) / cos(x) \
+  tan x = (sin x) / (cos x) $
+
+--- math-frac-precedence (skip: math function application not implemented) ---
+// Test precedence.
+$ a_1/b_2, 1/f(x), zeta(x)/2, "foo"[|x|]/2 \
+  1.2/3.7, 2.3^3.4 \
+  f [x]/2, phi [x]/2 \
+  +[x]/2, 1(x)/2, 2[x]/2, 🏳️‍🌈[x]/2 \
+  (a)b/2, b(a)[b]/2 \
+  n!/2, 5!/2, n !/2, 1/n!, 1/5! $
+
+--- math-frac-implicit-func ---
+// Test other precedence interactions with implicit function calls.
+$
+  f'(x) / f_pi{x} \
+  sin^2(x) / f_0(x) quad f!(x) / g^(-1)(x) \
+  a_\u{2a}[|x} / a_"2a"{x|] quad f_pi.alt{x} / f_#math.pi.alt{x} \
+  a(b)_c(d)^e(f) / g(h)'_i(j)' \
+  (x)'(x)'(x)' / (x)'(x)'(x)' \
+$
+│ #document[
+│   #math.equation(block: true)[
+│     #math.primes(count: 1)[#math.text("f")]
+│     #math.frac[
+│       #math.text("x")
+│     ][
+│       #math.attach(b: [#math.text("π")])[#math.text("f")]
+│     ]
+│     #math.text("{")
+│     #math.text("x")
+│     #math.text("}")
+│     #linebreak()
+│     #math.attach(t: [#math.text("2")])[#math.text("sin")]
+│     #math.frac[
+│       #math.text("x")
+│     ][
+│       #math.attach(b: [#math.text("0")])[#math.text("f")]
+│     ]
+│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #math.text("quad")
+│     #math.text("f")
+│     #math.text("!")
+│     #math.frac[
+│       #math.text("x")
+│     ][
+│       #math.attach(
+│         t: [
+│           #math.text("−")
+│           #math.text("1")
+│         ],
+│       )[#math.text("g")]
+│     ]
+│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #linebreak()
+│     #math.attach(
+│       b: [
+│         #math.text("*")
+│         #math.lr[
+│           #math.text("⟦")
+│         ][
+│           #math.text("x")
+│           #math.frac[
+│             #math.text("}")
+│           ][
+│             #math.attach(b: [#math.text("2a")])[#math.text("a")]
+│           ]
+│           #math.text("{")
+│           #math.text("x")
+│         ][
+│           #math.text("⟧")
+│         ]
+│       ],
+│     )[#math.text("a")]
+│     #math.text("quad")
+│     #math.attach(b: [#math.text("ϖ")])[#math.text("f")]
+│     #math.text("{")
+│     #math.text("x")
+│     #math.frac[
+│       #math.text("}")
+│     ][
+│       #math.attach(b: [#math.text("ϖ")])[#math.text("f")]
+│     ]
+│     #math.text("{")
+│     #math.text("x")
+│     #math.text("}")
+│     #linebreak()
+│     #math.frac[
+│       #math.attach(
+│         t: [
+│           #math.text("e")
+│           #math.lr[#math.text("(")][#math.text("f")][#math.text(")")]
+│         ],
+│         b: [
+│           #math.text("c")
+│           #math.lr[#math.text("(")][#math.text("d")][#math.text(")")]
+│         ],
+│       )[
+│         #math.text("a")
+│         #math.lr[#math.text("(")][#math.text("b")][#math.text(")")]
+│       ]
+│     ][
+│       #math.attach(
+│         b: [
+│           #math.primes(count: 1)[
+│             #math.text("i")
+│             #math.lr[#math.text("(")][#math.text("j")][#math.text(")")]
+│           ]
+│         ],
+│       )[
+│         #math.primes(count: 1)[
+│           #math.text("g")
+│           #math.lr[#math.text("(")][#math.text("h")][#math.text(")")]
+│         ]
+│       ]
+│     ]
+│     #linebreak()
+│     #math.primes(count: 1)[
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│     #math.primes(count: 1)[
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│     #math.frac[
+│       #math.primes(count: 1)[
+│         #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│       ]
+│     ][
+│       #math.primes(count: 1)[
+│         #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│       ]
+│     ]
+│     #math.primes(count: 1)[
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│     #math.primes(count: 1)[
+│       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     ]
+│     #linebreak()
+│   ]
+│ ]
+
+--- math-frac-gap ---
+// Test that the gap above and below the fraction rule is correct.
+$ sqrt(n^(2/3)) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.root[
+│       #math.attach(
+│         t: [
+│           #math.frac[#math.text("2")][#math.text("3")]
+│         ],
+│       )[#math.text("n")]
+│     ]
+│   ]
+│ ]
+
+--- math-frac-horizontal (skip: frac style parameter not implemented) ---
+// Test that horizontal fractions look identical to inline math with `slash`
+#set math.frac(style: "horizontal")
+$ (a / b) / (c / (d / e)) $
+$ (a slash b) slash (c slash (d slash e)) $
+
+--- math-frac-horizontal-lr-paren (skip: frac style parameter not implemented) ---
+// Test that parentheses are in a left-right pair even when rebuilt by a horizontal fraction
+#set math.frac(style: "horizontal")
+$ (#v(2em)) / n $
+
+--- math-frac-skewed (skip: frac style parameter not implemented) ---
+// Test skewed fractions
+#set math.frac(style: "skewed")
+$ a / b,  a / (b / c) $
+
+--- math-frac-horizontal-explicit (skip: frac style parameter not implemented) ---
+// Test that explicit fractions don't change parentheses
+#set math.frac(style: "horizontal")
+$ frac(a, (b + c)), frac(a, b + c) $
+
+--- math-frac-horizontal-nonparen-brackets (skip: frac style parameter not implemented) ---
+// Test that non-parentheses left-right pairs remain untouched
+#set math.frac(style: "horizontal")
+$ [x+y] / {z} $
+
+--- math-frac-styles-inline (skip: frac style parameter not implemented) ---
+// Test inline layout of styled fractions
+#set math.frac(style: "horizontal")
+$a/(b+c), frac(a, b+c, style: "skewed"), frac(a, b+c, style: "vertical")$
+
+--- math-frac-line-fill-stroke (skip: color values not implemented) ---
+// Test that the horizontal stroke is also decorated like text glyphs
+#text(size: 20pt, fill: yellow, stroke: red + .5pt)[$1/Delta$]
+#text(size: 25pt, stroke: red)[$1/Delta$]

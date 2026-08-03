@@ -24,11 +24,11 @@
 }
 │ #document[]
 
---- math-field-call-accent-accent (skip: equation parsing not implemented yet) ---
+--- math-field-call-accent-accent (skip: writst distinguishes math text from markup text, so the base built from $..(x)$ is not equal to the one built from the [\x] content block) ---
 // Test math method call for an accent symbol.
 #test($arrow.l.r(x)$, $#math.arrow.l.r[\x]$)
 
---- math-field-call-accent-non-func (skip: equation parsing not implemented yet) ---
+--- math-field-call-accent-non-func (skip: calling a non-accent symbol in math should render the call verbatim (Typst wraps the args in the equation); writst reports it as not callable) ---
 // Test calling a symbol whose field isn't an accent.
 #test($pi.alt(x)$, $pi.alt/**/(x)$)
 
@@ -36,7 +36,7 @@
 #import "module.typ"
 #test(module.item(1, 2), 3)
 
---- math-field-call-import-module (skip: equation parsing not implemented yet) ---
+--- math-field-call-import-module (skip: modules/imports are not implemented yet) ---
 #import "module.typ"
 #test($module.item(#1, #2)$, $#3$)
 
@@ -44,7 +44,7 @@
 // Error: 6-13 module `pdf` does not contain `attache`
 #pdf.attache()
 
---- math-field-call-missing-field (skip: equation parsing not implemented yet) ---
+--- math-field-call-missing-field ---
 // Error: 14-19 function `assert` does not contain field `noteq`
 $ std.assert.noteq() $
 
@@ -52,7 +52,7 @@ $ std.assert.noteq() $
 // Error: 2-8 type array has no method `fun`
 #().fun()
 
---- math-field-call-unknown-generic-type (skip: equation parsing not implemented yet) ---
+--- math-field-call-unknown-generic-type (skip: colors (std.red) are not implemented yet) ---
 // Error: 3-14 type color has no method `fun`
 $ std.red.fun() $
 
@@ -60,7 +60,7 @@ $ std.red.fun() $
 // Error: 2-8 element sequence has no method `fun`
 #[].fun()
 
---- math-field-call-unknown-content (skip: equation parsing not implemented yet) ---
+--- math-field-call-unknown-content ---
 #let pi = [pi]
 // Error: 3-9 element text has no method `fun`
 $ pi.fun() $
@@ -71,7 +71,7 @@ $ pi.fun() $
 // Hint: 2-48 to call the stored function, wrap the field access in parentheses: `(heading([], supplement: x => x + 1).supplement)(..)`
 #heading([], supplement: x => x + 1).supplement(2)
 
---- math-field-call-invalid-content-field-func (skip: equation parsing not implemented yet) ---
+--- math-field-call-invalid-content-field-func ---
 #let cancel = math.cancel($x$, angle: ang => ang + 90deg)
 // Error: 3-15 `angle` is not a valid method for element `cancel`
 // Hint: 3-15 to call the stored function, use code mode and wrap the field access in parentheses: `#(cancel.angle)(..)`
@@ -82,7 +82,7 @@ $ cancel.angle(#30deg) $
 // Hint: 2-26 to access the `stroke` field, remove the function arguments: `line(stroke: red).stroke`
 #line(stroke: red).stroke()
 
---- math-field-call-invalid-non-func (skip: equation parsing not implemented yet) ---
+--- math-field-call-invalid-non-func (skip: alignment values (std.top) are not implemented yet) ---
 // Error: 27-36 `y` is not a valid method for type `alignment`
 // Hint: 27-36 try adding a space before the parentheses
 #test($std.top.y/**/()$, $std.top.y()$)
@@ -95,7 +95,7 @@ $ cancel.angle(#30deg) $
 // Hint: 2-34 dictionary keys cannot be used with method syntax as keys could conflict with built-in method names
 #(call-me: () => "maybe").call-me()
 
---- math-field-call-dict-invalid (skip: equation parsing not implemented yet) ---
+--- math-field-call-dict-invalid ---
 #let pi = (alt: _ => math.pi.alt)
 // Error: 3-9 cannot directly call dictionary keys as functions
 // Hint: 3-9 to call the stored function, use code mode and wrap the field access in parentheses: `#(pi.alt)(..)`
@@ -108,7 +108,7 @@ $ pi.alt() $
 // Hint: 2-24 to access the `non-func` key, remove the function arguments: `(non-func: 1).non-func`
 #(non-func: 1).non-func()
 
---- math-field-call-dict-non-func (skip: equation parsing not implemented yet) ---
+--- math-field-call-dict-non-func ---
 // The hint should differ slightly to account for being in math mode.
 #let pi = (alt: math.pi.alt)
 // Error: 3-9 cannot directly call dictionary keys as functions
@@ -123,7 +123,7 @@ $ pi.alt() $
 #test(numbers, (1, 3))
 │ #document[]
 
---- math-field-call-mut-basic (skip: equation parsing not implemented yet) ---
+--- math-field-call-mut-basic (skip: intentional divergence — writst rejects resolved mutating methods without executing them; expecting the mutations to still apply is Typst-specific) ---
 // Test mutating method calls in math.
 // Currently they just error, but may be allowed in the future.
 #let array = (1, 2)
@@ -162,7 +162,7 @@ $
 // Hint: 2-10 to access the `pop` key, remove the function arguments: `dict.pop`
 #dict.pop()
 
---- math-field-call-dict-non-func-pop (skip: equation parsing not implemented yet) ---
+--- math-field-call-dict-non-func-pop (skip: intentional divergence — writst's runtime mutability check reports the precise dict-key-call error; Typst's name pre-check does not) ---
 #let dict = (pop: none)
 // Error: 3-13 cannot call mutating methods in math
 // Hint: 3-13 try using code mode to call the method: `#dict.pop()`
@@ -175,7 +175,7 @@ $ dict.pop() $
 // Hint: 2-10 to access the `pop` key, remove the function arguments: `dict.pop`
 #dict.pop(arg: "something")
 
---- math-field-call-dict-non-func-pop-arg (skip: equation parsing not implemented yet) ---
+--- math-field-call-dict-non-func-pop-arg (skip: intentional divergence — writst's runtime mutability check reports the precise dict-key-call error; Typst's name pre-check does not) ---
 #let dict = (pop: none)
 // Error: 3-29 cannot call mutating methods in math
 // Hint: 3-29 try using code mode to call the method: `#dict.pop(arg: "something")`
@@ -199,7 +199,7 @@ $ dict.pop(arg: "something") $
 // Error: 7-16 cannot mutate a temporary value
 #test((module,).at(0).push(2), 3)
 
---- math-field-call-mut-access-module-push (skip: equation parsing not implemented yet) ---
+--- math-field-call-mut-access-module-push (skip: modules/imports are not implemented yet) ---
 // This used to error, but math now correctly ignores the mutable method name.
 #import "module.typ"
 #let indirect = (mod: module)
@@ -253,7 +253,7 @@ $ dict.pop(arg: "something") $
   test(dict.one, (two: (three: none)))
 }
 
---- field-call-accent-eval-order-assign (skip: calling accent symbols as functions is not implemented yet) ---
+--- field-call-accent-eval-order-assign ---
 // Test evaluation order when assigning to a variable in an argument.
 #{
   let sm = symbol("m", ("method", sym.tilde))
@@ -263,7 +263,7 @@ $ dict.pop(arg: "something") $
   test(array, sm)
 }
 
---- math-field-call-accent-eval-order-assign (skip: equation parsing not implemented yet) ---
+--- math-field-call-accent-eval-order-assign ---
 // Test evaluation order when assigning to a variable in an argument in math.
 #{
   let sm = symbol("m", ("method", sym.tilde))
@@ -273,7 +273,7 @@ $ dict.pop(arg: "something") $
   test(array, sm)
 }
 
---- field-call-accent-eval-order-shadowed (skip: calling accent symbols as functions is not implemented yet) ---
+--- field-call-accent-eval-order-shadowed (skip: a let binding in argument position produces no value in writst, so the argument is missing rather than none) ---
 // Test shadowing a variable in arguments while calling a method on it.
 #{
   let sm = symbol("m", ("method", sym.tilde))
@@ -281,7 +281,7 @@ $ dict.pop(arg: "something") $
   test(sm, false)
 }
 
---- math-field-call-accent-eval-order-shadowed (skip: equation parsing not implemented yet) ---
+--- math-field-call-accent-eval-order-shadowed (skip: a let binding in argument position produces no value in writst, so the argument is missing rather than none) ---
 // Test shadowing a variable in arguments while calling a method on it in math.
 #{
   let sm = symbol("m", ("method", sym.tilde))
@@ -289,7 +289,7 @@ $ dict.pop(arg: "something") $
   test(sm, false)
 }
 
---- field-call-accent-eval-order-shadowed-push (skip: calling accent symbols as functions is not implemented yet) ---
+--- field-call-accent-eval-order-shadowed-push (skip: a let binding in argument position produces no value in writst, so the argument is missing rather than none) ---
 // This differs because `push` is a mutating method name, even though the method
 // on `sp` here isn't actually mutating.
 #{
@@ -299,7 +299,7 @@ $ dict.pop(arg: "something") $
   test(sp, false)
 }
 
---- math-field-call-accent-eval-order-shadowed-push (skip: equation parsing not implemented yet) ---
+--- math-field-call-accent-eval-order-shadowed-push (skip: a let binding in argument position produces no value in writst, so the argument is missing rather than none) ---
 // Math doesn't support mutable methods and always evaluates arguments second.
 #{
   let sp = symbol("p", ("push", sym.tilde))
@@ -307,7 +307,7 @@ $ dict.pop(arg: "something") $
   test(sp, false)
 }
 
---- field-call-accent-indirect-non-mut (skip: calling accent symbols as functions is not implemented yet) ---
+--- field-call-accent-indirect-non-mut ---
 // Using a non-mutating method, `dict.sym.push()`, in its own argument, but
 // indirectly via a mutating method, `sym-sym.pop()`.
 #{
@@ -321,8 +321,9 @@ $ dict.pop(arg: "something") $
   test(result, sym.tilde(sym.tilde(none)))
   test(array, ())
 }
+│ #document[]
 
---- field-call-accent-assign-during-non-mut-access (skip: calling accent symbols as functions is not implemented yet) ---
+--- field-call-accent-assign-during-non-mut-access ---
 // Using a non-mutating method, `dict.sym.push()`, in an assignment, but
 // indirectly via a mutating method, `sym-sym.pop()`.
 #{
@@ -331,3 +332,4 @@ $ dict.pop(arg: "something") $
   sp-dict.at(array.pop()) = sp-dict.at(array.pop()).push(none)
   test(array, ())
 }
+│ #document[]

@@ -122,11 +122,43 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
+// skipped holds the kinds the cursor steps over. Beyond trivia proper this
+// includes the two markers `parseEmbeddedCodeExpr` splices in as *flat
+// siblings* of the code expression it parses: the leading [syntax.KindHash]
+// and the optional statement-terminating [syntax.KindSemicolon]. Neither is
+// wrapped into a node standing for "an embedded code expression", so without
+// this every context admitting `#code` — math content, attachment operands,
+// fraction operands, spread values, math arguments, markup, code blocks —
+// would have to skip them by hand, and any context that forgot would take an
+// [analyzer.internal] panic on valid input. [syntax.KindParbreak] is here for
+// the same reason and comes back out for markup cursors; see [markupSkipped].
+var skipped = syntax.SetOf(
+	syntax.KindSpace,
+	syntax.KindParbreak,
+	syntax.KindLineComment,
+	syntax.KindBlockComment,
+	syntax.KindHash,
+	syntax.KindSemicolon,
+)
+
+// mathArgsSkipped is [skipped] for a MathArgs cursor, where `;` is meaningful:
+// it separates the rows of a 2D element like `mat`.
+var mathArgsSkipped = skipped.Remove(syntax.KindSemicolon)
+
+// markupSkipped is [skipped] for a Markup cursor, where a paragraph break is
+// content rather than trivia — it lowers to a [value.Parbreak]. Everywhere else
+// a parbreak is whitespace the parser happened to buffer in a structural
+// position (`/ \n\n  :` puts one between a term item's body and its colon), and
+// stepping over it keeps that from reading as a missing node.
+var markupSkipped = skipped.Remove(syntax.KindParbreak)
+
 // nodes is a cursor over a slice of syntax nodes, filtering out trivia.
 type nodes struct {
 	a     *analyzer
 	items []syntax.Node
 	pos   int
+	// skips holds the kinds this cursor steps over; see [skipped].
+	skips syntax.Set
 }
 
 // inner returns a cursor for the children of n. When n's kind doesn't
@@ -136,21 +168,31 @@ type nodes struct {
 // through to their cleanup with NoRef.
 func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) *nodes {
 	if !a.expect(kind, n) {
-		return &nodes{a: a, items: nil}
+		return &nodes{a: a, items: nil, skips: skipped}
 	}
 	if m, ok := n.(syntax.RootNode); ok {
 		n = m.Inner
 	}
-	ns := &nodes{a: a, items: n.(*syntax.Inner).Children()}
-	for ns.at(syntax.KindSpace) || ns.at(syntax.KindLineComment) || ns.at(syntax.KindBlockComment) {
-		ns.pos++
+	skips := skipped
+	switch kind {
+	case syntax.KindMathArgs:
+		skips = mathArgsSkipped
+	case syntax.KindMarkup:
+		skips = markupSkipped
 	}
+	ns := &nodes{a: a, items: n.(*syntax.Inner).Children(), skips: skips}
+	ns.skip()
 	return ns
 }
 
 func (ns *nodes) advance() {
 	ns.pos++
-	for ns.at(syntax.KindSpace) || ns.at(syntax.KindLineComment) || ns.at(syntax.KindBlockComment) {
+	ns.skip()
+}
+
+// skip moves the cursor past any skipped kinds, so it never rests on one.
+func (ns *nodes) skip() {
+	for ns.pos < len(ns.items) && ns.skips.Contains(ns.items[ns.pos].Kind()) {
 		ns.pos++
 	}
 }
@@ -204,17 +246,26 @@ func (ns *nodes) all() iter.Seq[syntax.Node] {
 	}
 }
 
+// takeDelim consumes a delimiter, tolerating an [*syntax.Error] in its place.
+// The parser rewrites an *opening* delimiter into an "unclosed delimiter" error
+// (see [parser.expectClosing]), so a plain [nodes.take] would emit the error but
+// leave the cursor on it. Emitting and advancing instead lets the rest of the
+// construct still be lowered.
+func (ns *nodes) takeDelim(kind syntax.Kind) {
+	if ns.at(syntax.KindError) {
+		ns.a.emitSyntaxError(ns.node().(*syntax.Error))
+		return
+	}
+	ns.take(kind)
+}
+
 // inside returns a sequence of nodes inside the given open and close
 // delimiters. If the parser emitted an [*syntax.Error] in place of the
 // open delimiter (typically because the closing one was missing), the
 // error is emitted into the IR and iteration proceeds on the remaining
 // children so the rest of the construct still gets lowered.
 func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
-	if ns.at(syntax.KindError) {
-		ns.a.emitSyntaxError(ns.node().(*syntax.Error))
-	} else {
-		ns.take(open)
-	}
+	ns.takeDelim(open)
 	return func(yield func(syntax.Node) bool) {
 		for !ns.done() {
 			n := ns.node()
@@ -265,11 +316,17 @@ func unquote(s string) string {
 				sb.WriteRune('\r')
 			case 't':
 				sb.WriteRune('\t')
-			case '\\', '"':
+			case '\\', '"', '\'':
 				sb.WriteRune(r)
 			case 'u':
-				if s[i] != '{' {
-					panic("invalid unicode escape sequence")
+				// The scanner validates both the shape and the code point of a
+				// `\u{...}` escape, so a string literal that reaches the
+				// analyzer always decodes. Anything else is drift: keep the
+				// text as written rather than panicking on user input.
+				if i >= len(s) || s[i] != '{' {
+					sb.WriteRune('\\')
+					sb.WriteRune(r)
+					continue
 				}
 				i++
 				start := i
@@ -283,11 +340,17 @@ func unquote(s string) string {
 				hex := s[start:end]
 				num, err := strconv.ParseInt(hex, 16, 32)
 				if err != nil {
-					panic("invalid unicode escape sequence")
+					sb.WriteString(`\u{`)
+					sb.WriteString(hex)
+					sb.WriteString("}")
+					continue
 				}
 				sb.WriteRune(rune(num))
 			default:
-				panic("invalid escape sequence: \\" + string(r))
+				// Likewise: the scanner rejects unknown escapes, so this is
+				// only reachable on drift.
+				sb.WriteRune('\\')
+				sb.WriteRune(r)
 			}
 		default:
 			sb.WriteRune(r)

@@ -2,7 +2,6 @@ package eval
 
 import (
 	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
 	"znkr.io/writst/value"
 )
 
@@ -44,7 +43,7 @@ func (s *session) flattenAndRealize(children []value.Content) []value.Content {
 	for _, ch := range children {
 		switch c := ch.(type) {
 		case *value.Templated:
-			appendFlat(&out, s.resolveTemplated(c))
+			appendFlat(&out, s.resolveTemplated(c, s.realize))
 		case *value.Sequence:
 			if c.Label == nil {
 				out = append(out, s.flattenAndRealize(c.Children)...)
@@ -73,7 +72,7 @@ func appendFlat(out *[]value.Content, c value.Content) {
 func (s *session) realize(c value.Content) value.Content {
 	switch c := c.(type) {
 	case *value.Templated:
-		return s.resolveTemplated(c)
+		return s.resolveTemplated(c, s.realize)
 	case *value.Sequence:
 		return s.realizeBody(c.Children, c.Label)
 	case *value.Heading:
@@ -92,6 +91,8 @@ func (s *session) realize(c value.Content) value.Content {
 		return &value.EnumItem{Number: c.Number, Body: s.realize(c.Body), Label: c.Label}
 	case *value.TermItem:
 		return &value.TermItem{Term: s.realize(c.Term), Description: s.realize(c.Description), Label: c.Label}
+	case *value.Equation:
+		return &value.Equation{Block: c.Block, Body: s.realizeInline(c.Body), Label: c.Label}
 	case *value.List:
 		items := make([]*value.ListItem, len(c.Children))
 		for i, it := range c.Children {
@@ -127,7 +128,7 @@ func (s *session) realize(c value.Content) value.Content {
 func (s *session) realizeInline(c value.Content) value.Content {
 	switch c := c.(type) {
 	case *value.Templated:
-		return s.resolveTemplated(c)
+		return s.resolveTemplated(c, s.realizeInline)
 	case *value.Sequence:
 		children := make([]value.Content, len(c.Children))
 		for i, ch := range c.Children {
@@ -232,15 +233,19 @@ func isBlock(c value.Content) bool {
 		return true
 	case *value.Raw:
 		return c.Block
+	case *value.Equation:
+		return c.Block
 	}
 	return false
 }
 
 // resolveTemplated realizes a template scope: it realizes the body, applies the
 // recorded set rules and show recipes to it, and returns the result with the
-// wrapper gone.
-func (s *session) resolveTemplated(t *value.Templated) value.Content {
-	body := s.realize(t.Body)
+// wrapper gone. realize is the caller's own realization step, so that a scope
+// reached from inline content (a math style function, say) doesn't have its
+// body grouped into paragraphs.
+func (s *session) resolveTemplated(t *value.Templated, realize func(value.Content) value.Content) value.Content {
+	body := realize(t.Body)
 	for _, set := range t.Sets {
 		body = s.applySet(body, set)
 	}
@@ -254,27 +259,68 @@ func (s *session) resolveTemplated(t *value.Templated) value.Content {
 	return body
 }
 
-// applySet applies a set rule to realized content. Only `document` sets take
-// effect for now — the title is hoisted into the session. Element sets (e.g.
-// `set heading(level: …)`) are realized away with no effect: our content model
-// tracks no "unset" state and styles don't propagate top-down, so applying a
-// default would wrongly overwrite explicit values (and nest in the wrong order).
-// See the deferred notes.
+// applySet applies a set rule to realized content. Two kinds take effect: a
+// `document` set, whose title is hoisted into the session, and the math font
+// styles, which are folded into the math leaves they reach (see
+// applyMathStyle). Other element sets (e.g. `set heading(level: …)`) are
+// realized away with no effect: our content model tracks no "unset" state for
+// their properties and styles don't propagate top-down, so applying a default
+// would wrongly overwrite explicit values (and nest in the wrong order). See
+// IDEAS.md.
 func (s *session) applySet(c value.Content, set *value.Set) value.Content {
-	if set.Element.Name == "document" {
+	switch set.Element.Name {
+	case "document":
 		if v, ok := set.Fields.Get(names.Title); ok {
 			if tc, err := value.ToContent(v); err == nil {
 				s.docTitle = tc
 			}
 		}
+	case "math.equation":
+		return applyMathStyle(c, set)
 	}
 	return c
+}
+
+// applyMathStyle folds the font-style properties of a `math.equation` set into
+// every [value.MathText] in c — the leaves that carry a math font style. This is
+// what makes `$bold(x)$` observable; the equation's other properties (block) are
+// left to the general set behaviour described on applySet.
+//
+// A property already set on a leaf is left alone, so the nearest style function
+// wins: resolveTemplated realizes a body before applying its own sets, so in
+// `sans(frak(x))` the inner frak lands first.
+func applyMathStyle(c value.Content, set *value.Set) value.Content {
+	bold, hasBold := set.Fields.Get(names.Bold)
+	italic, hasItalic := set.Fields.Get(names.Italic)
+	variant, hasVariant := set.Fields.Get(names.Variant)
+	if !hasBold && !hasItalic && !hasVariant {
+		return c
+	}
+	var fold func(value.Content) value.Content
+	fold = func(c value.Content) value.Content {
+		t, ok := c.(*value.MathText)
+		if !ok {
+			return mapChildren(c, fold)
+		}
+		styled := *t
+		if hasBold && styled.Bold == nil {
+			styled.Bold = bold
+		}
+		if hasItalic && styled.Italic == nil {
+			styled.Italic = italic
+		}
+		if hasVariant && styled.Variant == nil {
+			styled.Variant = variant
+		}
+		return &styled
+	}
+	return fold(c)
 }
 
 // applyRecipe replaces every node matching r.Selector with r's transform; non-
 // matching nodes recurse. Replacements are not re-matched.
 func (s *session) applyRecipe(c value.Content, r *value.Recipe) value.Content {
-	if matchesSelector(c, r.Selector) {
+	if r.Selector.Match(c) {
 		return s.applyTransform(c, r.Transform)
 	}
 	return mapChildren(c, func(ch value.Content) value.Content {
@@ -290,7 +336,7 @@ func (s *session) applyTransform(node value.Content, transform value.Value) valu
 	case *value.Function:
 		return s.callTransform(t, node)
 	case *value.Element:
-		return s.callTransform((*value.Function)(t), node)
+		return s.callTransform(&t.Function, node)
 	case value.Content:
 		return s.realize(t)
 	}
@@ -314,31 +360,6 @@ func (s *session) callTransform(fn *value.Function, node value.Content) value.Co
 	return s.realize(c)
 }
 
-// matchesSelector reports whether c is selected by sel.
-func matchesSelector(c value.Content, sel value.Selector) bool {
-	switch sel := sel.(type) {
-	case *value.ElementSelector:
-		return c.Name() == sel.Element.Name
-	case *value.LabelSelector:
-		n, ok := contentLabel(c)
-		return ok && n == sel.Label
-	case *value.WhereSelector:
-		if c.Name() != sel.Element.Name {
-			return false
-		}
-		n, ok := contentLabel(c)
-		return ok && n == sel.Label
-	}
-	return false
-}
-
-func contentLabel(c value.Content) (name.Name, bool) {
-	if l, ok := c.Field(names.Label).(*value.Label); ok {
-		return l.Name, true
-	}
-	return name.Name{}, false
-}
-
 // mapChildren returns a copy of c with f applied to each of its direct content
 // children (bodies/items). Leaves are returned unchanged.
 func mapChildren(c value.Content, f func(value.Content) value.Content) value.Content {
@@ -355,6 +376,8 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Par{Body: f(c.Body), Label: c.Label}
 	case *value.Link:
 		return &value.Link{Dest: c.Dest, Body: f(c.Body), Label: c.Label}
+	case *value.Equation:
+		return &value.Equation{Block: c.Block, Body: f(c.Body), Label: c.Label}
 	case *value.Document:
 		return &value.Document{Title: c.Title, Body: f(c.Body)}
 	case *value.ListItem:
@@ -383,6 +406,32 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Terms{Children: items, Label: c.Label}
 	case *value.Table:
 		return &value.Table{Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.MathAttach:
+		return &value.MathAttach{Base: f(c.Base), Top: mapOpt(c.Top, f), Bottom: mapOpt(c.Bottom, f), Label: c.Label}
+	case *value.MathFrac:
+		return &value.MathFrac{Num: f(c.Num), Denom: f(c.Denom), Label: c.Label}
+	case *value.MathRoot:
+		return &value.MathRoot{Index: mapOpt(c.Index, f), Radicand: f(c.Radicand), Label: c.Label}
+	case *value.MathPrimes:
+		return &value.MathPrimes{Base: f(c.Base), Count: c.Count, Label: c.Label}
+	case *value.MathDelimited:
+		return &value.MathDelimited{Open: f(c.Open), Body: f(c.Body), Close: f(c.Close), Label: c.Label}
+	case *value.MathUnderline:
+		return &value.MathUnderline{Body: f(c.Body), Label: c.Label}
+	case *value.MathAccent:
+		return &value.MathAccent{Base: f(c.Base), Accent: c.Accent, Size: c.Size, Dotless: c.Dotless, Label: c.Label}
+	case *value.MathCancel:
+		return &value.MathCancel{Body: f(c.Body), Angle: c.Angle, Label: c.Label}
+	case *value.MathVec:
+		return &value.MathVec{Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.MathCases:
+		return &value.MathCases{Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.MathMat:
+		rows := make([][]value.Content, len(c.Rows))
+		for i, r := range c.Rows {
+			rows[i] = mapEach(r, f)
+		}
+		return &value.MathMat{Rows: rows, Label: c.Label}
 	}
 	return c
 }
@@ -393,4 +442,13 @@ func mapEach(children []value.Content, f func(value.Content) value.Content) []va
 		out[i] = f(ch)
 	}
 	return out
+}
+
+// mapOpt applies f to c unless c is nil, in which case it returns nil. Used for
+// optional content fields.
+func mapOpt(c value.Content, f func(value.Content) value.Content) value.Content {
+	if c == nil {
+		return nil
+	}
+	return f(c)
 }

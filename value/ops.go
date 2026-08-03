@@ -27,6 +27,23 @@ func UnaryOp(op syntax.UnaryOp, x Value) (Value, error) {
 	return fn(x)
 }
 
+// maxRepeat bounds how large `n * str` and `arr * n` may grow. Without it a
+// constant like `#(70007000 * 70007000 * "00")` asks for a petabyte-sized
+// allocation, which the Go runtime answers with a `makeslice: len out of range`
+// panic — and it does so during analysis, since the IR builder folds constant
+// operands as it emits them.
+const maxRepeat = 1 << 31
+
+// repeatFits reports whether repeating something of the given size that many
+// times stays within [maxRepeat]. It divides rather than multiplies so the
+// check itself cannot overflow.
+func repeatFits(size int, times Int) bool {
+	if size == 0 || times == 0 {
+		return true
+	}
+	return int64(times) <= maxRepeat/int64(size)
+}
+
 func BinaryOp(op syntax.BinaryOp, x, y Value) (Value, error) {
 	xt, yt := x.Type(), y.Type()
 	switch {
@@ -511,6 +528,9 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 		if times < 0 {
 			return nil, fmt.Errorf("number must be at least zero")
 		}
+		if !repeatFits(len(str), times) {
+			return nil, fmt.Errorf("cannot repeat this string %d times", times)
+		}
 		return Str(strings.Repeat(string(str), int(times))), nil
 	},
 
@@ -532,6 +552,9 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 		arr, times := x.(*Array), y.(Int)
 		if times < 0 {
 			return nil, fmt.Errorf("cannot multiply array by negative integer")
+		}
+		if !repeatFits(len(arr.Elems), times) {
+			return nil, fmt.Errorf("cannot repeat this array %d times", times)
 		}
 		result := slices.Repeat(arr.Elems, int(times))
 		return &Array{result}, nil

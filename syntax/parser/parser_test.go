@@ -86,7 +86,10 @@ func FuzzTextRoundTrip(f *testing.F) {
 	f.Fuzz(func(t *testing.T, src string) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Parser may panic on unimplemented features; skip those.
+				// The parser has no recursion-depth guard, so deeply nested
+				// input (e.g. `#let{{{...`) overflows the stack. This is a
+				// known pre-existing limitation tracked in IDEAS.md; skip it
+				// rather than fail the round-trip invariant.
 				t.Skipf("parser panicked: %v", r)
 			}
 		}()

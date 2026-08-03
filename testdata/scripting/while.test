@@ -19,7 +19,13 @@
   dont-care
 }
 │ #document[
-│   #par[#raw("2")#raw("4")#raw("6")#raw("8")#raw("10")]
+│   #par[
+│     #raw("2")
+│     #raw("4")
+│     #raw("6")
+│     #raw("8")
+│     #raw("10")
+│   ]
 │   #par[Hi.]
 │ ]
 

@@ -1220,6 +1220,56 @@ func TestScanner_CodeMode(t *testing.T) {
 			},
 		},
 		{
+			name:  "string_unicode_empty",
+			input: `"\u{}"`,
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid unicode escape sequence", `"\u{}"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "string_unicode_not_hex",
+			input: `"\u{zz}"`,
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid unicode escape sequence", `"\u{zz}"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "string_unicode_out_of_range",
+			input: `"\u{110000}"`,
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid unicode escape sequence", `"\u{110000}"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "string_unicode_surrogate",
+			input: `"\u{d800}"`,
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.err("invalid unicode escape sequence", `"\u{d800}"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "string_escaped_single_quote",
+			input: `"\'"`,
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindStr, `"\'"`),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
 			name:  "string_escaped_quote",
 			input: `"\""`,
 			expected: func(b *nodeBuilder) []syntax.Node {
@@ -1352,6 +1402,158 @@ func TestScanner_CodeMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := New(tt.input)
 			s.SetMode(syntax.ModeCode)
+			var got []syntax.Node
+			for {
+				kind, node := s.Next()
+				got = append(got, node)
+				if kind == syntax.KindEnd {
+					break
+				}
+			}
+
+			b := &nodeBuilder{}
+			expected := tt.expected(b)
+
+			if diff := cmp.Diff(expected, got, nodeCmpOpts); diff != "" {
+				t.Errorf("Scan() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestScanner_MathMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(b *nodeBuilder) []syntax.Node
+	}{
+		{
+			name:  "superscript",
+			input: "x^2",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "x"),
+					b.leaf(syntax.KindHat, "^"),
+					b.leaf(syntax.KindMathText, "2"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "attach",
+			input: "a_1^2",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "a"),
+					b.leaf(syntax.KindUnderscore, "_"),
+					b.leaf(syntax.KindMathText, "1"),
+					b.leaf(syntax.KindHat, "^"),
+					b.leaf(syntax.KindMathText, "2"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "ident",
+			input: "pi",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathIdent, "pi"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "field_access",
+			input: "arrow.r",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				arrow := b.leaf(syntax.KindMathIdent, "arrow")
+				dot := b.leaf(syntax.KindDot, ".")
+				r := b.leaf(syntax.KindIdent, "r")
+				return []syntax.Node{
+					b.inner(syntax.KindFieldAccess, []syntax.Node{arrow, dot, r}),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "fraction",
+			input: "x/2",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "x"),
+					b.leaf(syntax.KindSlash, "/"),
+					b.leaf(syntax.KindMathText, "2"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "primes",
+			input: "a'''",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "a"),
+					b.leaf(syntax.KindMathPrimes, "'''"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "shorthand_leq",
+			input: "a <= b",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "a"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindMathShorthand, "<="),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindMathText, "b"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "number",
+			input: "123.45",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindMathText, "123.45"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "root_and_align",
+			input: "√x &",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindRoot, "√"),
+					b.leaf(syntax.KindMathText, "x"),
+					b.leaf(syntax.KindSpace, " "),
+					b.leaf(syntax.KindMathAlignPoint, "&"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+		{
+			name:  "lr_delimiters",
+			input: "[|x|]",
+			expected: func(b *nodeBuilder) []syntax.Node {
+				return []syntax.Node{
+					b.leaf(syntax.KindLeftBrace, "[|"),
+					b.leaf(syntax.KindMathText, "x"),
+					b.leaf(syntax.KindRightBrace, "|]"),
+					b.leaf(syntax.KindEnd, ""),
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(tt.input)
+			s.SetMode(syntax.ModeMath)
 			var got []syntax.Node
 			for {
 				kind, node := s.Next()

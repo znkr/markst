@@ -428,11 +428,12 @@ func (b *Builder) FieldRead(span, fieldSpan syntax.Span, target Ref, field name.
 // content element or method-bearing type is reported as a missing *method*.
 // targetText is the source text of the target expression, used to build the
 // "wrap in parentheses" / "remove the arguments" hints.
-func (b *Builder) MethodField(span, fieldSpan syntax.Span, target Ref, field name.Name, targetText string) Ref {
+func (b *Builder) MethodField(span, fieldSpan syntax.Span, target Ref, field name.Name, targetText string, math bool) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &MethodField{
 			fieldAccess: fieldAccess{instr: instr{result: ref}, Target: target, Field: field, FieldSpan: fieldSpan},
 			TargetText:  targetText,
+			Math:        math,
 		}
 	})
 }
@@ -478,6 +479,19 @@ func (b *Builder) DiscardCheck(span syntax.Span, value Ref) {
 		return &DiscardCheck{
 			voidInstr: voidInstr{span: span},
 			Value:     value,
+		}
+	})
+}
+
+// Warn emits a side-effect-only instruction that records a non-fatal
+// diagnostic at eval time. No SSA result; the warning flows through the
+// session when the instruction's block executes.
+func (b *Builder) Warn(span syntax.Span, msg string, hints ...string) {
+	b.emitVoid(func() Instruction {
+		return &Warn{
+			voidInstr: voidInstr{span: span},
+			Msg:       msg,
+			Hints:     hints,
 		}
 	})
 }
@@ -660,6 +674,14 @@ func (b *Builder) ContentResult(span syntax.Span, items []Ref) Ref {
 	})
 }
 
+// MathContentResult emits a content-join instruction over the items of an
+// equation, which joins in math flavour (see [ContentResult.Math]).
+func (b *Builder) MathContentResult(span syntax.Span, items []Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &ContentResult{instr: instr{result: ref}, Items: items, Math: true}
+	})
+}
+
 // AttachLabel emits a label-attachment instruction.
 func (b *Builder) AttachLabel(span syntax.Span, content Ref, label name.Name) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
@@ -769,6 +791,49 @@ func (b *Builder) EnumItem(span syntax.Span, number int, body Ref) Ref {
 func (b *Builder) TermItem(span syntax.Span, term, description Ref) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &TermItem{instr: instr{result: ref}, Term: term, Description: description}
+	})
+}
+
+// Equation emits a math-equation instruction.
+func (b *Builder) Equation(span syntax.Span, block bool, body Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &Equation{instr: instr{result: ref}, Block: block, Body: body}
+	})
+}
+
+// MathAttach emits a math attachment instruction. Top and Bottom are NoRef
+// when absent.
+func (b *Builder) MathAttach(span syntax.Span, base, top, bottom Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MathAttach{instr: instr{result: ref}, Base: base, Top: top, Bottom: bottom}
+	})
+}
+
+// MathFrac emits a math fraction instruction.
+func (b *Builder) MathFrac(span syntax.Span, num, denom Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MathFrac{instr: instr{result: ref}, Num: num, Denom: denom}
+	})
+}
+
+// MathRoot emits a math root instruction. Index is NoRef for a square root.
+func (b *Builder) MathRoot(span syntax.Span, index, radicand Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MathRoot{instr: instr{result: ref}, Index: index, Radicand: radicand}
+	})
+}
+
+// MathPrimes emits a math primes instruction.
+func (b *Builder) MathPrimes(span syntax.Span, base Ref, count int) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MathPrimes{instr: instr{result: ref}, Base: base, Count: count}
+	})
+}
+
+// MathDelimited emits a math delimited-group instruction.
+func (b *Builder) MathDelimited(span syntax.Span, open, body, close Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &MathDelimited{instr: instr{result: ref}, Open: open, Body: body, Close: close}
 	})
 }
 

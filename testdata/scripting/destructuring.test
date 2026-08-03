@@ -255,7 +255,22 @@
   }
   [#word = #roman \ ]
 }
-│ #document[#par[one=I#linebreak()two=II#linebreak()one=I#linebreak()]]
+│ #document[
+│   #par[
+│     one
+│     =
+│     I
+│     #linebreak()
+│     two
+│     =
+│     II
+│     #linebreak()
+│     one
+│     =
+│     I
+│     #linebreak()
+│   ]
+│ ]
 
 --- destructuring-assign ---
 // Test destructuring assignments.

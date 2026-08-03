@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"znkr.io/writst/expr"
+	"znkr.io/writst/internal/symbols"
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/syntax/convert"
@@ -58,8 +59,6 @@ func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span
 			continue
 		}
 		switch child.Kind() {
-		case syntax.KindSemicolon, syntax.KindHash, syntax.KindSpace:
-			continue
 		case syntax.KindError:
 			last = a.emitSyntaxError(child.(*syntax.Error))
 			emit(last, child.Span())
@@ -91,6 +90,11 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindText:
 		return a.b.Const(n.Span(), &value.Text{Text: strings.TrimSpace(n.Text())})
 	case syntax.KindEscape:
+		// In math, an escape like `\(` denotes a symbol character (matching
+		// Typst, where it can stand in as a delimiter); in markup it is text.
+		if a.mathDepth > 0 {
+			return a.b.Const(n.Span(), &value.Symbol{Variants: symbols.Variants{{Value: unescape(n.Text())}}})
+		}
 		return a.b.Const(n.Span(), &value.Text{Text: unescape(n.Text())})
 	case syntax.KindShorthand:
 		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(n.Text())})
@@ -192,6 +196,31 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 		return a.lowerModuleInclude(n)
 	case syntax.KindError:
 		return a.emitSyntaxError(n.(*syntax.Error))
+	// Math
+	case syntax.KindEquation:
+		return a.lowerEquation(n)
+	case syntax.KindMath:
+		return a.lowerMathContent(n)
+	case syntax.KindMathText:
+		return a.lowerMathText(n)
+	case syntax.KindMathIdent:
+		return a.lowerMathIdent(n)
+	case syntax.KindMathShorthand:
+		return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(n.Text())})
+	case syntax.KindMathAlignPoint:
+		return a.b.Const(n.Span(), &value.MathAlignPoint{})
+	case syntax.KindMathAttach:
+		return a.lowerMathAttach(n)
+	case syntax.KindMathFrac:
+		return a.lowerMathFrac(n)
+	case syntax.KindMathRoot:
+		return a.lowerMathRoot(n)
+	case syntax.KindMathPrimes:
+		return a.lowerMathPrimes(n)
+	case syntax.KindMathDelimited:
+		return a.lowerMathDelimited(n)
+	case syntax.KindMathCall:
+		return a.lowerMathCall(n)
 	default:
 		panic("ssa lowering not yet implemented for: " + n.Kind().String())
 	}
@@ -226,10 +255,23 @@ func (a *analyzer) lowerFloat(n syntax.Node) expr.Ref {
 	return a.b.Const(n.Span(), value.Float(fv))
 }
 
+// isUnitByte reports whether c can appear in the unit suffix of a numeric
+// literal (`pt`, `deg`, `%`, …). Every suffix the scanner accepts is ASCII.
+func isUnitByte(c byte) bool {
+	return c == '%' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+}
+
 func (a *analyzer) lowerNumeric(n syntax.Node) expr.Ref {
 	val := a.leaf(n, syntax.KindNumeric)
-	idx := strings.IndexFunc(val, func(r rune) bool { return (r < '0' || r > '9') && r != '.' })
-	if idx == -1 {
+	// Split off the unit the way the scanner did: it is the trailing run of
+	// ASCII letters, or `%`. Scanning from the front instead would cut a
+	// scientific-notation exponent in half — `0e0cm` has the unit `cm`, not
+	// `e0cm`.
+	idx := len(val)
+	for idx > 0 && isUnitByte(val[idx-1]) {
+		idx--
+	}
+	if idx == len(val) {
 		panic("invalid numeric literal, no unit: " + val)
 	}
 	num, suffix := val[:idx], val[idx:]
@@ -290,7 +332,11 @@ func (a *analyzer) lowerIdent(n syntax.Node) expr.Ref {
 func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 	frameIdx := len(a.frames) - 1
 	inCurrent := true
+	var fallback value.ModuleDef
 	for s := a.scope; s != nil; s = s.parent {
+		if s.mathScope != nil {
+			fallback = s.mathScope
+		}
 		if bnd, ok := s.bindings[source]; ok {
 			switch b := bnd.(type) {
 			case valueBinding:
@@ -315,9 +361,16 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 				panic(fmt.Sprintf("unknown binding kind: %T", b))
 			}
 		}
-		if s == a.frames[frameIdx].scope {
+		if frameIdx >= 0 && s == a.frames[frameIdx].scope {
 			inCurrent = false
 			frameIdx--
+		}
+	}
+	// A math-scope fallback (installed on the equation body scope) resolves
+	// symbols and math elements to immutable constants.
+	if fallback != nil {
+		if v := fallback.Get(source); v != nil {
+			return a.b.Const(span, v)
 		}
 	}
 	// checkIdent already reported "unknown variable" — this is a bug if we
@@ -491,9 +544,13 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 		if b, ok := a.lookup(source); ok {
 			bnd = b
 		}
-		old := a.b.ReadVar(bnd.(varBinding).v, a.b.CurrentBlock())
+		v, errRef, ok := a.assignVar(bnd, source, leftNode.Span())
+		if !ok {
+			return errRef
+		}
+		old := a.b.ReadVar(v, a.b.CurrentBlock())
 		newVal := a.b.Binary(span, op.StripAssign(), old, rhs)
-		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), newVal)
+		a.b.WriteVar(v, a.b.CurrentBlock(), newVal)
 		return a.b.Const(span, value.None{})
 	case syntax.KindParenthesized:
 		// Unwrap and recurse.
@@ -535,7 +592,11 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 		if !ok {
 			return a.checkIdent(source, leftNode.Span())
 		}
-		a.b.WriteVar(bnd.(varBinding).v, a.b.CurrentBlock(), newVal)
+		v, errRef, ok := a.assignVar(bnd, source, leftNode.Span())
+		if !ok {
+			return errRef
+		}
+		a.b.WriteVar(v, a.b.CurrentBlock(), newVal)
 		return a.b.Const(span, value.None{})
 	case syntax.KindFieldAccess:
 		if baseNode, ok := lvalueBase(leftNode); ok {
@@ -723,7 +784,7 @@ func (a *analyzer) lowerCallee(calleeNode syntax.Node) expr.Ref {
 	ns.take(syntax.KindDot)
 	fieldNode := ns.node()
 	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
-	return a.b.MethodField(calleeNode.Span(), fieldNode.Span(), a.lowerExpr(targetNode), method, targetNode.Text())
+	return a.b.MethodField(calleeNode.Span(), fieldNode.Span(), a.lowerExpr(targetNode), method, targetNode.Text(), false)
 }
 
 // Function calls //////////////////////////////////////////////////////////////
@@ -818,7 +879,7 @@ func (a *analyzer) lowerMethodCall(callNode, faNode, argsNode syntax.Node) (expr
 	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
 
 	targetRef, recv := a.lowerReceiver(targetNode)
-	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text())
+	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text(), false)
 	callee := expr.Callee{Ref: calleeRef, Span: faNode.Span()}
 	args, blocks := a.lowerArgs(argsNode)
 
@@ -1005,7 +1066,6 @@ func (a *analyzer) emitCodeItem(stmt syntax.Node, entry *pendingEscape, emit fun
 		return
 	}
 	switch stmt.Kind() {
-	case syntax.KindSemicolon:
 	case syntax.KindError:
 		emit(a.emitSyntaxError(stmt.(*syntax.Error)), stmt.Span())
 	default:
@@ -1623,17 +1683,23 @@ func (a *analyzer) lowerHeading(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerStrong(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindStrong)
-	ns.take(syntax.KindStar)
+	ns.takeDelim(syntax.KindStar)
+	if ns.done() {
+		return expr.NoRef
+	}
 	body := a.lowerMarkup(ns.node())
-	ns.take(syntax.KindStar)
+	ns.takeDelim(syntax.KindStar)
 	return a.b.Strong(n.Span(), body)
 }
 
 func (a *analyzer) lowerEmph(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindEmph)
-	ns.take(syntax.KindUnderscore)
+	ns.takeDelim(syntax.KindUnderscore)
+	if ns.done() {
+		return expr.NoRef
+	}
 	body := a.lowerMarkup(ns.node())
-	ns.take(syntax.KindUnderscore)
+	ns.takeDelim(syntax.KindUnderscore)
 	return a.b.Emph(n.Span(), body)
 }
 
@@ -1689,6 +1755,10 @@ func (a *analyzer) lowerContentBlock(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindContentBlock)
 	a.openScope()
 	defer a.closeScope()
+	// A content block's body is markup even when it appears inside an equation,
+	// so escapes in it are text, not math symbols.
+	defer func(d int) { a.mathDepth = d }(a.mathDepth)
+	a.mathDepth = 0
 	ns.take(syntax.KindLeftBracket)
 	bodyNode := ns.node()
 	// The closing bracket may be absent when the parser is recovering from
@@ -1746,11 +1816,30 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindSetRule)
 	ns.take(syntax.KindSet)
+	if ns.done() {
+		a.expected(ns, "expression")
+		return expr.NoRef
+	}
 	target := a.lowerExpr(ns.node())
+	// `parseArgs` bails without wrapping an Args node when the target is not
+	// directly followed by a delimiter, so a set rule can lack its argument
+	// list entirely (`#set .A`, `#(set!if`).
+	if !ns.at(syntax.KindArgs) {
+		if ns.at(syntax.KindError) {
+			a.unexpected(ns.node())
+		} else {
+			a.expected(ns, "argument list")
+		}
+		return expr.NoRef
+	}
 	args, _ := a.lowerArgs(ns.node())
 	cond := expr.NoRef
 	if ns.at(syntax.KindIf) {
 		ns.node()
+		if ns.done() {
+			a.expected(ns, "expression")
+			return expr.NoRef
+		}
 		cond = a.lowerExpr(ns.node())
 	}
 	return a.b.SetRule(n.Span(), target, args, cond)
@@ -1761,9 +1850,17 @@ func (a *analyzer) lowerShowRule(n syntax.Node) expr.Ref {
 	ns.take(syntax.KindShow)
 	selector := expr.NoRef
 	if !ns.at(syntax.KindColon) {
+		if ns.done() {
+			a.expected(ns, "selector")
+			return expr.NoRef
+		}
 		selector = a.lowerExpr(ns.node())
 	}
 	ns.take(syntax.KindColon)
+	if ns.done() {
+		a.expected(ns, "expression")
+		return expr.NoRef
+	}
 	transform := a.lowerExpr(ns.node())
 	return a.b.ShowRule(n.Span(), selector, transform)
 }

@@ -249,3 +249,43 @@
 │     Markup
 │       Text: "b"
 │   Space: "\n"
+
+--- list-item-body-starting-after-parbreak ---
+- 
+
+  b
+│ Markup
+│   ListItem
+│     ListMarker: "-"
+│     Markup
+│       Parbreak: " \n\n  "
+│       Text: "b"
+│   Space: "\n"
+
+--- enum-item-body-starting-after-parbreak ---
+0.
+
+  0
+│ Markup
+│   EnumItem
+│     EnumMarker: "0."
+│     Markup
+│       Parbreak: "\n\n  "
+│       Text: "0"
+│   Space: "\n"
+
+--- term-item-body-starting-after-parbreak ---
+/ t:
+
+  b
+│ Markup
+│   TermItem
+│     TermMarker: "/"
+│     Space: " "
+│     Markup
+│       Text: "t"
+│     Colon: ":"
+│     Markup
+│       Parbreak: "\n\n  "
+│       Text: "b"
+│   Space: "\n"

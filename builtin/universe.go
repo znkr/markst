@@ -37,6 +37,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Link:      Link,
 	names.List:      List,
 	names.Lorem:     Lorem,
+	names.Math:      Math,
 	names.Par:       Par,
 	names.Parbreak:  Parbreak,
 	names.Range:     Range,
