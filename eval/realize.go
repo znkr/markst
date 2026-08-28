@@ -10,7 +10,7 @@ import (
 // `*value.Templated` wrappers resolved (show recipes applied, `set document`
 // title hoisted). It runs inside [Eval] while the session — and any closures
 // captured by show transforms — are still live.
-func (s *session) realizeDocument(c value.Content) value.Content {
+func (s *session) realizeDocument(c value.Content) *value.Document {
 	body := s.realizeBody(topChildren(c), nil)
 	return &value.Document{Title: s.docTitle, Body: body}
 }

@@ -21,7 +21,7 @@ import (
 // [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
 // are returned separately. Free names in the module have already been
 // resolved to constants by the analyzer, so Eval needs no scope of its own.
-func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
+func Eval(mod *expr.Module) (doc *value.Document, warn []Error, err []Error) {
 	s := &session{mod: mod}
 
 	// Parse errors are diagnostics on the source, reported regardless of
@@ -56,8 +56,7 @@ func Eval(mod *expr.Module) (c value.Content, warn []Error, err []Error) {
 	// Turn the recorded content tree into a realized document: paragraphs
 	// formed, list/enum/term items grouped, templates resolved, wrapped in a
 	// Document root.
-	cc = s.realizeDocument(cc)
-	c = cc
+	doc = s.realizeDocument(cc)
 	warn = s.warnings
 	err = s.errors
 	return
