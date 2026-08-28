@@ -1,0 +1,117 @@
+// Test that the whitespace between markup items survives lowering. A markup
+// space lowers to a text " ", which realization merges into its neighbours.
+
+--- spacing-around-strong ---
+a *bold* word
+│ #document[#par[a #strong[bold] word]]
+
+--- spacing-composed-content ---
+#([*Hello* ] + [world!])
+│ #document[#par[#strong[Hello] world!]]
+
+--- spacing-before-link ---
+Check https://example.com/ foo
+│ #document[
+│   #par[
+│     Check 
+│     #link(dest: "https://example.com/")[https://example.com/]
+│      foo
+│   ]
+│ ]
+
+--- spacing-paragraph-edges ---
+#[ *Hello* ]
+│ #document[#par[#strong[Hello]]]
+
+--- spacing-newline-is-a-space ---
+one
+two
+│ #document[#par[one two]]
+
+--- spacing-linebreak-eats-spaces ---
+a \ b
+│ #document[#par[a#linebreak()b]]
+
+--- spacing-doubled-at-seam ---
+#([a ] + [ b])
+│ #document[#par[a b]]
+
+--- spacing-inside-element-body ---
+// An element body ends inside the line, not at a block boundary, so its edge
+// space still separates two words.
+#emph[Hello ]world
+│ #document[#par[#emph[Hello ]world]]
+
+--- spacing-inside-strong-body ---
+#strong[a ]b
+│ #document[#par[#strong[a ]b]]
+
+--- spacing-inside-link-body ---
+#link("https://example.com/")[a ]b
+│ #document[
+│   #par[
+│     #link(dest: "https://example.com/")[a ]
+│     b
+│   ]
+│ ]
+
+--- spacing-block-edge-trims-explicit-text ---
+// The block's outer edges trim whichever text lands on them, #text included;
+// only the whitespace *inside* a text value is off limits.
+#text("  a  ")
+│ #document[#par[a]]
+
+--- spacing-block-edge-trims-through-strong ---
+// A block edge sees straight through an inline wrapper: the space in a strong
+// alone on the line has as little left to separate as a bare one would.
+#strong[ a ]
+│ #document[#par[#strong[a]]]
+
+--- spacing-block-edge-trims-only-the-side-it-touches ---
+// The leading space still separates the strong from the word before it; only
+// the trailing one lands on the heading's edge.
+= b #strong[ a ]
+│ #document[#heading(level: 1)[b #strong[ a]]]
+
+--- spacing-block-edge-trims-through-nested-wrappers ---
+= #strong[#emph[ a ]]
+│ #document[#heading(level: 1)[#strong[#emph[a]]]]
+
+--- spacing-parbreak-trims-through-strong ---
+// A parbreak breaks the line the same way a block edge does.
+b
+
+#strong[ a ]
+│ #document[#par[b]#par[#strong[a]]]
+
+--- spacing-explicit-text-untouched ---
+#text("a    b")
+│ #document[#par[a    b]]
+
+--- spacing-parbreak-eats-spaces ---
+one
+
+two
+│ #document[#par[one]#par[two]]
+
+--- spacing-statement-swallows-line-break ---
+// A statement contributes nothing for a space to sit beside, so it absorbs the
+// line break after it the way a heading does — even at the start of a run,
+// where there is no block edge to trim it later.
+#emph[#let x = 1
+a]
+│ #document[#par[#emph[a]]]
+
+--- spacing-statement-mid-run ---
+b
+#let x = 1
+a
+│ #document[#par[b a]]
+
+--- spacing-heading-swallows-line-break ---
+= Title
+Some content
+│ #document[
+│   #heading(level: 1)[Title]
+│   #par[Some content]
+│ ]

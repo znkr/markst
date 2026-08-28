@@ -1061,7 +1061,13 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 		}
 		cv, err := toContent(v)
 		if err != nil {
-			fr.error(fr.span(c.Result()), err.Error())
+			// Point at the offending item, not at the whole join: the join
+			// spans the entire markup body, which is usually the whole file.
+			span := fr.span(c.Result())
+			if r.IsLocal() {
+				span = fr.fn.RefSpans[r]
+			}
+			fr.error(span, err.Error())
 			continue
 		}
 		if cv == nil {

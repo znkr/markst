@@ -126,6 +126,11 @@ func FuzzAnalyze(f *testing.F) {
 			}
 			panic(r)
 		}()
-		analyzer.Analyze(parser.Parse(src))
+		root := parser.Parse(src)
+		analyzer.Analyze(root)
+		// The approximations-off path lowers strictly more, so it reaches code
+		// the default path skips. TestApproximationsPreserveOutput is what
+		// checks the two agree; here it is only the panic-freedom that matters.
+		analyzer.Analyze(root, analyzer.WithoutApproximations())
 	})
 }

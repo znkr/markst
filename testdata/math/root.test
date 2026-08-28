@@ -73,15 +73,19 @@ $root(5, x)$
 │ #document[
 │   #par[
 │     #math.equation(block: false)[#math.root[#math.text("x")]]
+│      
 │     #math.equation(block: false)[
 │       #math.root[#math.text("2")][#math.text("x")]
 │     ]
+│      
 │     #math.equation(block: false)[
 │       #math.root[#math.text("3")][#math.text("x")]
 │     ]
+│      
 │     #math.equation(block: false)[
 │       #math.root[#math.text("4")][#math.text("x")]
 │     ]
+│      
 │     #math.equation(block: false)[
 │       #math.root[#math.text("5")][#math.text("x")]
 │     ]

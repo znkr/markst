@@ -62,7 +62,7 @@
 
 #f[My other figure]
 │ #document[
-│   #par[My figure,#emph[with caption].]
+│   #par[My figure, #emph[with caption].]
 │   #par[My other figure.]
 │ ]
 

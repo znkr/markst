@@ -121,6 +121,7 @@ $floor(phi.alt. )$
 │     #math.equation(block: false)[
 │       #math.lr[#math.text("⌊")][#math.text("ϕ")#math.text(".")][#math.text("⌋")]
 │     ]
+│      
 │     #math.equation(block: false)[
 │       #math.lr[#math.text("⌊")][#math.text("ϕ")#math.text(".")][#math.text("⌋")]
 │     ]
@@ -136,7 +137,7 @@ $1/2(x)$ vs. $1/10(x)$
 │       #math.frac[#math.text("1")][#math.text("2")]
 │       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
 │     ]
-│     vs.
+│      vs. 
 │     #math.equation(block: false)[
 │       #math.frac[#math.text("1")][#math.text("10")]
 │       #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]

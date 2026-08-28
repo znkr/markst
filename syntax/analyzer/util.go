@@ -145,12 +145,14 @@ var skipped = syntax.SetOf(
 // it separates the rows of a 2D element like `mat`.
 var mathArgsSkipped = skipped.Remove(syntax.KindSemicolon)
 
-// markupSkipped is [skipped] for a Markup cursor, where a paragraph break is
-// content rather than trivia — it lowers to a [value.Parbreak]. Everywhere else
-// a parbreak is whitespace the parser happened to buffer in a structural
-// position (`/ \n\n  :` puts one between a term item's body and its colon), and
-// stepping over it keeps that from reading as a missing node.
-var markupSkipped = skipped.Remove(syntax.KindParbreak)
+// markupSkipped is [skipped] for a Markup cursor, where both a paragraph break
+// and the whitespace between items are content rather than trivia. A parbreak
+// lowers to a [value.Parbreak]; everywhere else it is whitespace the parser
+// happened to buffer in a structural position (`/ \n\n  :` puts one between a
+// term item's body and its colon), and stepping over it keeps that from reading
+// as a missing node. A space is what separates `*bold*` from `word` in
+// `*bold* word`, and what tells a smart quote whether it opens or closes.
+var markupSkipped = skipped.Remove(syntax.KindParbreak).Remove(syntax.KindSpace)
 
 // nodes is a cursor over a slice of syntax nodes, filtering out trivia.
 type nodes struct {
@@ -221,6 +223,19 @@ func (ns *nodes) node() syntax.Node {
 	n := ns.items[ns.pos]
 	ns.advance()
 	return n
+}
+
+// nextContent returns the next node the cursor will yield that contributes
+// content, without moving the cursor. Labels are skipped: one attaches to the
+// item before it and emits nothing of its own, so it never stands between two
+// neighbours. Returns nil when nothing is left.
+func (ns *nodes) nextContent() syntax.Node {
+	for i := ns.pos; i < len(ns.items); i++ {
+		if k := ns.items[i].Kind(); !ns.skips.Contains(k) && k != syntax.KindLabel {
+			return ns.items[i]
+		}
+	}
+	return nil
 }
 
 // done returns true if there are no more nodes.

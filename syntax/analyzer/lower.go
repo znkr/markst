@@ -52,6 +52,12 @@ func (a *analyzer) lowerMarkupItems(n syntax.Node) []expr.Ref {
 func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span)) {
 	ns := a.inner(n, syntax.KindMarkup)
 	last := expr.NoRef
+	// swallow records that the preceding sibling absorbs the whitespace after
+	// it: either it owns its line (see [ownsLine]) or it is a statement that
+	// contributes nothing for a space to sit beside. False at the start of the
+	// body, because a leading space there may still separate this run from
+	// whatever it gets spliced into — `#emph[Hello ]world`.
+	swallow := false
 	entry := a.frame().pending
 	for child := range ns.all() {
 		if a.frame().pending != entry {
@@ -62,6 +68,7 @@ func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span
 		case syntax.KindError:
 			last = a.emitSyntaxError(child.(*syntax.Error))
 			emit(last, child.Span())
+			swallow = false
 		case syntax.KindLabel:
 			if last == expr.NoRef {
 				// Detached label: drop it. (Matches legacy "no preceding
@@ -71,13 +78,73 @@ func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span
 			label := a.leaf(child, syntax.KindLabel)
 			labelName := name.Make(label[1 : len(label)-1])
 			a.b.AttachLabel(child.Span(), last, labelName)
-		default:
+		case syntax.KindSpace:
+			// A space with a block-level or statement neighbour has no two
+			// words left to separate: `#let x = 1` swallows the line break
+			// after it, exactly as a heading does.
+			if swallow || a.ownsLine(ns.nextContent()) {
+				continue
+			}
 			if ref := a.lowerExpr(child); ref != expr.NoRef {
+				// A space is content, but it is never what a label names:
+				// `text <label>` labels the text, not the space before the
+				// label. So `last` is deliberately left alone here.
+				emit(ref, child.Span())
+			}
+		default:
+			ref := a.lowerExpr(child)
+			if ref != expr.NoRef {
 				last = ref
 				emit(ref, child.Span())
 			}
+			swallow = ref == expr.NoRef || a.ownsLine(child)
 		}
 	}
+}
+
+// ownsLine reports whether n is markup that occupies a line of its own, so that
+// whitespace beside it separates nothing.
+//
+// It is a static under-approximation of the question realization asks of the
+// finished value — [value.Content.IsBlock], plus the two breaks. Every kind
+// listed here realizes to content that answers yes no matter what, because even
+// a show rule replacing one has its result realized in block context. Kinds
+// whose blockness is only known at runtime are left out; answering no is always
+// safe, since realization trims the space anyway.
+//
+// Being safe in that direction is what makes it an approximation rather than a
+// rule: under [WithoutApproximations] it answers no to everything, every space
+// is lowered, and realization produces the same document from a larger module.
+func (a *analyzer) ownsLine(n syntax.Node) bool {
+	if a.disableApprox || n == nil {
+		return false
+	}
+	switch n.Kind() {
+	case syntax.KindParbreak, syntax.KindLinebreak, syntax.KindHeading,
+		syntax.KindListItem, syntax.KindEnumItem, syntax.KindTermItem:
+		return true
+	case syntax.KindEquation:
+		return equationIsBlock(n)
+	case syntax.KindRaw:
+		return rawIsBlock(n)
+	}
+	return false
+}
+
+// rawIsBlock reports whether a raw node is delimited by more than one backtick,
+// which is what makes it a block rather than an inline snippet. It mirrors the
+// `block` decision in [analyzer.lowerRaw].
+func rawIsBlock(n syntax.Node) bool {
+	inner, ok := n.(*syntax.Inner)
+	if !ok {
+		return false
+	}
+	for _, child := range inner.Children() {
+		if child.Kind() == syntax.KindRawDelim {
+			return child.Text() != "`"
+		}
+	}
+	return false
 }
 
 // lowerExpr is the dispatch entry for converting a single code- or markup-
@@ -88,7 +155,11 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	switch n.Kind() {
 	// Markup leaves
 	case syntax.KindText:
-		return a.b.Const(n.Span(), &value.Text{Text: strings.TrimSpace(n.Text())})
+		return a.b.Const(n.Span(), &value.Text{Text: n.Text()})
+	case syntax.KindSpace:
+		// A markup whitespace run is worth exactly one space: two blank lines
+		// scan as a parbreak instead, so there is nothing longer to preserve.
+		return a.b.Const(n.Span(), &value.Text{Text: " "})
 	case syntax.KindEscape:
 		// In math, an escape like `\(` denotes a symbol character (matching
 		// Typst, where it can stand in as a delimiter); in markup it is text.
@@ -99,7 +170,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindShorthand:
 		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(n.Text())})
 	case syntax.KindSmartQuote:
-		return a.b.Const(n.Span(), &value.Text{Text: n.Text()})
+		return a.b.Const(n.Span(), &value.SmartQuote{Double: n.Text() == `"`})
 	case syntax.KindLinebreak:
 		return a.b.Const(n.Span(), &value.Linebreak{})
 	case syntax.KindParbreak:

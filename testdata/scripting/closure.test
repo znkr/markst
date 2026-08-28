@@ -7,7 +7,7 @@
 
 // Should output `x => y`.
 #x => y
-│ #document[#par[x=\> y]]
+│ #document[#par[x =\> y]]
 
 --- closure-without-captures ---
 // Basic closure without captures.

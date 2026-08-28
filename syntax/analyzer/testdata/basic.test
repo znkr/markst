@@ -49,33 +49,38 @@ This is *bold* text
 │ fn $top:
 │   b0:
 │     v0 = const text "This is"
-│     v1 = const text "bold"
-│     v2 = strong v1
-│     v3 = const text "text"
-│     v4 = content_result [v0, v2, v3]
-│     return v4
+│     v1 = const text " "
+│     v2 = const text "bold"
+│     v3 = strong v2
+│     v4 = const text " "
+│     v5 = const text "text"
+│     v6 = content_result [v0, v1, v3, v4, v5]
+│     return v6
 
 --- emphasis ---
 This is _emphasized_ text
 │ fn $top:
 │   b0:
 │     v0 = const text "This is"
-│     v1 = const text "emphasized"
-│     v2 = emph v1
-│     v3 = const text "text"
-│     v4 = content_result [v0, v2, v3]
-│     return v4
+│     v1 = const text " "
+│     v2 = const text "emphasized"
+│     v3 = emph v2
+│     v4 = const text " "
+│     v5 = const text "text"
+│     v6 = content_result [v0, v1, v3, v4, v5]
+│     return v6
 
 --- link ---
 Check https://example.com out
 │ fn $top:
 │   b0:
-│     v0 = const text "Check"
+│     v0 = const text "Check "
 │     v1 = const text "https://example.com"
 │     v2 = link "https://example.com" v1
-│     v3 = const text "out"
-│     v4 = content_result [v0, v2, v3]
-│     return v4
+│     v3 = const text " "
+│     v4 = const text "out"
+│     v5 = content_result [v0, v2, v3, v4]
+│     return v5
 
 --- list ---
 - First item
@@ -218,20 +223,23 @@ regular text
 │   b0:
 │     v0 = const text "Key"
 │     v1 = const text "Value that spans"
-│     v2 = const text "multiple lines"
-│     v3 = content_result [v1, v2]
-│     v4 = term_item v0, v3
-│     return v4
+│     v2 = const text " "
+│     v3 = const text "multiple lines"
+│     v4 = content_result [v1, v2, v3]
+│     v5 = term_item v0, v4
+│     return v5
 
 --- inline-raw ---
 This has `code` in it
 │ fn $top:
 │   b0:
 │     v0 = const text "This has"
-│     v1 = const raw_inline "code"
-│     v2 = const text "in it"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = const raw_inline "code"
+│     v3 = const text " "
+│     v4 = const text "in it"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- inline-raw-multiline ---
 Text with `code that
@@ -239,10 +247,12 @@ spans lines` here
 │ fn $top:
 │   b0:
 │     v0 = const text "Text with"
-│     v1 = const raw_inline "code that\nspans lines"
-│     v2 = const text "here"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = const raw_inline "code that\nspans lines"
+│     v3 = const text " "
+│     v4 = const text "here"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- block-raw ---
 ```
@@ -278,27 +288,31 @@ Use \* for literal star
 │ fn $top:
 │   b0:
 │     v0 = const text "Use"
-│     v1 = const text "*"
-│     v2 = const text "for literal star"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = const text "*"
+│     v3 = const text " "
+│     v4 = const text "for literal star"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- unicode-escape ---
 Letter \u{41} is A
 │ fn $top:
 │   b0:
 │     v0 = const text "Letter"
-│     v1 = const text "A"
-│     v2 = const text "is A"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = const text "A"
+│     v3 = const text " "
+│     v4 = const text "is A"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- smart-quote ---
 It's working
 │ fn $top:
 │   b0:
 │     v0 = const text "It"
-│     v1 = const text "'"
+│     v1 = const smartquote double=false
 │     v2 = const text "s working"
 │     v3 = content_result [v0, v1, v2]
 │     return v3
@@ -308,34 +322,42 @@ Use ... for ellipsis and --- for dash
 │ fn $top:
 │   b0:
 │     v0 = const text "Use"
-│     v1 = const text "…"
-│     v2 = const text "for ellipsis and"
-│     v3 = const text "—"
-│     v4 = const text "for dash"
-│     v5 = content_result [v0, v1, v2, v3, v4]
-│     return v5
+│     v1 = const text " "
+│     v2 = const text "…"
+│     v3 = const text " "
+│     v4 = const text "for ellipsis and"
+│     v5 = const text " "
+│     v6 = const text "—"
+│     v7 = const text " "
+│     v8 = const text "for dash"
+│     v9 = content_result [v0, v1, v2, v3, v4, v5, v6, v7, v8]
+│     return v9
 
 --- reference ---
 See @intro for more
 │ fn $top:
 │   b0:
 │     v0 = const text "See"
-│     v1 = ref @intro
-│     v2 = const text "for more"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = ref @intro
+│     v3 = const text " "
+│     v4 = const text "for more"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- reference-with-supplement ---
 See @intro[the introduction] for details
 │ fn $top:
 │   b0:
 │     v0 = const text "See"
-│     v1 = const text "the introduction"
-│     v2 = content_result [v1]
-│     v3 = ref @intro v2
-│     v4 = const text "for details"
-│     v5 = content_result [v0, v3, v4]
-│     return v5
+│     v1 = const text " "
+│     v2 = const text "the introduction"
+│     v3 = content_result [v2]
+│     v4 = ref @intro v3
+│     v5 = const text " "
+│     v6 = const text "for details"
+│     v7 = content_result [v0, v1, v4, v5, v6]
+│     return v7
 
 --- label-on-heading ---
 = Introduction <intro>
@@ -351,8 +373,10 @@ Some text <my-label>
 │ fn $top:
 │   b0:
 │     v0 = const text "Some text"
-│     v1 = attach_label v0, @my-label
-│     return v0
+│     v1 = const text " "
+│     v2 = attach_label v0, @my-label
+│     v3 = content_result [v0, v1]
+│     return v3
 
 --- label-and-reference ---
 = Chapter One <ch1>
@@ -363,7 +387,9 @@ See @ch1 for details
 │     v1 = heading level=1 v0
 │     v2 = attach_label v1, @ch1
 │     v3 = const text "See"
-│     v4 = ref @ch1
-│     v5 = const text "for details"
-│     v6 = content_result [v1, v3, v4, v5]
-│     return v6
+│     v4 = const text " "
+│     v5 = ref @ch1
+│     v6 = const text " "
+│     v7 = const text "for details"
+│     v8 = content_result [v1, v3, v4, v5, v6, v7]
+│     return v8

@@ -257,17 +257,11 @@
 }
 │ #document[
 │   #par[
-│     one
-│     =
-│     I
+│     one = I
 │     #linebreak()
-│     two
-│     =
-│     II
+│     two = II
 │     #linebreak()
-│     one
-│     =
-│     I
+│     one = I
 │     #linebreak()
 │   ]
 │ ]

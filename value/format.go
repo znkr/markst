@@ -290,7 +290,7 @@ func (n *Text) Format(f *formatter.Formatter) {
 // escapeMarkupText backslash-escapes the characters that would otherwise be
 // structural in markup, so literal text round-trips unambiguously in a dump.
 func escapeMarkupText(s string) string {
-	const special = "\\[]#*_`<>@$"
+	const special = "\\[]#*_`<>@$\"'"
 	if !strings.ContainsAny(s, special) {
 		return s
 	}
@@ -322,6 +322,20 @@ func (n *Linebreak) Format(f *formatter.Formatter) {
 
 func (n *Parbreak) Format(f *formatter.Formatter) {
 	f.FuncCall("parbreak", nil)
+}
+
+func (n *SmartQuote) Format(f *formatter.Formatter) {
+	// In markup the quote is written the way it was typed; escapeMarkupText
+	// escapes a literal quote that came from text, so the two stay apart.
+	if f.Mode() == syntax.ModeMarkup {
+		if n.Double {
+			f.Str(`"`)
+		} else {
+			f.Str("'")
+		}
+		return
+	}
+	f.FuncCall("smartquote", []formatter.Arg{formatter.NamedArg("double", n.Double)})
 }
 
 func (n *Link) Format(f *formatter.Formatter) {

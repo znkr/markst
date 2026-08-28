@@ -112,7 +112,7 @@
     break
   }]
 }
-│ #document[#par[HelloWorld🌎]]
+│ #document[#par[Hello World 🌎]]
 
 --- loop-break-join-set-and-show (skip: text, colors, smallcaps, and show rules are not implemented yet) ---
 // Should output `Some` in red, `Some` in blue and `Last` in green.

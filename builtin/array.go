@@ -378,10 +378,12 @@ func arrayPositionImpl(_ *value.FunctionCallContext, args []value.Value, named v
 	arr := args[0].(*value.Array)
 	fn := args[1].(*value.Function)
 	for i, v := range arr.Elems {
-		fcc := &value.FunctionCallContext{} // TODO: no span!
-		match, err := fn.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+		match, poison, err := applyCallback(fn, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling searcher function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		found, ok := match.(value.Bool)
 		if !ok {
@@ -775,6 +777,11 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		}
 	}
 
+	// poison holds the first *value.Error a `key` or `by` function evaluated
+	// to. Its diagnostic is already recorded, so the comparison stays neutral
+	// and the sort as a whole resolves to that error rather than to a
+	// plausible-looking array (see applyCallback).
+	var poison *value.Error
 	val := func(v value.Value) (value.Value, error) { return v, nil }
 	cmp := func(a, b value.Value) (int, error) {
 		a0, err := val(a)
@@ -788,10 +795,16 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		// If a key/by function errored, propagate the existing diagnostic
 		// silently by treating those elements as equal rather than emitting
 		// a "cannot compare error" cascade.
-		if _, ok := value.IsError(a0); ok {
+		if e, ok := value.IsError(a0); ok {
+			if poison == nil {
+				poison = e
+			}
 			return 0, nil
 		}
-		if _, ok := value.IsError(b0); ok {
+		if e, ok := value.IsError(b0); ok {
+			if poison == nil {
+				poison = e
+			}
 			return 0, nil
 		}
 		cmp, err := value.Compare(a0, b0)
@@ -805,9 +818,12 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	}
 	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
 		val = func(v value.Value) (value.Value, error) {
-			// TODO: no span for the call context!
-			fcc := &value.FunctionCallContext{}
-			return keyFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+			res, p, err := applyCallback(keyFunc, v)
+			if p != nil {
+				// Hand the poison on as the key; cmp above picks it up.
+				return p, nil
+			}
+			return res, err
 		}
 	}
 	if byFunc, ok := named.Get(names.By).(*value.Function); ok {
@@ -820,10 +836,29 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 			if err != nil {
 				return false, err
 			}
-			fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
-			lt0, err := byFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{a0, b0}})
+			// `by` replaces cmp wholesale, so it repeats cmp's poison check
+			// rather than inheriting it.
+			if e, ok := value.IsError(a0); ok {
+				if poison == nil {
+					poison = e
+				}
+				return false, nil
+			}
+			if e, ok := value.IsError(b0); ok {
+				if poison == nil {
+					poison = e
+				}
+				return false, nil
+			}
+			lt0, p, err := applyCallback(byFunc, a0, b0)
 			if err != nil {
 				return false, err
+			}
+			if p != nil {
+				if poison == nil {
+					poison = p
+				}
+				return false, nil
 			}
 			lt, ok := lt0.(value.Bool)
 			if !ok {
@@ -857,6 +892,9 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		}
 		return cmp
 	})
+	if poison != nil {
+		return poison, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -869,9 +907,12 @@ func arrayFilterImpl(_ *value.FunctionCallContext, args []value.Value, named val
 
 	var filtered []value.Value
 	for _, v := range arr.Elems {
-		include, err := applyPredicate(test, v)
+		include, poison, err := applyPredicate(test, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		if include {
 			filtered = append(filtered, v)
@@ -886,9 +927,12 @@ func arrayMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 
 	mapped := make([]value.Value, len(arr.Elems))
 	for i, v := range arr.Elems {
-		res, err := applyMapper(mapper, v)
+		res, poison, err := applyMapper(mapper, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		mapped[i] = res
 	}
@@ -902,10 +946,12 @@ func arrayFoldImpl(_ *value.FunctionCallContext, args []value.Value, named value
 
 	acc := init
 	for _, v := range arr.Elems {
-		fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
-		res, err := folder.Apply(fcc, &value.Arguments{Positional: []value.Value{acc, v}})
+		res, poison, err := applyCallback(folder, acc, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling folder function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		acc = res
 	}
@@ -922,10 +968,12 @@ func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named val
 
 	acc := arr.Elems[0]
 	for _, v := range arr.Elems[1:] {
-		fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
-		res, err := reducer.Apply(fcc, &value.Arguments{Positional: []value.Value{acc, v}})
+		res, poison, err := applyCallback(reducer, acc, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling reducer function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		acc = res
 	}
@@ -935,26 +983,31 @@ func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named val
 func arrayDedupImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 
-	key := func(v value.Value) (value.Value, error) { return v, nil }
+	key := func(v value.Value) (value.Value, *value.Error, error) { return v, nil, nil }
 	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
-		key = func(v value.Value) (value.Value, error) {
-			fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
-			return keyFunc.Apply(fcc, &value.Arguments{Positional: []value.Value{v}})
+		key = func(v value.Value) (value.Value, *value.Error, error) {
+			return applyCallback(keyFunc, v)
 		}
 	}
 
 	var seen []value.Value
 	var result []value.Value
-	var err error
+	// cmpErr is named apart from the per-element err: the comparator below
+	// outlives one iteration, and a shadowed `err :=` in the loop would leave
+	// it permanently nil.
+	var cmpErr error
 	for _, v := range arr.Elems {
-		k, err := key(v)
+		k, poison, err := key(v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling key function: %w", err)
 		}
+		if poison != nil {
+			return poison, nil
+		}
 		idx, found := slices.BinarySearchFunc(seen, k, func(a, b value.Value) int {
-			cmp, err0 := value.Compare(a, b)
-			if err0 != nil && err == nil {
-				err = err0
+			cmp, err := value.Compare(a, b)
+			if err != nil && cmpErr == nil {
+				cmpErr = err
 			}
 			return cmp
 		})
@@ -964,8 +1017,8 @@ func arrayDedupImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 		seen = slices.Insert(seen, idx, k)
 		result = append(result, v)
 	}
-	if err != nil {
-		return nil, err
+	if cmpErr != nil {
+		return nil, cmpErr
 	}
 	return &value.Array{Elems: result}, nil
 }

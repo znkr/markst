@@ -34,7 +34,13 @@ func TestAnalyze(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
-					root := parser.Parse(tc.Input)
+					// The .test format terminates every input with a newline.
+					// That terminator scans as a markup space and lowers to a
+					// `const text " "`, which every case would then carry — noise
+					// that also renumbers every value after it. Realization trims
+					// it anyway (see testdata/text/spacing.test), so drop it here
+					// and keep the golden about the lowering under test.
+					root := parser.Parse(strings.TrimSuffix(tc.Input, "\n"))
 					mod := analyzer.Analyze(root)
 					got := expr.FormatModule(mod)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {

@@ -1358,6 +1358,50 @@ func (n *Sequence) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *SmartQuote) Field(name name.Name) Value {
+	switch name {
+	case names.Double:
+		return Bool(n.Double)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *SmartQuote) HasField(name name.Name) bool {
+	switch name {
+	case names.Double:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *SmartQuote) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Double.String()), n.Field(names.Double))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *SmartQuote) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *SmartQuote) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Strong) Field(name name.Name) Value {
 	switch name {
 	case names.Body:

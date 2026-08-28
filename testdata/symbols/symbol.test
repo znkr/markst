@@ -13,8 +13,8 @@
 
 #sym.arrow.r;this and this#sym.arrow.l;
 │ #document[
-│   #par[😀👵🐢]
-│   #par[→←⟿⤤]
+│   #par[😀 👵 🐢]
+│   #par[→ ← ⟿ ⤤]
 │   #par[→this and this←]
 │ ]
 
@@ -39,7 +39,9 @@
 #envelope.fly
 #one
 #one.emoji
-│ #document[#par[🖂🖃🖆🖆🖄🖅11️]]
+│ #document[
+│   #par[🖂 🖃 🖆 🖆 🖄 🖅 1 1️]
+│ ]
 
 --- symbol-constructor-empty ---
 // Error: 2-10 expected at least one variant
@@ -207,5 +209,5 @@ $ gt.tri $
 #sym.copyright #emoji.copyright \
 #sym.suit.heart #emoji.suit.heart
 │ #document[
-│   #par[©︎©️#linebreak()♥︎♥️]
+│   #par[©︎ ©️#linebreak()♥︎ ♥️]
 │ ]

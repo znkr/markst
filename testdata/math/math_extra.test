@@ -159,9 +159,9 @@ $x^#n$
 The value $x$ is here.
 │ #document[
 │   #par[
-│     The value
+│     The value 
 │     #math.equation(block: false)[#math.text("x")]
-│     is here.
+│      is here.
 │   ]
 │ ]
 
@@ -409,6 +409,7 @@ $mat(a,;b) mat(1,,2) vec(a,)$
 │ #document[
 │   #par[
 │     #math.frac[#math.text("1")][#math.text("2")]
+│      
 │     #math.equation(block: false)[
 │       #math.frac[#math.text("1")][#math.text("2")]
 │     ]

@@ -20,8 +20,8 @@
   [you] + "?"
 }
 │ #document[
-│   #par[Hello,my friend.]
-│   #par[How areyou?]
+│   #par[Hello, my friend.]
+│   #par[How are you?]
 │ ]
 
 --- code-block-empty ---

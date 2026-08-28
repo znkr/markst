@@ -25,6 +25,11 @@ type Content interface {
 	// Used in diagnostics such as "element <name> has no method `x`".
 	Name() string
 
+	// IsBlock reports whether the element is block-level: it occupies a line
+	// of its own and breaks the paragraph flow around it. Everything else is
+	// inline, and shares a paragraph with its neighbors.
+	IsBlock() bool
+
 	aContent()
 }
 
@@ -70,6 +75,18 @@ type Raw struct {
 type Linebreak struct{}
 
 type Parbreak struct{}
+
+// SmartQuote is a quotation mark written as ' or " in markup. Which glyph it
+// stands for depends on the surrounding content, so it is emitted unresolved:
+// present it with a [znkr.io/writst/smartquote.Quoter], which walks the content
+// in document order and resolves the opening, closing, apostrophe, and prime
+// forms. To get a literal quote instead, escape it in the source: \" or \'.
+type SmartQuote struct {
+	// Double reports whether this is a double quote (") rather than a single
+	// one (').
+	Double bool `writst:"required"`
+	Label  *Label
+}
 
 type Link struct {
 	Dest  string  `writst:"required"`
@@ -239,25 +256,26 @@ type Document struct {
 	Body  Content `writst:"required"`
 }
 
-func (*Sequence) aValue()  {}
-func (*Heading) aValue()   {}
-func (*Text) aValue()      {}
-func (*Raw) aValue()       {}
-func (*Strong) aValue()    {}
-func (*Emph) aValue()      {}
-func (*Par) aValue()       {}
-func (*Linebreak) aValue() {}
-func (*Parbreak) aValue()  {}
-func (*Link) aValue()      {}
-func (*Ref) aValue()       {}
-func (*List) aValue()      {}
-func (*ListItem) aValue()  {}
-func (*Enum) aValue()      {}
-func (*EnumItem) aValue()  {}
-func (*Terms) aValue()     {}
-func (*TermItem) aValue()  {}
-func (*Table) aValue()     {}
-func (*Document) aValue()  {}
+func (*Sequence) aValue()   {}
+func (*Heading) aValue()    {}
+func (*Text) aValue()       {}
+func (*Raw) aValue()        {}
+func (*Strong) aValue()     {}
+func (*Emph) aValue()       {}
+func (*Par) aValue()        {}
+func (*Linebreak) aValue()  {}
+func (*Parbreak) aValue()   {}
+func (*SmartQuote) aValue() {}
+func (*Link) aValue()       {}
+func (*Ref) aValue()        {}
+func (*List) aValue()       {}
+func (*ListItem) aValue()   {}
+func (*Enum) aValue()       {}
+func (*EnumItem) aValue()   {}
+func (*Terms) aValue()      {}
+func (*TermItem) aValue()   {}
+func (*Table) aValue()      {}
+func (*Document) aValue()   {}
 
 func (*Equation) aValue()       {}
 func (*MathText) aValue()       {}
@@ -274,25 +292,26 @@ func (*MathVec) aValue()        {}
 func (*MathCases) aValue()      {}
 func (*MathMat) aValue()        {}
 
-func (Sequence) aContent()   {}
-func (*Heading) aContent()   {}
-func (*Text) aContent()      {}
-func (*Raw) aContent()       {}
-func (*Strong) aContent()    {}
-func (*Emph) aContent()      {}
-func (*Par) aContent()       {}
-func (*Linebreak) aContent() {}
-func (*Parbreak) aContent()  {}
-func (*Link) aContent()      {}
-func (*Ref) aContent()       {}
-func (*List) aContent()      {}
-func (*ListItem) aContent()  {}
-func (*Enum) aContent()      {}
-func (*EnumItem) aContent()  {}
-func (*Terms) aContent()     {}
-func (*TermItem) aContent()  {}
-func (*Table) aContent()     {}
-func (*Document) aContent()  {}
+func (Sequence) aContent()    {}
+func (*Heading) aContent()    {}
+func (*Text) aContent()       {}
+func (*Raw) aContent()        {}
+func (*Strong) aContent()     {}
+func (*Emph) aContent()       {}
+func (*Par) aContent()        {}
+func (*Linebreak) aContent()  {}
+func (*Parbreak) aContent()   {}
+func (*SmartQuote) aContent() {}
+func (*Link) aContent()       {}
+func (*Ref) aContent()        {}
+func (*List) aContent()       {}
+func (*ListItem) aContent()   {}
+func (*Enum) aContent()       {}
+func (*EnumItem) aContent()   {}
+func (*Terms) aContent()      {}
+func (*TermItem) aContent()   {}
+func (*Table) aContent()      {}
+func (*Document) aContent()   {}
 
 func (*Equation) aContent()       {}
 func (*MathText) aContent()       {}
@@ -312,25 +331,26 @@ func (*MathMat) aContent()        {}
 // Name returns the element name, matching the constructor function used to
 // build it. Table has no dedicated diagnostic name and reports the generic
 // "content".
-func (Sequence) Name() string   { return "sequence" }
-func (*Heading) Name() string   { return "heading" }
-func (*Strong) Name() string    { return "strong" }
-func (*Emph) Name() string      { return "emph" }
-func (*Par) Name() string       { return "par" }
-func (*Text) Name() string      { return "text" }
-func (*Raw) Name() string       { return "raw" }
-func (*Linebreak) Name() string { return "linebreak" }
-func (*Parbreak) Name() string  { return "parbreak" }
-func (*Link) Name() string      { return "link" }
-func (*Ref) Name() string       { return "ref" }
-func (*List) Name() string      { return "list" }
-func (*ListItem) Name() string  { return "list.item" }
-func (*Enum) Name() string      { return "enum" }
-func (*EnumItem) Name() string  { return "enum.item" }
-func (*Terms) Name() string     { return "terms" }
-func (*TermItem) Name() string  { return "terms.item" }
-func (*Table) Name() string     { return "table" }
-func (*Document) Name() string  { return "document" }
+func (Sequence) Name() string    { return "sequence" }
+func (*Heading) Name() string    { return "heading" }
+func (*Strong) Name() string     { return "strong" }
+func (*Emph) Name() string       { return "emph" }
+func (*Par) Name() string        { return "par" }
+func (*Text) Name() string       { return "text" }
+func (*Raw) Name() string        { return "raw" }
+func (*Linebreak) Name() string  { return "linebreak" }
+func (*Parbreak) Name() string   { return "parbreak" }
+func (*SmartQuote) Name() string { return "smartquote" }
+func (*Link) Name() string       { return "link" }
+func (*Ref) Name() string        { return "ref" }
+func (*List) Name() string       { return "list" }
+func (*ListItem) Name() string   { return "list.item" }
+func (*Enum) Name() string       { return "enum" }
+func (*EnumItem) Name() string   { return "enum.item" }
+func (*Terms) Name() string      { return "terms" }
+func (*TermItem) Name() string   { return "terms.item" }
+func (*Table) Name() string      { return "table" }
+func (*Document) Name() string   { return "document" }
 
 func (*Equation) Name() string       { return "equation" }
 func (*MathText) Name() string       { return "math.text" }
@@ -347,25 +367,70 @@ func (*MathVec) Name() string        { return "math.vec" }
 func (*MathCases) Name() string      { return "math.cases" }
 func (*MathMat) Name() string        { return "math.mat" }
 
-func (Sequence) Type() types.Type   { return types.Content }
-func (*Heading) Type() types.Type   { return types.Content }
-func (*Text) Type() types.Type      { return types.Content }
-func (*Raw) Type() types.Type       { return types.Content }
-func (*Strong) Type() types.Type    { return types.Content }
-func (*Emph) Type() types.Type      { return types.Content }
-func (*Par) Type() types.Type       { return types.Content }
-func (*Linebreak) Type() types.Type { return types.Content }
-func (*Parbreak) Type() types.Type  { return types.Content }
-func (*Link) Type() types.Type      { return types.Content }
-func (*Ref) Type() types.Type       { return types.Content }
-func (*List) Type() types.Type      { return types.Content }
-func (*ListItem) Type() types.Type  { return types.Content }
-func (*Enum) Type() types.Type      { return types.Content }
-func (*EnumItem) Type() types.Type  { return types.Content }
-func (*Terms) Type() types.Type     { return types.Content }
-func (*TermItem) Type() types.Type  { return types.Content }
-func (*Table) Type() types.Type     { return types.Content }
-func (*Document) Type() types.Type  { return types.Content }
+// IsBlock reports whether the element occupies a line of its own. The item
+// elements are block: a `- apples` entry breaks the paragraph before it exactly
+// as a heading does, and its siblings being gathered into a [List] is a later
+// step. A sequence is a flat splice rather than a box around its children, so
+// the question is asked of each child once it is flattened. Raw and Equation
+// answer from their Block field, set by the form they were written in.
+func (Sequence) IsBlock() bool    { return false }
+func (*Heading) IsBlock() bool    { return true }
+func (*Strong) IsBlock() bool     { return false }
+func (*Emph) IsBlock() bool       { return false }
+func (*Par) IsBlock() bool        { return true }
+func (*Text) IsBlock() bool       { return false }
+func (n *Raw) IsBlock() bool      { return n.Block }
+func (*Linebreak) IsBlock() bool  { return false }
+func (*Parbreak) IsBlock() bool   { return false }
+func (*SmartQuote) IsBlock() bool { return false }
+func (*Link) IsBlock() bool       { return false }
+func (*Ref) IsBlock() bool        { return false }
+func (*List) IsBlock() bool       { return true }
+func (*ListItem) IsBlock() bool   { return true }
+func (*Enum) IsBlock() bool       { return true }
+func (*EnumItem) IsBlock() bool   { return true }
+func (*Terms) IsBlock() bool      { return true }
+func (*TermItem) IsBlock() bool   { return true }
+func (*Table) IsBlock() bool      { return true }
+func (*Document) IsBlock() bool   { return true }
+
+// Math is inline by construction: [Equation.Block] decides how the equation as
+// a whole is laid out, and everything within it is a fragment of one line.
+func (n *Equation) IsBlock() bool     { return n.Block }
+func (*MathText) IsBlock() bool       { return false }
+func (*MathAttach) IsBlock() bool     { return false }
+func (*MathFrac) IsBlock() bool       { return false }
+func (*MathRoot) IsBlock() bool       { return false }
+func (*MathPrimes) IsBlock() bool     { return false }
+func (*MathAlignPoint) IsBlock() bool { return false }
+func (*MathDelimited) IsBlock() bool  { return false }
+func (*MathUnderline) IsBlock() bool  { return false }
+func (*MathAccent) IsBlock() bool     { return false }
+func (*MathCancel) IsBlock() bool     { return false }
+func (*MathVec) IsBlock() bool        { return false }
+func (*MathCases) IsBlock() bool      { return false }
+func (*MathMat) IsBlock() bool        { return false }
+
+func (Sequence) Type() types.Type    { return types.Content }
+func (*Heading) Type() types.Type    { return types.Content }
+func (*Text) Type() types.Type       { return types.Content }
+func (*Raw) Type() types.Type        { return types.Content }
+func (*Strong) Type() types.Type     { return types.Content }
+func (*Emph) Type() types.Type       { return types.Content }
+func (*Par) Type() types.Type        { return types.Content }
+func (*Linebreak) Type() types.Type  { return types.Content }
+func (*Parbreak) Type() types.Type   { return types.Content }
+func (*SmartQuote) Type() types.Type { return types.Content }
+func (*Link) Type() types.Type       { return types.Content }
+func (*Ref) Type() types.Type        { return types.Content }
+func (*List) Type() types.Type       { return types.Content }
+func (*ListItem) Type() types.Type   { return types.Content }
+func (*Enum) Type() types.Type       { return types.Content }
+func (*EnumItem) Type() types.Type   { return types.Content }
+func (*Terms) Type() types.Type      { return types.Content }
+func (*TermItem) Type() types.Type   { return types.Content }
+func (*Table) Type() types.Type      { return types.Content }
+func (*Document) Type() types.Type   { return types.Content }
 
 func (*Equation) Type() types.Type       { return types.Content }
 func (*MathText) Type() types.Type       { return types.Content }

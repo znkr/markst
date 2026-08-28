@@ -25,9 +25,9 @@
 │ #document[
 │   #par[#strong[Bold]]
 │   #par[#raw("1")2#raw("3")]
-│   #par[#raw("test")(it)]
-│   #par[AAA]
-│   #par[ABABAB]
+│   #par[#raw("test") (it)]
+│   #par[A A A]
+│   #par[AB AB AB]
 │ ]
 
 --- call-aliased-function ---

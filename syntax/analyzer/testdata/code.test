@@ -55,10 +55,11 @@
 │ fn $top:
 │   b0:
 │     v0 = const text "hello"
-│     v1 = const text "world"
-│     v2 = strong v1
-│     v3 = content_result [v0, v2]
-│     return v3
+│     v1 = const text " "
+│     v2 = const text "world"
+│     v3 = strong v2
+│     v4 = content_result [v0, v1, v3]
+│     return v4
 
 --- parenthesized ---
 #{ (1) }
@@ -732,21 +733,24 @@
 #{ while true { 1; { 2; break } } }
 │ fn $top:
 │   b0:
-│     v0 = join_begin
-│     jump b1(v0)
-│   b1(v3):
-│     branch true, b2, b3(v3)
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = join_begin
+│     jump b1(v2)
+│   b1(v5):
+│     branch true, b2, b3(v5)
 │   b2:
-│     v1 = code_join [2]
-│     v2 = code_join [1, v1]
-│     v4 = join_add v3, v2
-│     jump b3(v4)
-│   b3(v6):
-│     v7 = join_result v6
-│     return v7
+│     v3 = code_join [2]
+│     v4 = code_join [1, v3]
+│     v6 = join_add v5, v4
+│     jump b3(v6)
+│   b3(v8):
+│     v9 = join_result v8
+│     v10 = content_result [v0, v1, v9]
+│     return v10
 │   b4:
-│     v5 = join_add <noref>, v2
-│     jump b1(v5)
+│     v7 = join_add <noref>, v4
+│     jump b1(v7)
 
 --- break-join-content-block ---
 // Same fold in content mode: the markup item and the nested code block's value
@@ -754,26 +758,29 @@
 #for _ in range(1) [a#{ 1; break }]
 │ fn $top:
 │   b0:
-│     v0 = call <function range>(1)
-│     v1 = iter_open v0
-│     v2 = join_begin
-│     jump b1(v2)
-│   b1(v8):
-│     v3 = iter_has_next v1
-│     branch v3, b2, b3(v8)
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = call <function range>(1)
+│     v3 = iter_open v2
+│     v4 = join_begin
+│     jump b1(v4)
+│   b1(v10):
+│     v5 = iter_has_next v3
+│     branch v5, b2, b3(v10)
 │   b2:
-│     v4 = iter_advance v1
-│     v5 = const text "a"
-│     v6 = code_join [1]
-│     v7 = content_result [v5, v6]
-│     v9 = join_add v8, v7
-│     jump b3(v9)
-│   b3(v11):
-│     v12 = join_result v11
-│     return v12
+│     v6 = iter_advance v3
+│     v7 = const text "a"
+│     v8 = code_join [1]
+│     v9 = content_result [v7, v8]
+│     v11 = join_add v10, v9
+│     jump b3(v11)
+│   b3(v13):
+│     v14 = join_result v13
+│     v15 = content_result [v0, v1, v14]
+│     return v15
 │   b4:
-│     v10 = join_add <noref>, v7
-│     jump b1(v10)
+│     v12 = join_add <noref>, v9
+│     jump b1(v12)
 
 --- return-with-value ---
 #{ let f() = { return 1 } }
@@ -807,8 +814,11 @@
 #{ let f() = { [x]; return 1 } }
 │ fn $top:
 │   b0:
-│     v0 = make_closure $fn_0
-│     return none
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = make_closure $fn_0
+│     v3 = content_result [v0, v1]
+│     return v3
 │ 
 │ fn $fn_0 name="f":
 │   b0:
@@ -883,9 +893,12 @@
 #none #auto #true #false
 │ fn $top:
 │   b0:
-│     v0 = const auto
-│     v1 = content_result [v0, true, false]
-│     return v1
+│     v0 = const text " "
+│     v1 = const auto
+│     v2 = const text " "
+│     v3 = const text " "
+│     v4 = content_result [v0, v1, v2, true, v3, false]
+│     return v4
 
 --- literal-int ---
 #42

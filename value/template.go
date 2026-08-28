@@ -267,6 +267,7 @@ func (n *TemplateUpdate) Field(name.Name) Value   { return nil }
 func (n *TemplateUpdate) HasField(name.Name) bool { return false }
 func (n *TemplateUpdate) Fields() *Dict           { return new(Dict) }
 func (n *TemplateUpdate) Name() string            { return "template" }
+func (n *TemplateUpdate) IsBlock() bool           { return false }
 func (n *TemplateUpdate) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
@@ -337,6 +338,7 @@ func (n *Templated) Field(name.Name) Value   { return nil }
 func (n *Templated) HasField(name.Name) bool { return false }
 func (n *Templated) Fields() *Dict           { return new(Dict) }
 func (n *Templated) Name() string            { return "templated" }
+func (n *Templated) IsBlock() bool           { return false }
 func (n *Templated) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label

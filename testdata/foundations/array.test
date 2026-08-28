@@ -362,7 +362,7 @@
 --- array-join-content ---
 // Test joining content.
 #([One], [Two], [Three]).join([, ], last: [ and ]).
-│ #document[#par[One,Two,Threeand.]]
+│ #document[#par[One, Two, Three and .]]
 
 --- array-intersperse ---
 // Test the `intersperse` method
@@ -431,6 +431,24 @@
 --- array-sorted-key-function-positional-1 ---
 // Error: 12-18 unexpected argument
 #().sorted(x => x)
+
+--- array-callback-errors-are-not-doubled ---
+// A callback that errors poisons the whole call, so the failure is reported
+// once, by the callback, and never again downstream as a stray value.
+// Error: 23-30 cannot subtract string from integer
+#(1, 2).position(x => x - "a")
+
+// Error: 18-25 cannot subtract string from integer
+#(1, 2).map(x => x - "a")
+
+// Error: 21-28 cannot subtract string from integer
+#(1, 2).filter(x => x - "a")
+
+// Error: 27-34 cannot subtract string from integer
+#(1, 2).fold(0, (a, b) => a - "x")
+
+// Error: 26-33 cannot subtract string from integer
+#(1, 2).sorted(key: x => x - "a")
 
 --- array-zip ---
 // Test the `zip` method.

@@ -6,7 +6,7 @@
 #assert.eq
 #assert.ne
 │ #document[
-│   #par[#raw("assert.eq")#raw("assert.ne")]
+│   #par[#raw("assert.eq") #raw("assert.ne")]
 │ ]
 
 --- field-normal-function-invalid ---

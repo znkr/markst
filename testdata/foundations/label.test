@@ -48,13 +48,19 @@ _Visible_
 --- label-unclosed-is-text ---
 // Test that incomplete label is text.
 1 < 2 is #if 1 < 2 [not] a label.
-│ #document[#par[1\< 2 isnota label.]]
+│ #document[#par[1 \< 2 is not a label.]]
 
 --- label-text-styled-and-sequence ---
 // Test label on text, styled, and sequence.
 #test([Hello<hi>].label, <hi>)
 #test([#[A *B* C]<hi>].label, <hi>)
 //TODO: #test([#text(red)[Hello]<hi>].label, <hi>)
+│ #document[]
+
+--- label-after-space ---
+// A space between the content and its label is content in its own right, but
+// it is not what the label names: the label reaches past it to the strong.
+#test([*A* <v>].children.first().label, <v>)
 │ #document[]
 
 --- label-string-conversion ---

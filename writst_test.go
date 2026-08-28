@@ -92,6 +92,81 @@ func TestWritst(t *testing.T) {
 	}
 }
 
+// TestApproximationsPreserveOutput runs the whole corpus through the analyzer
+// twice — once normally, once with [analyzer.WithoutApproximations] — and
+// requires the two to evaluate to the same document and the same diagnostics.
+//
+// The approximations exist to lower less; the module they produce is smaller
+// and its value numbering differs, which is exactly what the analyzer's own
+// golden files record. What must not differ is anything a reader of the
+// document can observe, and that is what this asserts. It runs by default, so
+// an approximation that is not output-preserving fails the ordinary test run.
+func TestApproximationsPreserveOutput(t *testing.T) {
+	files, err := filepath.Glob("testdata/**/*.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The corpus binds `test` to an assertion helper and two names to error
+	// placeholders. Here the assertions are somebody else's job — TestWritst
+	// makes them — but the names still have to resolve the same way, or the two
+	// runs would differ for a reason that has nothing to do with lowering.
+	bindings := map[name.Name]value.Value{
+		name.Make("test"): &value.Function{
+			Name:       "test",
+			Positional: []value.Param{{Type: types.Any}, {Type: types.Any}},
+			F: func(*value.FunctionCallContext, []value.Value, value.NamedArgsWithDefaults) (value.Value, error) {
+				return value.None{}, nil
+			},
+		},
+		name.Make("dont-care"): &value.Error{
+			Msg: "evaluated placeholder dont-care: this is an error",
+		},
+		name.Make("nope"): &value.Error{
+			Msg: "evaluated placeholder nope: this is an error",
+		},
+	}
+
+	// render evaluates src and returns everything observable about the result:
+	// the formatted document, and the diagnostics in the order they were
+	// reported.
+	render := func(src string, opts ...analyzer.Option) string {
+		root := parser.Parse(src)
+		mod := analyzer.Analyze(root, append([]analyzer.Option{analyzer.WithBindings(bindings)}, opts...)...)
+		contents, warnings, errors := eval.Eval(mod)
+		var sb strings.Builder
+		if contents != nil {
+			sb.WriteString(value.FormatContent(contents))
+		}
+		for _, d := range evalErrors(warnings, errors) {
+			fmt.Fprintf(&sb, "\n%v", d)
+		}
+		return sb.String()
+	}
+
+	for _, file := range files {
+		testname, err := filepath.Rel("testdata", file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Run(testname, func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range testfile.Read(t, file) {
+				t.Run(tc.Name, func(t *testing.T) {
+					if tc.Skip != "" {
+						t.Skip(tc.Skip)
+					}
+					with := render(tc.Input)
+					without := render(tc.Input, analyzer.WithoutApproximations())
+					if diff := textdiff.Unified(with, without); diff != "" {
+						t.Errorf("lowering approximations changed the result (-with +without):\n%s", diff)
+					}
+				})
+			}
+		})
+	}
+}
+
 // formatTestFailure renders a debugging report for a failed test(got, want)
 // call: the failing call, the full test input with the failing row highlighted,
 // the want/got values, and the SSA dump of the evaluated module.

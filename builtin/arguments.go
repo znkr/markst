@@ -119,9 +119,12 @@ func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named
 
 	var filteredPos []value.Value
 	for _, elem := range v.Positional {
-		include, err := applyPredicate(test, elem)
+		include, poison, err := applyPredicate(test, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		if include {
 			filteredPos = append(filteredPos, elem)
@@ -130,9 +133,12 @@ func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named
 
 	var filteredNamed value.NamedArgs
 	for k, elem := range v.Named.All() {
-		include, err := applyPredicate(test, elem)
+		include, poison, err := applyPredicate(test, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		if include {
 			filteredNamed.Put(k, elem)
@@ -148,18 +154,24 @@ func argumentsMapImpl(_ *value.FunctionCallContext, args []value.Value, named va
 
 	mappedPos := make([]value.Value, len(v.Positional))
 	for i, elem := range v.Positional {
-		res, err := applyMapper(mapper, elem)
+		res, poison, err := applyMapper(mapper, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		mappedPos[i] = res
 	}
 
 	var mappedNamed value.NamedArgs
 	for k, elem := range v.Named.All() {
-		res, err := applyMapper(mapper, elem)
+		res, poison, err := applyMapper(mapper, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
+		}
+		if poison != nil {
+			return poison, nil
 		}
 		mappedNamed.Put(k, res)
 	}

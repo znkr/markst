@@ -3,123 +3,154 @@
 #0x123z
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid hexadecimal number: 0x123z"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid hexadecimal number: 0x123z"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- int-base-hex-invalid-letter ---
 // Error: 2-5 invalid hexadecimal number: 0xG
 #0xG
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid hexadecimal number: 0xG"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid hexadecimal number: 0xG"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- int-base-binary-invalid ---
 // Error: 2-7 invalid binary number: 0b123
 #0b123
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid binary number: 0b123"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid binary number: 0b123"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- int-base-octal-invalid ---
 // Error: 2-6 invalid octal number: 0o89
 #0o89
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid octal number: 0o89"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid octal number: 0o89"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- number-suffix-invalid ---
 // Error: 2-4 invalid number suffix: u
 #1u
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid number suffix: u"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid number suffix: u"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- float-invalid-incomplete-exponent ---
 // Error: 2-6 invalid floating point number: .1E-
 #.1E-
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid floating point number: .1E-"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid floating point number: .1E-"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- float-invalid-trailing-exponent-sign ---
 // Error: 2-11 invalid floating point number: 123.456e+
 #123.456e+
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid floating point number: 123.456e+"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid floating point number: 123.456e+"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- string-invalid-escape ---
 // Error: 2-6 invalid escape sequence
 #"\z"
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid escape sequence"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid escape sequence"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- unicode-escape-invalid-codepoint ---
 // Error: 1-11 invalid Unicode escape sequence
 \u{FFFFFF}
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid Unicode escape sequence"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="invalid Unicode escape sequence"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- unicode-escape-unclosed ---
 // Error: 1-6 unclosed Unicode escape sequence
 \u{41
 │ fn $top:
 │   b0:
-│     v0 = error msg="unclosed Unicode escape sequence"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="unclosed Unicode escape sequence"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- label-unclosed ---
 // Error: 1-5 unclosed label, expected '>'
 <lbl
 │ fn $top:
 │   b0:
-│     v0 = error msg="unclosed label, expected '>'"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="unclosed label, expected '>'"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- label-empty ---
 // Error: 1-3 label cannot be empty
 <>
 │ fn $top:
 │   b0:
-│     v0 = error msg="label cannot be empty"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="label cannot be empty"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- unexpected-character-in-code ---
 // Error: 2-3 unexpected character: @
 #@
 │ fn $top:
 │   b0:
-│     v0 = error msg="unexpected character: @"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="unexpected character: @"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- missing-expression-after-hash ---
 // Error: 2 expected expression
 #
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected expression"
-│     return v0
+│     v0 = const text " "
+│     v1 = error msg="expected expression"
+│     v2 = content_result [v0, v1]
+│     return v2
 
 --- error-with-surrounding-content ---
 // Error: 8-11 invalid hexadecimal number: 0xG
 Hello #0xG world
 │ fn $top:
 │   b0:
-│     v0 = const text "Hello"
-│     v1 = error msg="invalid hexadecimal number: 0xG"
-│     v2 = const text "world"
-│     v3 = content_result [v0, v1, v2]
-│     return v3
+│     v0 = const text " "
+│     v1 = const text "Hello"
+│     v2 = const text " "
+│     v3 = error msg="invalid hexadecimal number: 0xG"
+│     v4 = const text " "
+│     v5 = const text "world"
+│     v6 = content_result [v0, v1, v2, v3, v4, v5]
+│     return v6
 
 --- multiple-errors ---
 // Error: 2-5 invalid hexadecimal number: 0xG
@@ -127,10 +158,13 @@ Hello #0xG world
 #0xG #0b99
 │ fn $top:
 │   b0:
-│     v0 = error msg="invalid hexadecimal number: 0xG"
-│     v1 = error msg="invalid binary number: 0b99"
-│     v2 = content_result [v0, v1]
-│     return v2
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = error msg="invalid hexadecimal number: 0xG"
+│     v3 = const text " "
+│     v4 = error msg="invalid binary number: 0b99"
+│     v5 = content_result [v0, v1, v2, v3, v4]
+│     return v5
 
 --- for-loop-destructuring-without-parentheses ---
 // Destructuring without parentheses.
@@ -141,8 +175,12 @@ Hello #0xG world
 }
 │ fn $top:
 │   b0:
-│     v0 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
-│     return none
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = const text " "
+│     v3 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
+│     v4 = content_result [v0, v1, v2]
+│     return v4
 
 --- unexpected-comma-in-for-pattern ---
 // Error: 7-8 unexpected comma
@@ -150,32 +188,38 @@ Hello #0xG world
 #for k, in () {}
 │ fn $top:
 │   b0:
-│     v0 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
-│     return none
+│     v0 = const text " "
+│     v1 = const text " "
+│     v2 = error msg="unexpected comma" hint="destructuring patterns must be wrapped in parentheses"
+│     v3 = content_result [v0, v1]
+│     return v3
 
 --- for-loop-missing-pattern ---
 // Error: 5 expected pattern
 #for
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected pattern"
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="expected pattern"
+│     return v0
 
 --- for-loop-missing-iterable ---
 // Error: 10 expected expression
 #for v in
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected expression"
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="expected expression"
+│     return v0
 
 --- for-loop-missing-body ---
 // Error: 15 expected block
 #for v in iter
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected block"
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="expected block"
+│     return v0
 
 --- for-loop-pattern-on-next-line ---
 // Error: 5 expected pattern
@@ -183,36 +227,42 @@ Hello #0xG world
 v in iter {}
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected pattern"
-│     v1 = const text "v in iter"
-│     v2 = const text "{}"
-│     v3 = content_result [v1, v2]
-│     return v3
+│     v0 = const text " "
+│     v1 = error msg="expected pattern"
+│     v2 = const text "v in iter"
+│     v3 = const text " "
+│     v4 = const text "{}"
+│     v5 = content_result [v0, v2, v3, v4]
+│     return v5
 
 --- for-loop-string-as-pattern ---
 // Error: 6-9 expected pattern, found string
 #for "v" in iter {}
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected pattern, found string"
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="expected pattern, found string"
+│     return v0
 
 --- for-loop-binary-as-pattern ---
 // Error: 7 expected keyword `in`
 #for a + b in iter {}
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected keyword `in`"
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="expected keyword `in`"
+│     return v0
 
 --- duplicate-args-sink ---
 // Error: 15-18 only one arguments sink is allowed
 #{ let f(..a, ..b) = 1 }
 │ fn $top:
 │   b0:
-│     v0 = error msg="only one argument sink is allowed"
-│     v1 = make_closure $fn_0
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="only one argument sink is allowed"
+│     v2 = make_closure $fn_0
+│     v3 = content_result [v0]
+│     return v3
 │ 
 │ fn $fn_0 name="f" params=[v0=..a, v1=..b]:
 │   b0:
@@ -236,36 +286,44 @@ v in iter {}
 #{ (a: 1, b: 2, 3) }
 │ fn $top:
 │   b0:
-│     v0 = error msg="expected named or keyed pair"
-│     v1 = make_dict (a: 1, b: 2)
-│     return v1
+│     v0 = const text " "
+│     v1 = error msg="expected named or keyed pair"
+│     v2 = make_dict (a: 1, b: 2)
+│     v3 = content_result [v0, v2]
+│     return v3
 
 --- duplicate-dict-key-named ---
 // Error: 11-15 duplicate key: a
 #{ (a: 1, a: 2) }
 │ fn $top:
 │   b0:
-│     v0 = error msg="duplicate key: a"
-│     v1 = make_dict (a: 1, a: 2)
-│     return v1
+│     v0 = const text " "
+│     v1 = error msg="duplicate key: a"
+│     v2 = make_dict (a: 1, a: 2)
+│     v3 = content_result [v0, v2]
+│     return v3
 
 --- duplicate-dict-key-string ---
 // Error: 15-23 duplicate key: key
 #{ ("key": 1, "key": 2) }
 │ fn $top:
 │   b0:
-│     v0 = error msg="duplicate key: key"
-│     v1 = make_dict (key: 1, key: 2)
-│     return v1
+│     v0 = const text " "
+│     v1 = error msg="duplicate key: key"
+│     v2 = make_dict (key: 1, key: 2)
+│     v3 = content_result [v0, v2]
+│     return v3
 
 --- duplicate-dict-key-mixed ---
 // Error: 11-17 duplicate key: a
 #{ (a: 1, "a": 2) }
 │ fn $top:
 │   b0:
-│     v0 = error msg="duplicate key: a"
-│     v1 = make_dict (a: 1, a: 2)
-│     return v1
+│     v0 = const text " "
+│     v1 = error msg="duplicate key: a"
+│     v2 = make_dict (a: 1, a: 2)
+│     v3 = content_result [v0, v2]
+│     return v3
 
 --- duplicate-named-argument ---
 #let f = size => none
@@ -300,9 +358,11 @@ v in iter {}
 #{ let f(x, x) = 1 }
 │ fn $top:
 │   b0:
-│     v0 = error msg="duplicate parameter: x"
-│     v1 = make_closure $fn_0
-│     return none
+│     v0 = const text " "
+│     v1 = error msg="duplicate parameter: x"
+│     v2 = make_closure $fn_0
+│     v3 = content_result [v0]
+│     return v3
 │ 
 │ fn $fn_0 name="f" params=[v0=x, v1=x]:
 │   b0:
@@ -319,22 +379,24 @@ v in iter {}
 }
 │ fn $top:
 │   b0:
-│     v0 = make_array [1, 2, 3]
-│     v1 = iter_open v0
-│     v2 = join_begin
-│     jump b1(v2)
-│   b1(v7):
-│     v3 = iter_has_next v1
-│     branch v3, b2, b3
+│     v0 = const text " "
+│     v1 = make_array [1, 2, 3]
+│     v2 = iter_open v1
+│     v3 = join_begin
+│     jump b1(v3)
+│   b1(v8):
+│     v4 = iter_has_next v2
+│     branch v4, b2, b3
 │   b2:
-│     v4 = iter_advance v1
-│     v5 = make_closure $fn_0
-│     v6 = call v5()
-│     v8 = join_add v7, v6
-│     jump b1(v8)
+│     v5 = iter_advance v2
+│     v6 = make_closure $fn_0
+│     v7 = call v6()
+│     v9 = join_add v8, v7
+│     jump b1(v9)
 │   b3:
-│     v9 = join_result v7
-│     return v9
+│     v10 = join_result v8
+│     v11 = content_result [v0, v10]
+│     return v11
 │ 
 │ fn $fn_0:
 │   b0:

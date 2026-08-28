@@ -129,6 +129,21 @@ func rawImpl(_ *value.FunctionCallContext, args []value.Value, named value.Named
 	}, nil
 }
 
+// SmartQuote is a quotation mark that adapts to its surroundings; it builds a
+// [value.SmartQuote]. It also has dedicated syntax: the quote characters
+// themselves, ' and ".
+var SmartQuote = value.NewElement[*value.SmartQuote](value.Function{
+	Name: "smartquote",
+	Named: value.NamedParams{
+		names.Double: {Name: "double", Type: types.SetOf(types.Bool), Default: value.Bool(true)},
+	},
+	F: smartQuoteImpl,
+})
+
+func smartQuoteImpl(_ *value.FunctionCallContext, _ []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.SmartQuote{Double: bool(named.Get(names.Double).(value.Bool))}, nil
+}
+
 // Linebreak forces a line break; it builds a [value.Linebreak].
 var Linebreak = value.NewElement[*value.Linebreak](value.Function{
 	Name: "linebreak",

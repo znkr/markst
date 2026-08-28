@@ -1,0 +1,68 @@
+// Test smart quotes. Quotes stay unresolved in the realized document; which
+// glyph each one stands for is decided by smartquote.Quoter at presentation
+// time (see smartquote/smartquote_test.go).
+
+--- smartquote-sentence ---
+"The horse eats no cucumber salad" was the first sentence ever uttered on the 'telephone.'
+│ #document[
+│   #par[
+│     "
+│     The horse eats no cucumber salad
+│     "
+│      was the first sentence ever uttered on the 
+│     '
+│     telephone.
+│     '
+│   ]
+│ ]
+
+--- smartquote-apostrophe ---
+The 5'11" 'quick' brown fox jumps over the "lazy" dog's ear.
+│ #document[
+│   #par[
+│     The 5
+│     '
+│     11
+│     "
+│      
+│     '
+│     quick
+│     '
+│      brown fox jumps over the 
+│     "
+│     lazy
+│     "
+│      dog
+│     '
+│     s ear.
+│   ]
+│ ]
+
+--- smartquote-escape ---
+Escaped quotes are literal text: 5\'11\" and dog\'s ear.
+│ #document[
+│   #par[
+│     Escaped quotes are literal text: 5\'11\" and dog\'s ear.
+│   ]
+│ ]
+
+--- smartquote-nesting ---
+"'test statement'"
+│ #document[#par["'test statement'"]]
+
+--- smartquote-prime ---
+A 2" nail.
+│ #document[#par[A 2" nail.]]
+
+--- smartquote-slash ---
+"Hello"/"World"
+│ #document[#par["Hello"/"World"]]
+
+--- smartquote-element ---
+#smartquote()#smartquote(double: false)
+│ #document[#par["']]
+
+--- smartquote-element-fields ---
+#test(smartquote().double, true)
+#test(smartquote(double: false).double, false)
+│ #document[]

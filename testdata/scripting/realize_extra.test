@@ -40,6 +40,42 @@ Body text.
 │   )
 │ ]
 
+--- realize-markup-terms ---
+/ apples: red
+/ pears: green
+│ #document[
+│   #terms(
+│     #terms.item[apples][red],
+│     #terms.item[pears][green],
+│   )
+│ ]
+
+--- realize-list-between-paragraphs ---
+Before.
+- one
+- two
+After.
+│ #document[
+│   #par[Before.]
+│   #list(
+│     #list.item[one],
+│     #list.item[two],
+│   )
+│   #par[After.]
+│ ]
+
+--- realize-items-from-loop ---
+// The newline that ends each iteration's item separates nothing: the items
+// still group into a single list.
+#for x in (1, 2) [- #x
+]
+│ #document[
+│   #list(
+│     #list.item[#raw("1")],
+│     #list.item[#raw("2")],
+│   )
+│ ]
+
 --- realize-list-then-paragraph ---
 - item
 
@@ -57,7 +93,7 @@ After the list.
 --- realize-inline-not-paragraphed-in-heading ---
 = A *bold* title
 │ #document[
-│   #heading(level: 1)[A#strong[bold]title]
+│   #heading(level: 1)[A #strong[bold] title]
 │ ]
 
 --- realize-document-not-callable ---

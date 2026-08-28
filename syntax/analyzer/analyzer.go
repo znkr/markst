@@ -105,6 +105,25 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 	}
 }
 
+// WithoutApproximations turns off the conservative approximations the analyzer
+// uses to lower less than the general case would require — see
+// [analyzer.ownsLine].
+//
+// An approximation is always static and one-sided: it may skip work only when a
+// later, fully informed stage would undo that work anyway, and it does nothing
+// whenever it cannot tell. So turning them off changes how large the module is,
+// never the document it evaluates to. TestApproximationsPreserveOutput checks
+// that over the whole corpus by analyzing every case both ways.
+//
+// A change that is not output-preserving does not belong behind this option. If
+// disabling it changes a document, it is a semantic rule, not an approximation,
+// and it must run unconditionally.
+func WithoutApproximations() Option {
+	return func(a *analyzer) {
+		a.disableApprox = true
+	}
+}
+
 // Analyze converts the syntax tree rooted at n into an SSA [expr.Module].
 // Errors discovered during lowering (along with embedded scanner/parser
 // errors from the syntax tree) are emitted into the module as [expr.Error]
@@ -157,6 +176,10 @@ type analyzer struct {
 	// lowers to a math [value.Symbol] rather than markup text. Content blocks
 	// reset it, since their bodies are markup even inside an equation.
 	mathDepth int
+
+	// disableApprox disables the lowering approximations; see
+	// [WithoutApproximations].
+	disableApprox bool
 }
 
 // frame is one nesting level of SSA construction. Pushed at closure entry by

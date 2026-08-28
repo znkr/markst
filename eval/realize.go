@@ -1,6 +1,10 @@
 package eval
 
 import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
 	"znkr.io/writst/internal/names"
 	"znkr.io/writst/value"
 )
@@ -28,7 +32,7 @@ func topChildren(c value.Content) []value.Content {
 // into paragraphs and item containers. This is *block context*: bare inline runs
 // become paragraphs.
 func (s *session) realizeBody(children []value.Content, label *value.Label) value.Content {
-	r := seqOf(groupContent(s.flattenAndRealize(children)))
+	r := seqOf(groupContent(trimRun(mergeText(s.flattenAndRealize(children)), true, true)))
 	if label != nil {
 		r.SetLabel(label)
 	}
@@ -76,7 +80,7 @@ func (s *session) realize(c value.Content) value.Content {
 	case *value.Sequence:
 		return s.realizeBody(c.Children, c.Label)
 	case *value.Heading:
-		return &value.Heading{Depth: c.Depth, Body: s.realizeInline(c.Body), Label: c.Label}
+		return &value.Heading{Depth: c.Depth, Body: s.realizeInlineBlock(c.Body), Label: c.Label}
 	case *value.Strong:
 		return &value.Strong{Body: s.realizeInline(c.Body), Label: c.Label}
 	case *value.Emph:
@@ -84,7 +88,7 @@ func (s *session) realize(c value.Content) value.Content {
 	case *value.Link:
 		return &value.Link{Dest: c.Dest, Body: s.realizeInline(c.Body), Label: c.Label}
 	case *value.Par:
-		return &value.Par{Body: s.realizeInline(c.Body), Label: c.Label}
+		return &value.Par{Body: s.realizeInlineBlock(c.Body), Label: c.Label}
 	case *value.ListItem:
 		return &value.ListItem{Body: s.realize(c.Body), Label: c.Label}
 	case *value.EnumItem:
@@ -92,7 +96,9 @@ func (s *session) realize(c value.Content) value.Content {
 	case *value.TermItem:
 		return &value.TermItem{Term: s.realize(c.Term), Description: s.realize(c.Description), Label: c.Label}
 	case *value.Equation:
-		return &value.Equation{Block: c.Block, Body: s.realizeInline(c.Body), Label: c.Label}
+		// A block equation's body ends where the block ends; an inline one sits
+		// in the middle of a line, so its edges still separate words.
+		return &value.Equation{Block: c.Block, Body: s.realizeInlineRun(c.Body, c.Block), Label: c.Label}
 	case *value.List:
 		items := make([]*value.ListItem, len(c.Children))
 		for i, it := range c.Children {
@@ -123,20 +129,47 @@ func (s *session) realize(c value.Content) value.Content {
 	}
 }
 
-// realizeInline realizes inline content without forming paragraphs: it resolves
-// templates and recurses into wrapper bodies but leaves sequences flat.
+// realizeInline realizes inline content whose run sits inside a line: a
+// strong/emph/link body, or a sequence about to be spliced into a surrounding
+// run. Its edge whitespace is kept, because it still separates words —
+// `#emph[Hello ]world` reads "Hello world".
 func (s *session) realizeInline(c value.Content) value.Content {
+	return s.realizeInlineRun(c, false)
+}
+
+// realizeInlineBlock is [session.realizeInline] for a body whose ends are block
+// boundaries — a heading or paragraph body — where edge whitespace has nothing
+// left to separate.
+func (s *session) realizeInlineBlock(c value.Content) value.Content {
+	return s.realizeInlineRun(c, true)
+}
+
+// realizeInlineRun realizes inline content without forming paragraphs: it
+// resolves templates and recurses into wrapper bodies but leaves sequences
+// flat. edges says whether the run this builds ends on block boundaries; it
+// reaches the run's own ends through [trimRun] and [trimEdges].
+func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 	switch c := c.(type) {
 	case *value.Templated:
-		return s.resolveTemplated(c, s.realizeInline)
+		return s.resolveTemplated(c, func(body value.Content) value.Content {
+			return s.realizeInlineRun(body, edges)
+		})
 	case *value.Sequence:
-		children := make([]value.Content, len(c.Children))
-		for i, ch := range c.Children {
-			children[i] = s.realizeInline(ch)
+		var children []value.Content
+		for _, ch := range c.Children {
+			// A nested sequence is spliced into this run, so its own ends are
+			// not edges: realizeInline, never realizeInlineBlock.
+			appendFlat(&children, s.realizeInline(ch))
 		}
-		return &value.Sequence{Children: children, Label: c.Label}
+		return &value.Sequence{Children: trimRun(mergeText(children), edges, edges), Label: c.Label}
 	default:
-		return mapChildren(c, s.realizeInline)
+		// A run of one: this element is its own first and last item, so a block
+		// edge reaches straight into it.
+		r, keep := trimEdges(mapChildren(c, s.realizeInline), edges, edges)
+		if !keep {
+			return &value.Sequence{}
+		}
+		return r
 	}
 }
 
@@ -162,7 +195,7 @@ func groupContent(items []value.Content) []value.Content {
 		case isItem(it):
 			flush()
 			i = appendItemRun(&out, items, i)
-		case isBlock(it):
+		case it.IsBlock():
 			flush()
 			out = append(out, it)
 			i++
@@ -214,27 +247,177 @@ func appendItemRun(out *[]value.Content, items []value.Content, i int) int {
 	return i
 }
 
+// mergeText concatenates adjacent unlabeled Text items and collapses the
+// whitespace that markup composition duplicates at their seam. A markup space
+// is an ordinary Text holding " " (see the analyzer's lowering of
+// syntax.KindSpace), so this is where `[*Hello* ] + [world!]` gets its single
+// separating space. Dropping the whitespace that has nothing to separate is
+// [trimRun]'s job; run the two in that order.
+//
+// Whitespace inside a single Text value is never touched: an explicit
+// #text("a    b") keeps its spacing.
+func mergeText(items []value.Content) []value.Content {
+	out := make([]value.Content, 0, len(items))
+	for _, it := range items {
+		if text, ok := mergeable(it); ok && len(out) > 0 {
+			if prev, ok := mergeable(out[len(out)-1]); ok {
+				// Both sides contribute whitespace at the seam: keep one.
+				if endsWithSpace(prev.Text) {
+					text = &value.Text{Text: trimLeftSpace(text.Text)}
+				}
+				out[len(out)-1] = &value.Text{Text: prev.Text + text.Text}
+				continue
+			}
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
+// trimRun drops the whitespace in a merged run that has nothing to separate:
+// a space beside content that breaks the line anyway, and — where left or right
+// is set — a space at that end of the run. Both are true for a run whose ends
+// really are block boundaries (the document body, a list item, a heading or
+// paragraph body) and false for one that sits inside a line, where the trailing
+// space of `#emph[Hello ]world` still separates two words. They differ only for
+// a wrapper body that sits on one edge but not the other.
+//
+// A block edge trims whatever lands on it — see [trimEdges]; only the
+// whitespace *inside* a Text is off limits.
+//
+// trimRun filters in place, which is why it takes the run rather than being
+// folded into [mergeText]: every caller hands it a freshly built slice.
+func trimRun(items []value.Content, left, right bool) []value.Content {
+	kept := items[:0]
+	l := left
+	for i, it := range items {
+		// edgeRight looks ahead into slots this loop has not written yet, so it
+		// reads the run as it came in — which is what it is asking about.
+		it, keep := trimEdges(it, l, edgeRight(items, i, right))
+		if !keep {
+			// A space that trimmed away leaves the edge where it was, so the
+			// item behind it lands on the edge in its turn.
+			continue
+		}
+		l = breaksLine(it)
+		kept = append(kept, it)
+	}
+	return kept
+}
+
+// edgeRight reports whether items[i] ends on an edge: the run's own end when
+// right is set, a neighbour that breaks the line, or nothing but space that is
+// about to trim away on the same edge. [mergeText] leaves at most one Text
+// between two other items, so the scan takes a step or two.
+func edgeRight(items []value.Content, i int, right bool) bool {
+	for j := i + 1; j < len(items); j++ {
+		if breaksLine(items[j]) {
+			return true
+		}
+		if !spaceOnly(items[j]) {
+			return false
+		}
+	}
+	return right
+}
+
+// spaceOnly reports whether c is an unlabeled Text of nothing but whitespace —
+// one that leaves the run entirely once an edge trims it.
+func spaceOnly(c value.Content) bool {
+	text, ok := mergeable(c)
+	return ok && strings.TrimFunc(text.Text, unicode.IsSpace) == ""
+}
+
+// trimEdges trims the whitespace on whichever sides of c are marked by left and
+// right, descending through the inline wrappers a block edge sees straight
+// through: the space in `#strong[ x ]` alone in a heading has as little left to
+// separate as the space in a bare ` x `. keep is false when c was a Text that
+// trimmed away to nothing and leaves the run.
+func trimEdges(c value.Content, left, right bool) (_ value.Content, keep bool) {
+	if !left && !right {
+		return c, true
+	}
+	switch c := c.(type) {
+	case *value.Text:
+		trimmed := c.Text
+		if left {
+			trimmed = trimLeftSpace(trimmed)
+		}
+		if right {
+			trimmed = trimRightSpace(trimmed)
+		}
+		if trimmed == "" && c.Label == nil {
+			return nil, false
+		}
+		if trimmed == c.Text {
+			return c, true
+		}
+		return &value.Text{Text: trimmed, Label: c.Label}, true
+	case *value.Strong:
+		return &value.Strong{Body: trimBody(c.Body, left, right), Label: c.Label}, true
+	case *value.Emph:
+		return &value.Emph{Body: trimBody(c.Body, left, right), Label: c.Label}, true
+	case *value.Link:
+		return &value.Link{Dest: c.Dest, Body: trimBody(c.Body, left, right), Label: c.Label}, true
+	}
+	// Everything else is opaque to the edge: an inline equation keeps its own
+	// spacing, and a leaf has nothing to trim.
+	return c, true
+}
+
+// trimBody trims the edges of a wrapper's realized body, which is a run in its
+// own right: a sequence hands its children back to [trimRun], anything else is
+// a run of one. A body that trims away to nothing leaves the wrapper empty
+// rather than dropping it — `#strong[ ]` on an edge is still a strong.
+func trimBody(c value.Content, left, right bool) value.Content {
+	if seq, ok := c.(*value.Sequence); ok {
+		return &value.Sequence{Children: trimRun(seq.Children, left, right), Label: seq.Label}
+	}
+	if trimmed, keep := trimEdges(c, left, right); keep {
+		return trimmed
+	}
+	return &value.Sequence{}
+}
+
+// mergeable reports whether c is a Text that may be concatenated with an
+// adjacent one. A labeled Text stands on its own: the label names it.
+func mergeable(c value.Content) (*value.Text, bool) {
+	text, ok := c.(*value.Text)
+	if !ok || text.Label != nil {
+		return nil, false
+	}
+	return text, true
+}
+
+// breaksLine reports whether c ends the line it sits on, making adjacent
+// whitespace pointless. That is every block element, plus the two breaks, which
+// end a line without being content on it.
+func breaksLine(c value.Content) bool {
+	switch c.(type) {
+	case *value.Parbreak, *value.Linebreak:
+		return true
+	}
+	return c.IsBlock()
+}
+
+func endsWithSpace(s string) bool {
+	r, size := utf8.DecodeLastRuneInString(s)
+	return size > 0 && unicode.IsSpace(r)
+}
+
+func trimLeftSpace(s string) string  { return strings.TrimLeftFunc(s, unicode.IsSpace) }
+func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
+
 func isParbreak(c value.Content) bool { _, ok := c.(*value.Parbreak); return ok }
 
+// isItem reports whether c is one of the item elements. Items are block content
+// like any other ([value.Content.IsBlock]); this narrower question is only
+// [groupContent]'s, which must gather a run of them into a container instead of
+// emitting them one by one, and so asks it first.
 func isItem(c value.Content) bool {
 	switch c.(type) {
 	case *value.ListItem, *value.EnumItem, *value.TermItem:
 		return true
-	}
-	return false
-}
-
-// isBlock reports whether c is block-level content (breaks paragraph flow).
-// Everything not block, not a parbreak, and not a loose item is inline.
-func isBlock(c value.Content) bool {
-	switch c := c.(type) {
-	case *value.Heading, *value.List, *value.Enum, *value.Terms,
-		*value.Par, *value.Table, *value.Document:
-		return true
-	case *value.Raw:
-		return c.Block
-	case *value.Equation:
-		return c.Block
 	}
 	return false
 }

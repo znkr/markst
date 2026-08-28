@@ -452,6 +452,8 @@ func formatConst(v any) string {
 		return "linebreak"
 	case *value.Parbreak:
 		return "parbreak"
+	case *value.SmartQuote:
+		return fmt.Sprintf("smartquote double=%v", v.Double)
 	case *value.Label:
 		return fmt.Sprintf("label %q", v.Name.String())
 	case *value.Raw:

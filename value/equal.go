@@ -268,6 +268,11 @@ func (n *Parbreak) Equal(other Value) bool {
 	return ok
 }
 
+func (n *SmartQuote) Equal(other Value) bool {
+	o, ok := other.(*SmartQuote)
+	return ok && n.Double == o.Double && labelEqual(n.Label, o.Label)
+}
+
 func (n *Link) Equal(other Value) bool {
 	o, ok := other.(*Link)
 	return ok && n.Dest == o.Dest && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)

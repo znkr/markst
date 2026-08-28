@@ -36,24 +36,20 @@
 #let f(..args) = (f1(..args) + f2(..args)).join(", ")
 #f(1, a: 2)
 │ #document[
-│   #par[Name:Typst.Age:#raw("2").]
+│   #par[Name: Typst. Age: #raw("2").]
 │   #par[
 │     \[
 │     #raw("1")
-│     st
-│     ,
+│     st, 
 │     #raw("2")
-│     nd
-│     ,
+│     nd, 
 │     #raw("3")
-│     rd
-│     ,
+│     rd, 
 │     #raw("4")
-│     th
-│     \]
+│     th\]
 │   ]
 │   #par[2345]
-│   #par[1, "a": 2]
+│   #par[1, \"a\": 2]
 │ ]
 
 --- for-loop-integrated ---
