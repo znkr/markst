@@ -252,8 +252,7 @@ func generate(filename string) ([]byte, error) {
 		}
 		fmt.Fprintf(&buf, "}\n\n")
 
-		// SetLabel method
-		fmt.Fprintf(&buf, "func (n *%s) SetLabel(label *Label) *Label {\n", typeName)
+		// SetLabel/GetLabel methods
 		hasLabel := false
 		for _, f := range fields {
 			if f.Name == "Label" && f.Type == "*Label" {
@@ -261,10 +260,18 @@ func generate(filename string) ([]byte, error) {
 				break
 			}
 		}
+		fmt.Fprintf(&buf, "func (n *%s) SetLabel(label *Label) *Label {\n", typeName)
 		if hasLabel {
 			fmt.Fprintf(&buf, "\told := n.Label\n")
 			fmt.Fprintf(&buf, "\tn.Label = label\n")
 			fmt.Fprintf(&buf, "\treturn old\n")
+		} else {
+			fmt.Fprintf(&buf, "\treturn nil\n")
+		}
+		fmt.Fprintf(&buf, "}\n\n")
+		fmt.Fprintf(&buf, "func (n *%s) GetLabel() *Label {\n", typeName)
+		if hasLabel {
+			fmt.Fprintf(&buf, "\treturn n.Label\n")
 		} else {
 			fmt.Fprintf(&buf, "\treturn nil\n")
 		}

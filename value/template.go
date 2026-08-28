@@ -272,6 +272,9 @@ func (n *TemplateUpdate) SetLabel(label *Label) *Label {
 	n.Label = label
 	return old
 }
+func (n *TemplateUpdate) GetLabel() *Label {
+	return n.Label
+}
 
 // Templated is the reified per-scope template: one wrapper per set/show scope,
 // recording the rules that apply to Body (the remaining siblings after the
@@ -338,4 +341,7 @@ func (n *Templated) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+func (n *Templated) GetLabel() *Label {
+	return n.Label
 }

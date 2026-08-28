@@ -14,6 +14,7 @@ type Content interface {
 	Value
 
 	SetLabel(*Label) *Label
+	GetLabel() *Label
 
 	Field(name.Name) Value
 	HasField(name.Name) bool

@@ -43,6 +43,10 @@ func (n *Document) SetLabel(label *Label) *Label {
 	return nil
 }
 
+func (n *Document) GetLabel() *Label {
+	return nil
+}
+
 func (n *Emph) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -81,6 +85,10 @@ func (n *Emph) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Emph) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *Enum) Field(name name.Name) Value {
@@ -125,6 +133,10 @@ func (n *Enum) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Enum) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *EnumItem) Field(name name.Name) Value {
@@ -177,6 +189,10 @@ func (n *EnumItem) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *EnumItem) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Equation) Field(name name.Name) Value {
 	switch name {
 	case names.Block:
@@ -220,6 +236,10 @@ func (n *Equation) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Equation) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *Heading) Field(name name.Name) Value {
@@ -267,6 +287,10 @@ func (n *Heading) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Heading) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Linebreak) Field(name name.Name) Value {
 	return nil
 }
@@ -280,6 +304,10 @@ func (n *Linebreak) Fields() *Dict {
 }
 
 func (n *Linebreak) SetLabel(label *Label) *Label {
+	return nil
+}
+
+func (n *Linebreak) GetLabel() *Label {
 	return nil
 }
 
@@ -328,6 +356,10 @@ func (n *Link) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Link) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *List) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -372,6 +404,10 @@ func (n *List) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *List) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *ListItem) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -410,6 +446,10 @@ func (n *ListItem) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *ListItem) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathAccent) Field(name name.Name) Value {
@@ -472,6 +512,10 @@ func (n *MathAccent) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathAccent) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathAlignPoint) Field(name name.Name) Value {
 	switch name {
 	case names.Label:
@@ -505,6 +549,10 @@ func (n *MathAlignPoint) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathAlignPoint) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathAttach) Field(name name.Name) Value {
@@ -567,6 +615,10 @@ func (n *MathAttach) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathAttach) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathCancel) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -617,6 +669,10 @@ func (n *MathCancel) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathCancel) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathCases) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -659,6 +715,10 @@ func (n *MathCases) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathCases) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathDelimited) Field(name name.Name) Value {
@@ -711,6 +771,10 @@ func (n *MathDelimited) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathDelimited) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathFrac) Field(name name.Name) Value {
 	switch name {
 	case names.Num:
@@ -754,6 +818,10 @@ func (n *MathFrac) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathFrac) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathMat) Field(name name.Name) Value {
@@ -804,6 +872,10 @@ func (n *MathMat) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathMat) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathPrimes) Field(name name.Name) Value {
 	switch name {
 	case names.Base:
@@ -847,6 +919,10 @@ func (n *MathPrimes) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathPrimes) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathRoot) Field(name name.Name) Value {
@@ -897,6 +973,10 @@ func (n *MathRoot) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathRoot) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathText) Field(name name.Name) Value {
@@ -969,6 +1049,10 @@ func (n *MathText) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathText) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *MathUnderline) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1007,6 +1091,10 @@ func (n *MathUnderline) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *MathUnderline) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *MathVec) Field(name name.Name) Value {
@@ -1053,6 +1141,10 @@ func (n *MathVec) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *MathVec) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Par) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1093,6 +1185,10 @@ func (n *Par) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Par) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Parbreak) Field(name name.Name) Value {
 	return nil
 }
@@ -1106,6 +1202,10 @@ func (n *Parbreak) Fields() *Dict {
 }
 
 func (n *Parbreak) SetLabel(label *Label) *Label {
+	return nil
+}
+
+func (n *Parbreak) GetLabel() *Label {
 	return nil
 }
 
@@ -1149,6 +1249,10 @@ func (n *Raw) Fields() *Dict {
 }
 
 func (n *Raw) SetLabel(label *Label) *Label {
+	return nil
+}
+
+func (n *Raw) GetLabel() *Label {
 	return nil
 }
 
@@ -1202,6 +1306,10 @@ func (n *Ref) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Ref) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Sequence) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -1246,6 +1354,10 @@ func (n *Sequence) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Sequence) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Strong) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1284,6 +1396,10 @@ func (n *Strong) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Strong) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *Table) Field(name name.Name) Value {
@@ -1328,6 +1444,10 @@ func (n *Table) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Table) GetLabel() *Label {
+	return n.Label
 }
 
 func (n *TermItem) Field(name name.Name) Value {
@@ -1375,6 +1495,10 @@ func (n *TermItem) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *TermItem) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Terms) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -1419,6 +1543,10 @@ func (n *Terms) SetLabel(label *Label) *Label {
 	return old
 }
 
+func (n *Terms) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Text) Field(name name.Name) Value {
 	switch name {
 	case names.Text:
@@ -1457,4 +1585,8 @@ func (n *Text) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
+}
+
+func (n *Text) GetLabel() *Label {
+	return n.Label
 }

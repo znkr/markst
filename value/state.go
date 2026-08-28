@@ -62,3 +62,6 @@ func (n *StateUpdate) SetLabel(label *Label) *Label {
 	n.Label = label
 	return old
 }
+func (n *StateUpdate) GetLabel() *Label {
+	return n.Label
+}
