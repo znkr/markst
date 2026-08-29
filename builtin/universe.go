@@ -33,6 +33,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Fraction:   reflectedTypes[types.Fraction],
 	names.Function:   reflectedTypes[types.Function],
 	names.Heading:    Heading,
+	names.Image:      Image,
 	names.Int:        reflectedTypes[types.Int],
 	names.Label:      reflectedTypes[types.Label],
 	names.Linebreak:  Linebreak,

@@ -178,6 +178,27 @@ func linkImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 	return &value.Link{Dest: string(args[0].(value.Str)), Body: args[1].(value.Content)}, nil
 }
 
+// Image is a picture loaded from a file; it builds a [value.Image]. The path is
+// left as written — resolving it against the document root is the presenter's
+// job — and `alt` carries the alternative description for assistive technology.
+var Image = value.NewElement[*value.Image](value.Function{
+	Name: "image",
+	Positional: []value.Param{
+		{Name: "path", Type: types.SetOf(types.Str)},
+	},
+	Named: value.NamedParams{
+		names.Alt: {Name: "alt", Type: types.SetOf(types.Str), Default: value.Str("")},
+	},
+	F: imageImpl,
+})
+
+func imageImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.Image{
+		Path: string(args[0].(value.Str)),
+		Alt:  string(named.Get(names.Alt).(value.Str)),
+	}, nil
+}
+
 // Ref is a cross-reference to a label; it builds a [value.Ref].
 var Ref = value.NewElement[*value.Ref](value.Function{
 	Name: "ref",

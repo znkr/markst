@@ -291,6 +291,60 @@ func (n *Heading) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Image) Field(name name.Name) Value {
+	switch name {
+	case names.Path:
+		return Str(n.Path)
+	case names.Alt:
+		if n.Alt == "" {
+			return nil
+		}
+		return Str(n.Alt)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Image) HasField(name name.Name) bool {
+	switch name {
+	case names.Path:
+		return true
+	case names.Alt:
+		return n.Alt != ""
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Image) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Path.String()), n.Field(names.Path))
+	if f := n.Field(names.Alt); f != nil {
+		fields.Elems.Put(Str(names.Alt.String()), f)
+	}
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Image) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *Image) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Linebreak) Field(name name.Name) Value {
 	return nil
 }

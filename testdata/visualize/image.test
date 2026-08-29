@@ -1,0 +1,67 @@
+// Tests for the image element. An image carries only the path it was written
+// with — resolving it against the document root is the presenter's job — and an
+// optional alternative description for assistive technology.
+
+--- image-basic ---
+#image("cat.png")
+│ #document[#par[#image("cat.png")]]
+
+--- image-alt ---
+#image("cat.png", alt: "A sleeping cat")
+│ #document[
+│   #par[
+│     #image(
+│       "cat.png",
+│       alt: "A sleeping cat",
+│     )
+│   ]
+│ ]
+
+--- image-inline ---
+// An image is inline: it shares the paragraph with the text around it.
+Look at #image("cat.png") — cute.
+│ #document[
+│   #par[Look at #image("cat.png") — cute.]
+│ ]
+
+--- image-fields ---
+#test(image("cat.png").path, "cat.png")
+#test(image("cat.png", alt: "A cat").alt, "A cat")
+│ #document[]
+
+--- image-alt-unset ---
+// An unset alt is absent, not an empty string.
+// Error: 19-22 content does not have field "alt"
+#image("cat.png").alt
+
+--- image-equality ---
+#test(image("a.png") == image("a.png"), true)
+#test(image("a.png") == image("b.png"), false)
+#test(image("a.png", alt: "x") == image("a.png"), false)
+│ #document[]
+
+--- image-label ---
+#test([#image("cat.png")<cat>].label, <cat>)
+│ #document[]
+
+--- image-show-rule ---
+#show image: it => [a picture of #it.path]
+#image("cat.png")
+│ #document[#par[#par[a picture of cat.png]]]
+
+--- image-missing-path ---
+// Error: 2-9 missing argument: path
+#image()
+
+--- image-path-wrong-type ---
+// Error: 8-9 expected string, found integer
+#image(1)
+
+--- image-alt-wrong-type ---
+// Error: 24-25 expected string, found integer
+#image("cat.png", alt: 1)
+
+--- image-unknown-argument ---
+// Only the path and the alternative description are modeled so far.
+// Error: 19-27 unexpected argument: width
+#image("cat.png", width: 1)

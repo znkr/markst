@@ -537,6 +537,14 @@ func (n *Table) Format(f *formatter.Formatter) {
 	f.FuncCall("table", args)
 }
 
+func (n *Image) Format(f *formatter.Formatter) {
+	args := []formatter.Arg{formatter.PositionalArg(n.Path)}
+	if n.Alt != "" {
+		args = append(args, formatter.NamedArg("alt", n.Alt))
+	}
+	f.FuncCall("image", args)
+}
+
 func (n *Document) Format(f *formatter.Formatter) {
 	f.Prefix()
 	f.Str("document")
