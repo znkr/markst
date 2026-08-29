@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/woodsbury/decimal128"
 	"znkr.io/writst/syntax"
@@ -196,6 +197,16 @@ var unaryops = map[unaryopKey]func(x Value) (Value, error){
 		return Relative{Ratio: -r.Ratio, Length: Length{Pt: -r.Length.Pt, Em: -r.Length.Em}}, nil
 	},
 	{syntax.Pos, types.Relative}: func(x Value) (Value, error) {
+		return x, nil
+	},
+	{syntax.Neg, types.Duration}: func(x Value) (Value, error) {
+		d, ok := x.(Duration).Neg()
+		if !ok {
+			return Duration{}, ErrValueTooLarge
+		}
+		return d, nil
+	},
+	{syntax.Pos, types.Duration}: func(x Value) (Value, error) {
 		return x, nil
 	},
 }
@@ -601,6 +612,191 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 		result := slices.Repeat([]Content{c}, int(times))
 		return &Sequence{Children: result}, nil
 	},
+
+	// Datetime and duration operations
+	{syntax.Sub, types.Datetime, types.Datetime}: func(x, y Value) (Value, error) {
+		a, b := x.(Datetime), y.(Datetime)
+		if a.Kind != b.Kind {
+			return nil, fmt.Errorf("cannot subtract %s from %s", datetimeShape(b), datetimeShape(a))
+		}
+		// time.Time.Sub answers in a bare time.Duration and saturates rather
+		// than admitting the span didn't fit, so the difference is taken in
+		// seconds and split into days and a remainder instead.
+		secs, ok := subNoOverflow(a.T.Unix(), b.T.Unix())
+		if !ok {
+			return Duration{}, ErrValueTooLarge
+		}
+		rest := time.Duration(secs%86400)*time.Second +
+			time.Duration(a.T.Nanosecond()-b.T.Nanosecond())
+		d, ok := normalizeDuration(secs/86400, rest)
+		if !ok {
+			return Duration{}, ErrValueTooLarge
+		}
+		return d, nil
+	},
+	{syntax.Add, types.Datetime, types.Duration}: func(x, y Value) (Value, error) {
+		return shiftDatetime(x.(Datetime), y.(Duration))
+	},
+	{syntax.Add, types.Duration, types.Datetime}: func(x, y Value) (Value, error) {
+		return shiftDatetime(y.(Datetime), x.(Duration))
+	},
+	{syntax.Sub, types.Datetime, types.Duration}: func(x, y Value) (Value, error) {
+		by, ok := y.(Duration).Neg()
+		if !ok {
+			return nil, ErrValueTooLarge
+		}
+		return shiftDatetime(x.(Datetime), by)
+	},
+	{syntax.Add, types.Duration, types.Duration}: func(x, y Value) (Value, error) {
+		a, b := x.(Duration), y.(Duration)
+		days, ok := addNoOverflow(a.Days, b.Days)
+		if !ok {
+			return Duration{}, ErrValueTooLarge
+		}
+		return normalizeOrTooLarge(days, a.Time+b.Time)
+	},
+	{syntax.Sub, types.Duration, types.Duration}: func(x, y Value) (Value, error) {
+		a, b := x.(Duration), y.(Duration)
+		days, ok := subNoOverflow(a.Days, b.Days)
+		if !ok {
+			return Duration{}, ErrValueTooLarge
+		}
+		return normalizeOrTooLarge(days, a.Time-b.Time)
+	},
+	{syntax.Mul, types.Duration, types.Int}: func(x, y Value) (Value, error) {
+		return scaleDuration(x.(Duration), float64(y.(Int)))
+	},
+	{syntax.Mul, types.Duration, types.Float}: func(x, y Value) (Value, error) {
+		return scaleDuration(x.(Duration), float64(y.(Float)))
+	},
+	{syntax.Mul, types.Int, types.Duration}: func(x, y Value) (Value, error) {
+		return scaleDuration(y.(Duration), float64(x.(Int)))
+	},
+	{syntax.Mul, types.Float, types.Duration}: func(x, y Value) (Value, error) {
+		return scaleDuration(y.(Duration), float64(x.(Float)))
+	},
+	{syntax.Div, types.Duration, types.Int}: func(x, y Value) (Value, error) {
+		if y.(Int) == 0 {
+			return Duration{}, fmt.Errorf("cannot divide by zero")
+		}
+		return divideDuration(x.(Duration), float64(y.(Int)))
+	},
+	{syntax.Div, types.Duration, types.Float}: func(x, y Value) (Value, error) {
+		f := float64(y.(Float))
+		if f == 0 {
+			return Duration{}, fmt.Errorf("cannot divide by zero")
+		}
+		return divideDuration(x.(Duration), f)
+	},
+	{syntax.Div, types.Duration, types.Duration}: func(x, y Value) (Value, error) {
+		b := y.(Duration)
+		if b == (Duration{}) {
+			return Float(0), fmt.Errorf("cannot divide by zero")
+		}
+		return Float(x.(Duration).Seconds() / b.Seconds()), nil
+	},
+}
+
+// normalizeOrTooLarge is [normalizeDuration] with the overflow reported the
+// way the operator table wants it.
+func normalizeOrTooLarge(days int64, rest time.Duration) (Value, error) {
+	d, ok := normalizeDuration(days, rest)
+	if !ok {
+		return Duration{}, ErrValueTooLarge
+	}
+	return d, nil
+}
+
+// scaleDuration multiplies a duration by a factor.
+func scaleDuration(d Duration, by float64) (Value, error) {
+	return durationFromParts(float64(d.Days)*by, float64(d.Time)*by)
+}
+
+// divideDuration divides a duration by a divisor.
+//
+// It divides both halves rather than handing scaleDuration the reciprocal:
+// 1/by is itself rarely exact, and the second rounding that introduces costs a
+// nanosecond on divisions that ought to come out even — duration(seconds: 49)
+// / 49 would land just short of a second.
+func divideDuration(d Duration, by float64) (Value, error) {
+	return durationFromParts(float64(d.Days)/by, float64(d.Time)/by)
+}
+
+// durationFromParts assembles a scaled day count and remainder back into a
+// duration, reporting [ErrValueTooLarge] instead of wrapping when the result no
+// longer fits.
+//
+// The two halves are scaled apart so that neither has to fit in the other's
+// range: whole days as a count of days, the remainder in nanoseconds, with
+// whole days carried out of the remainder before it has to be a time.Duration
+// again.
+func durationFromParts(days, rest float64) (Value, error) {
+	if carry := math.Trunc(rest / float64(day)); carry != 0 {
+		days += carry
+		rest -= carry * float64(day)
+	}
+	whole := math.Trunc(days)
+	rest += (days - whole) * float64(day)
+	// The upper bound has to be exclusive: math.MaxInt64 rounds up to 2^63 as
+	// a float64, which is one past what an int64 holds, and converting an
+	// out-of-range float is implementation-defined (it saturates on arm64 and
+	// wraps to the most negative int64 on amd64). math.MinInt64 needs no such
+	// care — it is exactly representable, so the lower bound stays inclusive.
+	if math.IsNaN(whole) || whole >= 1<<63 || whole < math.MinInt64 {
+		return Duration{}, ErrValueTooLarge
+	}
+	return normalizeOrTooLarge(int64(whole), time.Duration(rest))
+}
+
+// shiftDatetime moves d by the given duration.
+//
+// The day count is applied as calendar days and the remainder as elapsed time,
+// so a shift lands on the day it names whatever the months in between are
+// long. A time-only value has no date to roll over into, so it wraps around
+// midnight. A date-only value is shifted at full precision rather than in
+// whole days: one moved by part of a day gains a time of day, and only one
+// that lands back on midnight stays a plain date.
+func shiftDatetime(d Datetime, by Duration) (Value, error) {
+	if by.Days > maxShiftDays || by.Days < -maxShiftDays {
+		return nil, ErrValueTooLarge
+	}
+	// A datetime holds whole seconds, so a sub-second remainder in the span
+	// has nowhere to land. Dropping it here rather than letting AddDate carry
+	// it into T keeps two datetimes that print the same comparing equal.
+	by.Time = by.Time.Truncate(time.Second)
+	t := d.T.AddDate(0, 0, int(by.Days)).Add(by.Time)
+	// time.Time wraps silently at the far ends of its range, and a shift that
+	// moved the wrong way is the tell.
+	if by != (Duration{}) && (by.Days > 0 || (by.Days == 0 && by.Time > 0)) != t.After(d.T) {
+		return nil, ErrValueTooLarge
+	}
+	switch d.Kind {
+	case TimeOnly:
+		t = time.Date(0, 1, 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+	case DateOnly:
+		midnight := t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0
+		if !midnight {
+			return Datetime{T: t, Kind: DateAndTime}, nil
+		}
+	}
+	return Datetime{T: t, Kind: d.Kind}, nil
+}
+
+// maxShiftDays is the widest day count [shiftDatetime] will apply. A time.Time
+// holds seconds in an int64, so anything past this cannot land anywhere real.
+const maxShiftDays = math.MaxInt64 / (24 * 60 * 60)
+
+// datetimeShape names the half of the calendar a datetime covers, for error
+// messages about operations that need two values of the same shape.
+func datetimeShape(d Datetime) string {
+	switch d.Kind {
+	case DateOnly:
+		return "a date"
+	case TimeOnly:
+		return "a time"
+	default:
+		return "a datetime"
+	}
 }
 
 var cmpops = map[types.Type]func(x, y Value) (int, error){
@@ -654,6 +850,14 @@ var cmpops = map[types.Type]func(x, y Value) (int, error){
 	types.Fraction: func(x, y Value) (int, error) { return cmp.Compare(x.(Fraction), y.(Fraction)), nil },
 	types.Str:      func(x, y Value) (int, error) { return cmp.Compare(x.(Str), y.(Str)), nil },
 	types.Bytes:    func(x, y Value) (int, error) { return cmp.Compare(x.(Bytes), y.(Bytes)), nil },
+	types.Datetime: func(x, y Value) (int, error) {
+		a, b := x.(Datetime), y.(Datetime)
+		if a.Kind != b.Kind {
+			return 0, fmt.Errorf("cannot compare %s with %s", datetimeShape(a), datetimeShape(b))
+		}
+		return a.T.Compare(b.T), nil
+	},
+	types.Duration: func(x, y Value) (int, error) { return x.(Duration).Compare(y.(Duration)), nil },
 }
 
 func init() {

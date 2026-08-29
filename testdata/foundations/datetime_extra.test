@@ -1,0 +1,65 @@
+--- datetime-parse-date ---
+// Test parsing dates from strings.
+#test(datetime.parse_date("2023-04-29"), datetime(year: 2023, month: 4, day: 29))
+#test(datetime.parse_date("2023-04-29").display(), "2023-04-29")
+#test(datetime.parse_date("2024-02-29").day(), 29)
+#test(datetime.parse_date("0000-01-01").year(), 0)
+
+// A parsed date carries no time of day.
+#test(datetime.parse_date("2023-04-29").hour(), none)
+#test(datetime.parse_date("2023-04-29").weekday(), 6)
+#test(datetime.parse_date("2023-04-29") - datetime.parse_date("2023-04-27"), duration(days: 2))
+│ #document[]
+
+--- datetime-parse-date-unpadded ---
+// Error: 22-32 invalid date: "2023-4-9"
+// Hint: 22-32 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#datetime.parse_date("2023-4-9")
+
+--- datetime-parse-date-day-out-of-range ---
+// Error: 22-34 invalid date: "2023-02-30"
+// Hint: 22-34 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#datetime.parse_date("2023-02-30")
+
+--- datetime-parse-date-month-out-of-range ---
+// Error: 22-34 invalid date: "2023-13-01"
+// Hint: 22-34 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#datetime.parse_date("2023-13-01")
+
+--- datetime-parse-date-trailing-text ---
+// Error: 22-43 invalid date: "2023-04-29 14:26:50"
+// Hint: 22-43 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#datetime.parse_date("2023-04-29 14:26:50")
+
+--- datetime-parse-date-empty ---
+// Error: 22-24 invalid date: ""
+// Hint: 22-24 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#datetime.parse_date("")
+
+--- datetime-parse-date-bad-type ---
+// Error: 22-30 expected string, found integer
+#datetime.parse_date(20230429)
+
+--- datetime-shift-drops-sub-second ---
+// A datetime holds whole seconds, so a sub-second remainder in the span has
+// nowhere to land — and two datetimes that print the same must compare equal.
+#let d = datetime(year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0)
+#test(d + duration(seconds: 1) / 2, d)
+#test(d - duration(seconds: 1) / 2, d)
+#test(
+  datetime(year: 2024, month: 1, day: 1) + duration(seconds: 1) / 2,
+  datetime(year: 2024, month: 1, day: 1),
+)
+│ #document[]
+
+--- datetime-year-last-two-has-no-sign ---
+// The last two digits stand on their own: with the century gone, a sign in
+// front of them would name nothing, so `sign` doesn't reach them.
+#let bc = datetime(year: -44, month: 3, day: 15)
+#let ad = datetime(year: 44, month: 3, day: 15)
+#test(bc.display("[year repr:last_two sign:mandatory]"), "44")
+#test(bc.display("[year repr:last_two]"), "44")
+#test(ad.display("[year repr:last_two sign:mandatory]"), "44")
+#test(bc.display("[year sign:mandatory]"), "-0044")
+#test(ad.display("[year sign:mandatory]"), "+0044")
+│ #document[]

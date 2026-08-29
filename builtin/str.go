@@ -14,7 +14,17 @@ var (
 	Str = &value.Function{
 		Name: "str",
 		Positional: []value.Param{
-			{Name: "value", Type: types.Any},
+			// Only the types strImpl knows how to render. types.Any would
+			// accept everything and then panic on whatever has no case.
+			{Name: "value", Type: types.SetOf(
+				types.Int,
+				types.Float,
+				types.Decimal,
+				types.Str,
+				types.Bytes,
+				types.Label,
+				types.ReflectedType,
+			)},
 		},
 		F: strImpl,
 	}
@@ -63,6 +73,8 @@ var (
 
 func strImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	switch v := args[0].(type) {
+	case value.Str:
+		return v, nil
 	case value.Bytes:
 		return value.Str(v), nil
 	case value.Int:
@@ -88,6 +100,8 @@ func strImpl(_ *value.FunctionCallContext, args []value.Value, named value.Named
 	case *value.Type:
 		return value.Str(v.Reflected.String()), nil
 	default:
+		// The parameter's type set is the guard; anything else is a bug in
+		// keeping the two in step.
 		panic("unexpected type: " + v.Type().String())
 	}
 }

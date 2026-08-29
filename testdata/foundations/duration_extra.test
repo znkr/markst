@@ -1,0 +1,90 @@
+--- duration-canonical-form ---
+// The day count and the sub-day remainder are carried and sign-matched, so
+// spans of equal length are equal however they were written.
+#test(duration(weeks: 1, hours: -1), duration(days: 6, hours: 23))
+#test(duration(hours: 49), duration(days: 2, hours: 1))
+#test(duration(days: -1, hours: 1), duration(hours: -23))
+#test(duration(days: 1) - duration(hours: 1), duration(hours: 23))
+#test(duration(minutes: 1500), duration(days: 1, hours: 1))
+│ #document[]
+
+--- duration-wide-spans ---
+// Days are counted as days, so a span stays exact well past the ~292 years a
+// nanosecond count can hold.
+#test(
+  (datetime(year: 2000, month: 1, day: 1) - datetime(year: 1000, month: 1, day: 1)).days(),
+  365242.0,
+)
+#test(
+  datetime(year: 1000, month: 1, day: 1) + duration(days: 365242),
+  datetime(year: 2000, month: 1, day: 1),
+)
+#test(duration(weeks: 100000).days(), 700000.0)
+#test(
+  datetime(year: 1, month: 1, day: 1) + duration(days: 3652058),
+  datetime(year: 9999, month: 12, day: 31),
+)
+│ #document[]
+
+--- duration-leap-days ---
+// Shifting by whole days walks the calendar, so a leap day is a day like any
+// other and a 365-day year is not always a year.
+#test(
+  datetime(year: 2024, month: 2, day: 28) + duration(days: 1),
+  datetime(year: 2024, month: 2, day: 29),
+)
+#test(
+  datetime(year: 2023, month: 2, day: 28) + duration(days: 1),
+  datetime(year: 2023, month: 3, day: 1),
+)
+#test(
+  datetime(year: 2024, month: 1, day: 1) + duration(days: 365),
+  datetime(year: 2024, month: 12, day: 31),
+)
+#test(
+  datetime(year: 2023, month: 1, day: 1) + duration(days: 365),
+  datetime(year: 2024, month: 1, day: 1),
+)
+│ #document[]
+
+--- duration-sub-second ---
+// Nothing in the constructor is finer than a second, but division can be.
+#test((duration(seconds: 1) / 2).seconds(), 0.5)
+#test(duration(seconds: 1) / 2 + duration(seconds: 1) / 2, duration(seconds: 1))
+#test((duration(seconds: 1) / 2) * 2, duration(seconds: 1))
+#test(duration(seconds: 1) / 2 > duration(), true)
+│ #document[]
+
+--- duration-too-large ---
+// Error: 3-42 value is too large
+#(duration(days: 9223372036854775807) * 2)
+
+--- duration-shift-too-large ---
+// Error: 3-76 value is too large
+#(datetime(year: 2000, month: 1, day: 1) + duration(weeks: 100000000000000))
+
+--- duration-division-is-exact ---
+// Dividing divides both halves rather than scaling by 1/n: the reciprocal is
+// rarely exact, and rounding twice leaves these a nanosecond short.
+#test(duration(seconds: 49) / 49, duration(seconds: 1))
+#test(duration(days: 49) / 49, duration(days: 1))
+#test(duration(seconds: 103) / 103, duration(seconds: 1))
+#test(duration(minutes: 107) / 107, duration(minutes: 1))
+#test(duration(weeks: 1) / 7, duration(days: 1))
+#test(duration(days: -49) / 49, duration(days: -1))
+│ #document[]
+
+--- duration-scale-just-past-the-day-count ---
+// float64 rounds the widest day count up to 2^63, which is one past it, so the
+// overflow bound has to reject that value rather than convert it.
+// Error: 3-44 value is too large
+#(duration(days: 1) * 9223372036854775808.0)
+
+--- duration-neg-most-negative ---
+// The day count reaches one step further below zero than above it, so the most
+// negative duration has no positive counterpart.
+#{
+  let d = duration(days: -9223372036854775807) - duration(days: 1)
+  // Error: 3-5 value is too large
+  -d
+}

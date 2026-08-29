@@ -129,6 +129,18 @@ func (n Bytes) Format(f *formatter.Formatter) {
 	f.Str(")")
 }
 
+// Dates ///////////////////////////////////////////////////////////////////////
+
+func (n Datetime) Format(f *formatter.Formatter) {
+	f.Prefix()
+	f.Str(n.String())
+}
+
+func (n Duration) Format(f *formatter.Formatter) {
+	f.Prefix()
+	f.Str(n.String())
+}
+
 // Symbols /////////////////////////////////////////////////////////////////////
 
 func (n *Symbol) Format(f *formatter.Formatter) {

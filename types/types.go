@@ -43,6 +43,8 @@ const (
 	Error
 	State
 	Selector
+	Datetime
+	Duration
 )
 
 var types = [...]string{
@@ -71,6 +73,8 @@ var types = [...]string{
 	Error:         "error",
 	State:         "state",
 	Selector:      "selector",
+	Datetime:      "datetime",
+	Duration:      "duration",
 }
 
 func (t Type) String() string {
@@ -111,6 +115,8 @@ var Any = SetOf(
 	Module,
 	State,
 	Selector,
+	Datetime,
+	Duration,
 )
 
 // SetOf creates a Set containing the given types.

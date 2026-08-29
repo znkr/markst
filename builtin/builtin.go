@@ -107,6 +107,10 @@ func reprImpl(_ *value.FunctionCallContext, args []value.Value, named value.Name
 	case value.Decimal:
 		s := v.String()
 		return value.Str(fmt.Sprintf("decimal(\"%s\")", s)), nil
+	case value.Datetime:
+		return value.Str(v.String()), nil
+	case value.Duration:
+		return value.Str(v.String()), nil
 	case *value.Array:
 		elems := make([]string, len(v.Elems))
 		for i, e := range v.Elems {

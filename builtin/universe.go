@@ -22,8 +22,10 @@ var stdDef = value.SimpleModuleDef{
 	names.Bytes:      reflectedTypes[types.Bytes],
 	names.Calc:       Calc,
 	names.Content:    reflectedTypes[types.Content],
+	names.Datetime:   reflectedTypes[types.Datetime],
 	names.Decimal:    reflectedTypes[types.Decimal],
 	names.Document:   Document,
+	names.Duration:   reflectedTypes[types.Duration],
 	names.Emoji:      Emoji,
 	names.Emph:       Emph,
 	names.Enum:       Enum,
@@ -119,6 +121,14 @@ var reflectedTypes = [...]*value.Type{
 		Constructor: Label,
 	},
 	types.State: {Reflected: types.State},
+	types.Datetime: {
+		Reflected:   types.Datetime,
+		Constructor: Datetime,
+	},
+	types.Duration: {
+		Reflected:   types.Duration,
+		Constructor: Duration,
+	},
 }
 
 // TypeFields maps each type to its available methods and fields. When a field
@@ -207,5 +217,25 @@ var TypeFields = [...]map[name.Name]value.Value{
 	types.Content: {},
 	types.State: {
 		names.Update: StateUpdate,
+	},
+	types.Datetime: {
+		names.Day:       DatetimeDay,
+		names.Display:   DatetimeDisplay,
+		names.Hour:      DatetimeHour,
+		names.Minute:    DatetimeMinute,
+		names.Month:     DatetimeMonth,
+		names.Ordinal:   DatetimeOrdinal,
+		names.ParseDate: DatetimeParseDate,
+		names.Second:    DatetimeSecond,
+		names.Today:     DatetimeToday,
+		names.Weekday:   DatetimeWeekday,
+		names.Year:      DatetimeYear,
+	},
+	types.Duration: {
+		names.Days:    DurationDays,
+		names.Hours:   DurationHours,
+		names.Minutes: DurationMinutes,
+		names.Seconds: DurationSeconds,
+		names.Weeks:   DurationWeeks,
 	},
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"znkr.io/diff/textdiff"
 	"znkr.io/writst/eval"
@@ -21,6 +22,12 @@ import (
 )
 
 var update = flag.Bool("update", false, "update golden files")
+
+// testNow is the instant the corpus is evaluated at. `datetime.today()` reads
+// the current date off it, so tests that print today's date have something
+// stable to expect. Noon on the epoch is deliberate: it leaves room on both
+// sides of the day boundary for the offsets the datetime tests apply.
+var testNow = time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 
 func TestWritst(t *testing.T) {
 	files, err := filepath.Glob("testdata/**/*.test")
@@ -66,7 +73,7 @@ func TestWritst(t *testing.T) {
 
 					root := parser.Parse(tc.Input)
 					mod = analyzer.Analyze(root, analyzer.WithBindings(bindings))
-					contents, warnings, errors := eval.Eval(mod)
+					contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
 
 					if diff := errcmp.Diff(root, evalErrors(warnings, errors)); diff != "" {
 						t.Errorf("error mismatch (-want +got):\n%s", diff)
@@ -133,7 +140,7 @@ func TestApproximationsPreserveOutput(t *testing.T) {
 	render := func(src string, opts ...analyzer.Option) string {
 		root := parser.Parse(src)
 		mod := analyzer.Analyze(root, append([]analyzer.Option{analyzer.WithBindings(bindings)}, opts...)...)
-		contents, warnings, errors := eval.Eval(mod)
+		contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
 		var sb strings.Builder
 		if contents != nil {
 			sb.WriteString(value.FormatContent(contents))

@@ -37,6 +37,10 @@ func ToContent(v Value) (Content, error) {
 			s = d.String()
 		}
 		return &Raw{Text: s}, nil
+	case Datetime:
+		return &Raw{Text: v.String()}, nil
+	case Duration:
+		return &Raw{Text: v.String()}, nil
 	case *Array:
 		return &Raw{Text: FormatValue(v)}, nil
 	case *Dict:

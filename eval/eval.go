@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
@@ -17,12 +18,25 @@ import (
 	"znkr.io/writst/value"
 )
 
+// Option configures an [Eval] run.
+type Option func(*session)
+
+// WithNow fixes the instant the document is rendered at — what `datetime.today`
+// reads the current date off. Without it the system clock is used; passing a
+// fixed instant makes a render reproducible.
+func WithNow(t time.Time) Option {
+	return func(s *session) { s.now = t }
+}
+
 // Eval evaluates an SSA [Module] and returns the resulting document
 // [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
 // are returned separately. Free names in the module have already been
 // resolved to constants by the analyzer, so Eval needs no scope of its own.
-func Eval(mod *expr.Module) (doc *value.Document, warn []Error, err []Error) {
+func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, err []Error) {
 	s := &session{mod: mod}
+	for _, opt := range opts {
+		opt(s)
+	}
 
 	// Parse errors are diagnostics on the source, reported regardless of
 	// which code paths run — and this is their only reporting channel: the
@@ -74,6 +88,11 @@ const maxCallDepth = 64
 type session struct {
 	mod    *expr.Module
 	labels map[name.Name]struct{}
+
+	// now is the instant the document is rendered at, handed to every builtin
+	// through [value.FunctionCallContext]. The zero value means the builtins
+	// that care read the system clock themselves.
+	now time.Time
 
 	// callDepth counts the number of user-closure calls currently on the stack.
 	// Incremented on entry to a closure in [frame.evalCall] and decremented on
@@ -1560,7 +1579,7 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		defer func() { fr.s.callDepth-- }()
 	}
 
-	fcc := value.FunctionCallContext{Span: fr.span(c.Result())}
+	fcc := value.FunctionCallContext{Span: fr.span(c.Result()), Now: fr.s.now}
 	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
 		return fr.applyErr(fn, fr.span(c.Result()), c.Args, err)
@@ -1605,7 +1624,7 @@ func (fr *frame) evalCallSet(c *expr.CallSet) {
 	}
 
 	var setter func(value.Value)
-	fcc := value.FunctionCallContext{Span: c.Span(), Setter: &setter}
+	fcc := value.FunctionCallContext{Span: c.Span(), Setter: &setter, Now: fr.s.now}
 	cur, err := fn.Apply(&fcc, &args)
 	if err != nil {
 		fr.applyErr(fn, c.Span(), c.Args, err)

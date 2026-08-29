@@ -3,6 +3,7 @@ package value
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
@@ -321,6 +322,13 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 // implementations.
 type FunctionCallContext struct {
 	Span syntax.Span
+
+	// Now is the instant the document is being rendered at, which
+	// `datetime.today` reads the current date off. It is threaded through the
+	// call context rather than read from the clock so that a render is
+	// reproducible: two evaluations of the same source with the same Now
+	// produce the same document. A zero value means "read the clock".
+	Now time.Time
 
 	// Setter can be set by the function to support assignment to the result of
 	// a function call, e.g. array.at(). This is a bit of a hack and there's

@@ -1,0 +1,25 @@
+--- str-accepts-what-it-renders ---
+// The parameter's type set is what keeps str's conversion switch total, so it
+// has to name every type the switch handles and nothing else.
+#test(str("hi"), "hi")
+#test(str(bytes("hi")), "hi")
+#test(str(42), "42")
+#test(str(-42), "−42")
+#test(str(4.5), "4.5")
+#test(str(-4.5), "−4.5")
+#test(str(decimal("1.5")), "1.5")
+#test(str(<hey>), "hey")
+#test(str(type(1)), "integer")
+│ #document[]
+
+--- str-rejects-duration ---
+// Error: 6-24 expected type, integer, float, decimal, string, bytes, or label, found duration
+#str(duration(hours: 1))
+
+--- str-rejects-datetime ---
+// Error: 6-44 expected type, integer, float, decimal, string, bytes, or label, found datetime
+#str(datetime(year: 2024, month: 1, day: 1))
+
+--- str-rejects-array ---
+// Error: 6-12 expected type, integer, float, decimal, string, bytes, or label, found array
+#str((1, 2))

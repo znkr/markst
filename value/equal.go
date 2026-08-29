@@ -115,6 +115,19 @@ func (n Angle) Equal(other Value) bool {
 	return ok && n == o
 }
 
+// Dates ///////////////////////////////////////////////////////////////////////
+
+func (n Datetime) Equal(other Value) bool {
+	o, ok := other.(Datetime)
+	return ok && n.Kind == o.Kind && n.T.Equal(o.T)
+}
+
+func (n Duration) Equal(other Value) bool {
+	o, ok := other.(Duration)
+	// Both are in canonical form, so equal lengths are equal field by field.
+	return ok && n == o
+}
+
 // Collections /////////////////////////////////////////////////////////////////
 
 // argumentsArrayEqual reports whether a positional-only arguments value equals

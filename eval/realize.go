@@ -527,7 +527,7 @@ func (s *session) applyTransform(node value.Content, transform value.Value) valu
 }
 
 func (s *session) callTransform(fn *value.Function, node value.Content) value.Content {
-	res, err := fn.Apply(&value.FunctionCallContext{}, &value.Arguments{Positional: []value.Value{node}})
+	res, err := fn.Apply(&value.FunctionCallContext{Now: s.now}, &value.Arguments{Positional: []value.Value{node}})
 	if err != nil {
 		s.recordError(&value.Error{Msg: err.Error()})
 		return node
