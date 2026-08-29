@@ -72,6 +72,7 @@ var (
 	Frak        = name.Make("frak")
 	FromBytes   = name.Make("from-bytes")
 	Function    = name.Make("function")
+	Footnote    = name.Make("footnote")
 	Gap         = name.Make("gap")
 	Heading     = name.Make("heading")
 	Hour        = name.Make("hour")

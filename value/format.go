@@ -537,6 +537,10 @@ func (n *Table) Format(f *formatter.Formatter) {
 	f.FuncCall("table", args)
 }
 
+func (n *Footnote) Format(f *formatter.Formatter) {
+	f.FuncCall("footnote", nil, contentBlock{n.Body})
+}
+
 func (n *Image) Format(f *formatter.Formatter) {
 	args := []formatter.Arg{formatter.PositionalArg(n.Path)}
 	if n.Alt != "" {

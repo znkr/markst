@@ -137,6 +137,11 @@ type Table struct {
 	Label    *Label
 }
 
+type Footnote struct {
+	Body  Content `writst:"required"`
+	Label *Label
+}
+
 // Image is a picture loaded from a file. Path names the file and is resolved by
 // the presenter, relative to whatever the presenter considers the document's
 // root. Alt is an alternative description for assistive technology; it is empty
@@ -286,6 +291,7 @@ func (*EnumItem) aValue()   {}
 func (*Terms) aValue()      {}
 func (*TermItem) aValue()   {}
 func (*Table) aValue()      {}
+func (*Footnote) aValue()   {}
 func (*Image) aValue()      {}
 func (*Document) aValue()   {}
 
@@ -323,6 +329,7 @@ func (*EnumItem) aContent()   {}
 func (*Terms) aContent()      {}
 func (*TermItem) aContent()   {}
 func (*Table) aContent()      {}
+func (*Footnote) aContent()   {}
 func (*Image) aContent()      {}
 func (*Document) aContent()   {}
 
@@ -363,6 +370,7 @@ func (*EnumItem) Name() string   { return "enum.item" }
 func (*Terms) Name() string      { return "terms" }
 func (*TermItem) Name() string   { return "terms.item" }
 func (*Table) Name() string      { return "table" }
+func (*Footnote) Name() string   { return "footnote" }
 func (*Image) Name() string      { return "image" }
 func (*Document) Name() string   { return "document" }
 
@@ -406,11 +414,10 @@ func (*EnumItem) IsBlock() bool   { return true }
 func (*Terms) IsBlock() bool      { return true }
 func (*TermItem) IsBlock() bool   { return true }
 func (*Table) IsBlock() bool      { return true }
+func (*Footnote) IsBlock() bool   { return false }
 func (*Image) IsBlock() bool      { return false }
 func (*Document) IsBlock() bool   { return true }
 
-// Math is inline by construction: [Equation.Block] decides how the equation as
-// a whole is laid out, and everything within it is a fragment of one line.
 func (n *Equation) IsBlock() bool     { return n.Block }
 func (*MathText) IsBlock() bool       { return false }
 func (*MathAttach) IsBlock() bool     { return false }
@@ -445,6 +452,7 @@ func (*EnumItem) Type() types.Type   { return types.Content }
 func (*Terms) Type() types.Type      { return types.Content }
 func (*TermItem) Type() types.Type   { return types.Content }
 func (*Table) Type() types.Type      { return types.Content }
+func (*Footnote) Type() types.Type   { return types.Content }
 func (*Image) Type() types.Type      { return types.Content }
 func (*Document) Type() types.Type   { return types.Content }
 

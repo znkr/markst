@@ -32,6 +32,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Float:      reflectedTypes[types.Float],
 	names.Fraction:   reflectedTypes[types.Fraction],
 	names.Function:   reflectedTypes[types.Function],
+	names.Footnote:   Footnote,
 	names.Heading:    Heading,
 	names.Image:      Image,
 	names.Int:        reflectedTypes[types.Int],

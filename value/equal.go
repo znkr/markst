@@ -459,6 +459,11 @@ func (n *Table) Equal(other Value) bool {
 	return true
 }
 
+func (n *Footnote) Equal(other Value) bool {
+	o, ok := other.(*Footnote)
+	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
+}
+
 func (n *Image) Equal(other Value) bool {
 	o, ok := other.(*Image)
 	return ok && n.Path == o.Path && n.Alt == o.Alt && labelEqual(n.Label, o.Label)

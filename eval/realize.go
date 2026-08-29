@@ -306,12 +306,12 @@ func trimRun(items []value.Content, left, right bool) []value.Content {
 }
 
 // edgeRight reports whether items[i] ends on an edge: the run's own end when
-// right is set, a neighbour that breaks the line, or nothing but space that is
+// right is set, a neighbor that breaks the line, or nothing but space that is
 // about to trim away on the same edge. [mergeText] leaves at most one Text
 // between two other items, so the scan takes a step or two.
 func edgeRight(items []value.Content, i int, right bool) bool {
 	for j := i + 1; j < len(items); j++ {
-		if breaksLine(items[j]) {
+		if breaksLine(items[j]) || isFootnote(items[j]) {
 			return true
 		}
 		if !spaceOnly(items[j]) {
@@ -398,6 +398,11 @@ func breaksLine(c value.Content) bool {
 		return true
 	}
 	return c.IsBlock()
+}
+
+func isFootnote(c value.Content) bool {
+	_, ok := c.(*value.Footnote)
+	return ok
 }
 
 func endsWithSpace(s string) bool {

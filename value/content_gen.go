@@ -242,6 +242,50 @@ func (n *Equation) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Footnote) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Footnote) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Footnote) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Footnote) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *Footnote) GetLabel() *Label {
+	return n.Label
+}
+
 func (n *Heading) Field(name name.Name) Value {
 	switch name {
 	case names.Depth:

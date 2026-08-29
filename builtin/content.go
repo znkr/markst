@@ -50,6 +50,18 @@ func tableImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedAr
 	return &value.Table{Children: children}, nil
 }
 
+var Footnote = value.NewElement[*value.Footnote](value.Function{
+	Name: "footnote",
+	Positional: []value.Param{
+		{Name: "body", Type: types.SetOf(types.Content)},
+	},
+	F: footnoteImpl,
+})
+
+func footnoteImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.Footnote{Body: args[0].(value.Content)}, nil
+}
+
 // Heading is the heading element; it builds a [value.Heading].
 var Heading = value.NewElement[*value.Heading](value.Function{
 	Name: "heading",
