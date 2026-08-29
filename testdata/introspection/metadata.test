@@ -1,0 +1,130 @@
+// Tests for `#metadata`, the element that carries a value through the document
+// without producing any output. It survives realization as an invisible leaf,
+// so it keeps its place; the label attached to it is what identifies it, and
+// znkr.io/writst.Query is what finds it again.
+//
+// Metadata is the one element whose label is printed below: without it there
+// would be no telling one entry from another.
+
+--- metadata-labelled ---
+#metadata("2024-02-29") <published>
+= Hello
+│ #document[
+│   #metadata("2024-02-29") <published>
+│   #heading(level: 1)[Hello]
+│ ]
+
+--- metadata-alone-makes-no-paragraph ---
+// A line holding nothing but metadata has no paragraph to make: wrapping it in
+// one would leave the presenter an empty paragraph to render.
+#metadata(1) <a>
+│ #document[#metadata(1) <a>]
+
+--- metadata-between-paragraphs ---
+First.
+
+#metadata(1) <a>
+
+Second.
+│ #document[
+│   #par[First.]
+│   #metadata(1) <a>
+│   #par[Second.]
+│ ]
+
+--- metadata-inside-paragraph ---
+// Metadata written mid-sentence stays in the paragraph, where it sits in the
+// document. It contributes no output, so the text around it reads unbroken.
+Hello #metadata(1) <a> world.
+│ #document[#par[Hello #metadata(1) <a> world.]]
+
+--- metadata-in-heading ---
+// A label at the end of a heading line names the heading, so the metadata here
+// is unlabelled; a content block gives it one of its own.
+= Hello #metadata(1) <heading-label>
+= World #[#metadata(2) <a>]
+│ #document[
+│   #heading(level: 1)[Hello #metadata(1)]
+│   #heading(level: 1)[World #metadata(2) <a>]
+│ ]
+
+--- metadata-in-list-item ---
+- first #metadata(1) <a>
+- second
+│ #document[
+│   #list(
+│     #list.item[#par[first #metadata(1) <a>]],
+│     #list.item[second],
+│   )
+│ ]
+
+--- metadata-unlabelled ---
+// An unlabelled entry is kept — dropping it would lose data — but nothing can
+// ask for it, since the label is what identifies it.
+#metadata("orphan")
+= Hello
+│ #document[
+│   #metadata("orphan")
+│   #heading(level: 1)[Hello]
+│ ]
+
+--- metadata-value-is-any ---
+// The value is any value at all, content included. Content held by metadata is
+// data the document carries, not part of the document.
+#metadata((tags: ("go", "typst"), draft: false)) <front>
+#metadata([A short _summary_.]) <summary>
+= Hello
+│ #document[
+│   #metadata(("tags": ("go", "typst"), "draft": false)) <front>
+│   #metadata([A short #emph[summary].]) <summary>
+│   #heading(level: 1)[Hello]
+│ ]
+
+--- metadata-never-reaches-document ---
+// Metadata is content: it has to reach the document to be found there. Bound
+// to a name and never used, it is as absent as any other unused content.
+#let unused = [#metadata(1) <a>]
+= Hello
+│ #document[#heading(level: 1)[Hello]]
+
+--- metadata-fields ---
+// The value and the label are readable as fields, like any other element's.
+// The labels differ because the duplicate-label check counts every label
+// attached while evaluating, including on content that never reaches the
+// document — as these do not.
+#test([#metadata(1)<m1>].value, 1)
+#test([#metadata(1)<m2>].label, <m2>)
+│ #document[]
+
+--- metadata-duplicate-label-warn ---
+// Two metadata under one label leave a query no way to tell them apart.
+#metadata(1) <dup>
+// Warning: 2-13 metadata label `<dup>` used more than once
+// Hint: 2-13 a query for it finds the first one; label the others separately
+#metadata(2) <dup>
+│ #document[#metadata(1) <dup>#metadata(2) <dup>]
+
+--- metadata-duplicate-label-across-elements-ok ---
+// A label shared with a *different* element is not a conflict: only metadata
+// is looked up by label.
+= Hello <shared>
+#metadata(1) <shared>
+│ #document[
+│   #heading(level: 1)[Hello]
+│   #metadata(1) <shared>
+│ ]
+
+--- metadata-missing-argument ---
+// Error: 2-12 missing argument: value
+#metadata()
+
+--- metadata-discarded-hint ---
+#let f() = {
+  metadata(1)
+  // Warning: 3-14 this return unconditionally discards the content before it
+  // Hint: 3-14 try omitting the `return` to automatically join all values
+  // Hint: 3-14 state updates and metadata are content that must end up in the document to have an effect
+  return none
+}
+#f()
+│ #document[]

@@ -89,6 +89,13 @@ type session struct {
 	mod    *expr.Module
 	labels map[name.Name]struct{}
 
+	// metadataLabels is the subset of labels attached to a [value.Metadata].
+	// A label may legitimately be shared by several elements — `#show <x>:`
+	// styles every one of them — but two metadata under one label leave
+	// znkr.io/writst.Query no way to tell them apart, so that case is warned
+	// about; see [frame.attachLabel].
+	metadataLabels map[name.Name]struct{}
+
 	// now is the instant the document is rendered at, handed to every builtin
 	// through [value.FunctionCallContext]. The zero value means the builtins
 	// that care read the system clock themselves.
@@ -102,9 +109,11 @@ type session struct {
 	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
 
-	// docTitle holds the document title collected from a `set document(title: …)`
-	// rule during the realization pass; nil when unset.
-	docTitle value.Content
+	// doc accumulates the document properties collected from `set document(…)`
+	// rules during the realization pass. Body is left alone here; it is filled
+	// in by [session.realizeDocument], which returns a copy of this value as
+	// the document root.
+	doc value.Document
 
 	// errors collects every diagnostic produced during evaluation. Every
 	// failure surfaces here via [session.recordError]; instructions that
@@ -256,16 +265,37 @@ func (fr *frame) warn(span syntax.Span, msg string, hints ...string) {
 // and warning at warnSpan if c was already labelled. Used by both
 // [expr.AttachLabel] (explicit `<label>` markup) and [evalContentResult]
 // (labels that appear as siblings to content in a markup body).
+//
+// This is also where a metadata label is checked for reuse. It has to be here:
+// the label set is built during evaluation, which is the last stage that still
+// has spans to report against — realization has none. The cost is that a label
+// counts even when its content is later dropped by a show rule and never
+// reaches the document; the `@ref` existence check that reads fr.s.labels has
+// always had the same blind spot, and warning about a document that turns out
+// not to have the conflict is better than staying silent about one that does.
 func (fr *frame) attachLabel(c value.Content, lbl *value.Label, warnSpan syntax.Span) {
 	if old := c.SetLabel(lbl); old != nil {
 		fr.warn(warnSpan, "content labelled multiple times",
 			"only the last label is used, the rest are ignored")
 		delete(fr.s.labels, old.Name)
+		delete(fr.s.metadataLabels, old.Name)
 	}
 	if fr.s.labels == nil {
 		fr.s.labels = make(map[name.Name]struct{})
 	}
 	fr.s.labels[lbl.Name] = struct{}{}
+
+	if _, isMetadata := c.(*value.Metadata); !isMetadata {
+		return
+	}
+	if _, dup := fr.s.metadataLabels[lbl.Name]; dup {
+		fr.warn(warnSpan, fmt.Sprintf("metadata label `<%s>` used more than once", lbl.Name),
+			"a query for it finds the first one; label the others separately")
+	}
+	if fr.s.metadataLabels == nil {
+		fr.s.metadataLabels = make(map[name.Name]struct{})
+	}
+	fr.s.metadataLabels[lbl.Name] = struct{}{}
 }
 
 // functionCall bundles the arguments for [runFunction] into a single struct
@@ -474,8 +504,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.DiscardCheck:
 		if c, ok := fr.get(i.Value).(value.Content); ok {
 			hints := []string{"try omitting the `return` to automatically join all values"}
-			if containsStateUpdate(c) {
-				hints = append(hints, "state/counter updates are content that must end up in the document to have an effect")
+			if containsIntrospection(c) {
+				hints = append(hints, "state updates and metadata are content that must end up in the document to have an effect")
 			}
 			fr.warn(i.Span(), "this return unconditionally discards the content before it", hints...)
 		}
@@ -757,16 +787,18 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	}
 }
 
-// containsStateUpdate reports whether content is, or (for a sequence)
-// transitively contains, a state update. Discarding such content is worth a
-// dedicated hint because the update silently has no effect.
-func containsStateUpdate(c value.Content) bool {
+// containsIntrospection reports whether content is, or (for a sequence)
+// transitively contains, an element whose whole purpose is to be found again
+// in the document: a state update or a metadata value. Discarding such content
+// is worth a dedicated hint because it silently has no effect — there is no
+// visible output missing to give the mistake away.
+func containsIntrospection(c value.Content) bool {
 	switch c := c.(type) {
-	case *value.StateUpdate:
+	case *value.StateUpdate, *value.Metadata:
 		return true
 	case *value.Sequence:
 		for _, child := range c.Children {
-			if containsStateUpdate(child) {
+			if containsIntrospection(child) {
 				return true
 			}
 		}

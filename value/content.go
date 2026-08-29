@@ -30,6 +30,11 @@ type Content interface {
 	// inline, and shares a paragraph with its neighbors.
 	IsBlock() bool
 
+	// walk yields this element and everything below it in document order,
+	// stopping early when yield says so. It is generated for every element in
+	// this file; see [All], the iterator built on it.
+	walk(yield func(Content) bool) bool
+
 	aContent()
 }
 
@@ -153,6 +158,15 @@ type Image struct {
 	Label *Label
 }
 
+// Metadata attaches a value to the document without producing any output. It
+// survives realization as an invisible leaf, so it keeps its place in the
+// document; a [Label] is what identifies it, and znkr.io/writst.Query finds it
+// by that label.
+type Metadata struct {
+	Value Value `writst:"required"`
+	Label *Label
+}
+
 // Equation is a mathematical equation, produced by `$...$`. Block reports
 // whether it is displayed on its own line (block) or inline.
 type Equation struct {
@@ -266,9 +280,10 @@ type MathMat struct {
 }
 
 // Document is the realized document root, produced by the realization pass (it
-// has no constructor). Title is populated from a `set document(title: …)` rule.
+// has no constructor). Fields are populated from set rules.
 type Document struct {
-	Title Content
+	Title string
+	Date  *Datetime
 	Body  Content `writst:"required"`
 }
 
@@ -293,6 +308,7 @@ func (*TermItem) aValue()   {}
 func (*Table) aValue()      {}
 func (*Footnote) aValue()   {}
 func (*Image) aValue()      {}
+func (*Metadata) aValue()   {}
 func (*Document) aValue()   {}
 
 func (*Equation) aValue()       {}
@@ -331,6 +347,7 @@ func (*TermItem) aContent()   {}
 func (*Table) aContent()      {}
 func (*Footnote) aContent()   {}
 func (*Image) aContent()      {}
+func (*Metadata) aContent()   {}
 func (*Document) aContent()   {}
 
 func (*Equation) aContent()       {}
@@ -372,6 +389,7 @@ func (*TermItem) Name() string   { return "terms.item" }
 func (*Table) Name() string      { return "table" }
 func (*Footnote) Name() string   { return "footnote" }
 func (*Image) Name() string      { return "image" }
+func (*Metadata) Name() string   { return "metadata" }
 func (*Document) Name() string   { return "document" }
 
 func (*Equation) Name() string       { return "equation" }
@@ -416,6 +434,7 @@ func (*TermItem) IsBlock() bool   { return true }
 func (*Table) IsBlock() bool      { return true }
 func (*Footnote) IsBlock() bool   { return false }
 func (*Image) IsBlock() bool      { return false }
+func (*Metadata) IsBlock() bool   { return false }
 func (*Document) IsBlock() bool   { return true }
 
 func (n *Equation) IsBlock() bool     { return n.Block }
@@ -454,6 +473,7 @@ func (*TermItem) Type() types.Type   { return types.Content }
 func (*Table) Type() types.Type      { return types.Content }
 func (*Footnote) Type() types.Type   { return types.Content }
 func (*Image) Type() types.Type      { return types.Content }
+func (*Metadata) Type() types.Type   { return types.Content }
 func (*Document) Type() types.Type   { return types.Content }
 
 func (*Equation) Type() types.Type       { return types.Content }

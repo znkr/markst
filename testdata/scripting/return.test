@@ -159,7 +159,7 @@
 
   // Warning: 3-19 this return unconditionally discards the content before it
   // Hint: 3-19 try omitting the `return` to automatically join all values
-  // Hint: 3-19 state/counter updates are content that must end up in the document to have an effect
+  // Hint: 3-19 state updates and metadata are content that must end up in the document to have an effect
   return [ Hello ]
 }
 

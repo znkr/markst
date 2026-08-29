@@ -1,8 +1,8 @@
 // Tests for #set / #show rule evaluation, after the realization pass. `#show`
 // recipes are applied to matching content; `#set` rules are consumed and
 // realized away without styling effect (element-property defaults aren't
-// modeled yet — only `set document(title:)` in realize_extra takes effect), so
-// the set scopes below leave the headings at their explicit level.
+// modeled yet — only `set document(…)`, covered in document.test, takes
+// effect), so the set scopes below leave the headings at their explicit level.
 //
 // Set-rule arguments are still validated against the element's own parameters,
 // so the tests use `level` (heading's one modeled property); a bogus property

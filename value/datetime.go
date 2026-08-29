@@ -55,6 +55,23 @@ func NewDatetime(year, month, day, hour, minute, second int) (Datetime, bool) {
 	return Datetime{T: t, Kind: DateAndTime}, ok
 }
 
+// dateLayout is the only shape [ParseDate] accepts: a four-digit year, a
+// two-digit month, and a two-digit day, separated by hyphens.
+const dateLayout = "2006-01-02"
+
+// ParseDate parses a date written as `yyyy-mm-dd`, returning it as a date-only
+// value. The second result is false if s isn't a date in that shape.
+func ParseDate(s string) (Datetime, bool) {
+	// time.Parse with a fixed-width layout is strict in exactly the ways this
+	// needs: it rejects unpadded components, leading or trailing text, and days
+	// that don't exist in the given month.
+	t, err := time.Parse(dateLayout, s)
+	if err != nil {
+		return Datetime{}, false
+	}
+	return NewDate(t.Year(), int(t.Month()), t.Day())
+}
+
 // DatetimeFromTime returns t (converted to UTC) as a date-and-time value.
 func DatetimeFromTime(t time.Time) Datetime {
 	t = t.UTC()

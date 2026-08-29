@@ -8,10 +8,15 @@ import "znkr.io/writst/name"
 func (n *Document) Field(name name.Name) Value {
 	switch name {
 	case names.Title:
-		if n.Title == nil {
+		if n.Title == "" {
 			return nil
 		}
-		return n.Title
+		return Str(n.Title)
+	case names.Date:
+		if n.Date == nil {
+			return nil
+		}
+		return *n.Date
 	case names.Body:
 		return n.Body
 	default:
@@ -22,7 +27,9 @@ func (n *Document) Field(name name.Name) Value {
 func (n *Document) HasField(name name.Name) bool {
 	switch name {
 	case names.Title:
-		return n.Title != nil
+		return n.Title != ""
+	case names.Date:
+		return n.Date != nil
 	case names.Body:
 		return true
 	default:
@@ -35,6 +42,9 @@ func (n *Document) Fields() *Dict {
 	if f := n.Field(names.Title); f != nil {
 		fields.Elems.Put(Str(names.Title.String()), f)
 	}
+	if f := n.Field(names.Date); f != nil {
+		fields.Elems.Put(Str(names.Date.String()), f)
+	}
 	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
 	return fields
 }
@@ -45,6 +55,16 @@ func (n *Document) SetLabel(label *Label) *Label {
 
 func (n *Document) GetLabel() *Label {
 	return nil
+}
+
+func (n *Document) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *Emph) Field(name name.Name) Value {
@@ -89,6 +109,16 @@ func (n *Emph) SetLabel(label *Label) *Label {
 
 func (n *Emph) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Emph) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *Enum) Field(name name.Name) Value {
@@ -137,6 +167,18 @@ func (n *Enum) SetLabel(label *Label) *Label {
 
 func (n *Enum) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Enum) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
 }
 
 func (n *EnumItem) Field(name name.Name) Value {
@@ -193,6 +235,16 @@ func (n *EnumItem) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *EnumItem) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Equation) Field(name name.Name) Value {
 	switch name {
 	case names.Block:
@@ -242,6 +294,16 @@ func (n *Equation) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Equation) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Footnote) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -284,6 +346,16 @@ func (n *Footnote) SetLabel(label *Label) *Label {
 
 func (n *Footnote) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Footnote) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *Heading) Field(name name.Name) Value {
@@ -333,6 +405,16 @@ func (n *Heading) SetLabel(label *Label) *Label {
 
 func (n *Heading) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Heading) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *Image) Field(name name.Name) Value {
@@ -389,6 +471,13 @@ func (n *Image) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Image) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
+}
+
 func (n *Linebreak) Field(name name.Name) Value {
 	return nil
 }
@@ -407,6 +496,13 @@ func (n *Linebreak) SetLabel(label *Label) *Label {
 
 func (n *Linebreak) GetLabel() *Label {
 	return nil
+}
+
+func (n *Linebreak) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
 }
 
 func (n *Link) Field(name name.Name) Value {
@@ -458,6 +554,16 @@ func (n *Link) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Link) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *List) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -506,6 +612,18 @@ func (n *List) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *List) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
+}
+
 func (n *ListItem) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -548,6 +666,16 @@ func (n *ListItem) SetLabel(label *Label) *Label {
 
 func (n *ListItem) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *ListItem) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *MathAccent) Field(name name.Name) Value {
@@ -614,6 +742,16 @@ func (n *MathAccent) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathAccent) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Base != nil && !n.Base.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *MathAlignPoint) Field(name name.Name) Value {
 	switch name {
 	case names.Label:
@@ -651,6 +789,13 @@ func (n *MathAlignPoint) SetLabel(label *Label) *Label {
 
 func (n *MathAlignPoint) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathAlignPoint) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
 }
 
 func (n *MathAttach) Field(name name.Name) Value {
@@ -717,6 +862,22 @@ func (n *MathAttach) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathAttach) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Base != nil && !n.Base.walk(yield) {
+		return false
+	}
+	if n.Top != nil && !n.Top.walk(yield) {
+		return false
+	}
+	if n.Bottom != nil && !n.Bottom.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *MathCancel) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -771,6 +932,16 @@ func (n *MathCancel) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathCancel) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *MathCases) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -817,6 +988,18 @@ func (n *MathCases) SetLabel(label *Label) *Label {
 
 func (n *MathCases) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathCases) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
 }
 
 func (n *MathDelimited) Field(name name.Name) Value {
@@ -873,6 +1056,22 @@ func (n *MathDelimited) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathDelimited) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Open != nil && !n.Open.walk(yield) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	if n.Close != nil && !n.Close.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *MathFrac) Field(name name.Name) Value {
 	switch name {
 	case names.Num:
@@ -920,6 +1119,19 @@ func (n *MathFrac) SetLabel(label *Label) *Label {
 
 func (n *MathFrac) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathFrac) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Num != nil && !n.Num.walk(yield) {
+		return false
+	}
+	if n.Denom != nil && !n.Denom.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *MathMat) Field(name name.Name) Value {
@@ -974,6 +1186,20 @@ func (n *MathMat) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathMat) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, row := range n.Rows {
+		for _, c := range row {
+			if !c.walk(yield) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (n *MathPrimes) Field(name name.Name) Value {
 	switch name {
 	case names.Base:
@@ -1021,6 +1247,16 @@ func (n *MathPrimes) SetLabel(label *Label) *Label {
 
 func (n *MathPrimes) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathPrimes) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Base != nil && !n.Base.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *MathRoot) Field(name name.Name) Value {
@@ -1075,6 +1311,19 @@ func (n *MathRoot) SetLabel(label *Label) *Label {
 
 func (n *MathRoot) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathRoot) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Index != nil && !n.Index.walk(yield) {
+		return false
+	}
+	if n.Radicand != nil && !n.Radicand.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *MathText) Field(name name.Name) Value {
@@ -1151,6 +1400,13 @@ func (n *MathText) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathText) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
+}
+
 func (n *MathUnderline) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1193,6 +1449,16 @@ func (n *MathUnderline) SetLabel(label *Label) *Label {
 
 func (n *MathUnderline) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *MathUnderline) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *MathVec) Field(name name.Name) Value {
@@ -1243,6 +1509,69 @@ func (n *MathVec) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *MathVec) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
+}
+
+func (n *Metadata) Field(name name.Name) Value {
+	switch name {
+	case names.Value:
+		return n.Value
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Metadata) HasField(name name.Name) bool {
+	switch name {
+	case names.Value:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Metadata) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Value.String()), n.Field(names.Value))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Metadata) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *Metadata) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *Metadata) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
+}
+
 func (n *Par) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1287,6 +1616,16 @@ func (n *Par) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Par) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Parbreak) Field(name name.Name) Value {
 	return nil
 }
@@ -1305,6 +1644,13 @@ func (n *Parbreak) SetLabel(label *Label) *Label {
 
 func (n *Parbreak) GetLabel() *Label {
 	return nil
+}
+
+func (n *Parbreak) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
 }
 
 func (n *Raw) Field(name name.Name) Value {
@@ -1352,6 +1698,13 @@ func (n *Raw) SetLabel(label *Label) *Label {
 
 func (n *Raw) GetLabel() *Label {
 	return nil
+}
+
+func (n *Raw) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
 }
 
 func (n *Ref) Field(name name.Name) Value {
@@ -1408,6 +1761,16 @@ func (n *Ref) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Ref) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Supplement != nil && !n.Supplement.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Sequence) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -1456,6 +1819,18 @@ func (n *Sequence) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Sequence) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
+}
+
 func (n *SmartQuote) Field(name name.Name) Value {
 	switch name {
 	case names.Double:
@@ -1500,6 +1875,13 @@ func (n *SmartQuote) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *SmartQuote) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
+}
+
 func (n *Strong) Field(name name.Name) Value {
 	switch name {
 	case names.Body:
@@ -1542,6 +1924,16 @@ func (n *Strong) SetLabel(label *Label) *Label {
 
 func (n *Strong) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Strong) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
 }
 
 func (n *Table) Field(name name.Name) Value {
@@ -1590,6 +1982,18 @@ func (n *Table) SetLabel(label *Label) *Label {
 
 func (n *Table) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Table) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
 }
 
 func (n *TermItem) Field(name name.Name) Value {
@@ -1641,6 +2045,19 @@ func (n *TermItem) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *TermItem) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Term != nil && !n.Term.walk(yield) {
+		return false
+	}
+	if n.Description != nil && !n.Description.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Terms) Field(name name.Name) Value {
 	switch name {
 	case names.Children:
@@ -1689,6 +2106,18 @@ func (n *Terms) GetLabel() *Label {
 	return n.Label
 }
 
+func (n *Terms) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
+}
+
 func (n *Text) Field(name name.Name) Value {
 	switch name {
 	case names.Text:
@@ -1731,4 +2160,11 @@ func (n *Text) SetLabel(label *Label) *Label {
 
 func (n *Text) GetLabel() *Label {
 	return n.Label
+}
+
+func (n *Text) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
 }

@@ -1,22 +1,28 @@
 package eval
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"znkr.io/writst/internal/names"
+	"znkr.io/writst/name"
 	"znkr.io/writst/value"
 )
 
 // realizeDocument turns the recorded content tree into a realized
 // [value.Document]: paragraphs are formed, list/enum/term items grouped,
 // `*value.Styled` wrappers resolved (show recipes applied, `set document`
-// title hoisted). It runs inside [Eval] while the session — and any closures
-// captured by show transforms — are still live.
+// properties hoisted). It runs inside [Eval] while the session — and any
+// closures captured by show transforms — are still live.
 func (s *session) realizeDocument(c value.Content) *value.Document {
+	// Realize first: the body is where the `set document` rules live, so
+	// s.doc isn't populated until it has been walked.
 	body := s.realizeBody(topChildren(c), nil)
-	return &value.Document{Title: s.docTitle, Body: body}
+	doc := s.doc
+	doc.Body = body
+	return &doc
 }
 
 // topChildren returns c's children when it is an (unlabeled) sequence, else c
@@ -181,10 +187,26 @@ func groupContent(items []value.Content) []value.Content {
 	var out []value.Content
 	var para []value.Content
 	flush := func() {
-		if len(para) > 0 {
-			out = append(out, &value.Par{Body: seqOf(para)})
-			para = nil
+		if len(para) == 0 {
+			return
 		}
+		// A run of nothing but invisible elements has no paragraph to make:
+		// `#metadata(…) <x>` alone on a line would otherwise leave an empty
+		// paragraph behind for the presenter to render. They stay where they
+		// are, as siblings of the blocks around them, and the whitespace
+		// between them goes too — with nothing visible on either side, it has
+		// nothing left to separate.
+		if !slices.ContainsFunc(para, isVisible) {
+			for _, c := range para {
+				if !spaceOnly(c) {
+					out = append(out, c)
+				}
+			}
+			para = nil
+			return
+		}
+		out = append(out, &value.Par{Body: seqOf(para)})
+		para = nil
 	}
 	for i := 0; i < len(items); {
 		it := items[i]
@@ -415,6 +437,21 @@ func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.I
 
 func isParbreak(c value.Content) bool { _, ok := c.(*value.Parbreak); return ok }
 
+// isVisible reports whether c is an element a reader can see. The introspection
+// elements are not: they ride the document to be found again — by
+// znkr.io/writst.Query, or by whatever comes to resolve state — and produce no
+// output where they sit.
+func isVisible(c value.Content) bool {
+	switch c.(type) {
+	case *value.Metadata, *value.StateUpdate:
+		return false
+	}
+	// Whitespace is not visible on its own account: it is only ever there to
+	// separate what is around it. Two metadata on consecutive lines have a
+	// markup space between them that separates nothing.
+	return !spaceOnly(c)
+}
+
 // isItem reports whether c is one of the item elements. Items are block content
 // like any other ([value.Content.IsBlock]); this narrower question is only
 // [groupContent]'s, which must gather a run of them into a container instead of
@@ -448,25 +485,54 @@ func (s *session) resolveStyled(t *value.Styled, realize func(value.Content) val
 }
 
 // applySet applies a set rule to realized content. Two kinds take effect: a
-// `document` set, whose title is hoisted into the session, and the math font
-// styles, which are folded into the math leaves they reach (see
+// `document` set, whose properties are hoisted into the session, and the math
+// font styles, which are folded into the math leaves they reach (see
 // applyMathStyle). Other element sets (e.g. `set heading(level: …)`) are
 // realized away with no effect: our content model tracks no "unset" state for
 // their properties and styles don't propagate top-down, so applying a default
 // would wrongly overwrite explicit values (and nest in the wrong order). See
 // IDEAS.md.
+//
+// The root is a single element, so a `set document` is never scoped to the block
+// it appears in. When two rules name the same property, the one in the outer
+// scope wins: a set rule scopes over its following siblings, so a later rule
+// nests inside an earlier one, and resolveStyled realizes a body before applying
+// its own sets. That is the order `set document(title:)` has always had.
 func (s *session) applySet(c value.Content, set *value.Set) value.Content {
 	switch set.Element.Name {
 	case "document":
+		// The argument types were checked when the set rule was bound, so a
+		// value of the wrong shape here is a bug rather than bad input, and
+		// there is no span left to report it against: leave the field alone.
 		if v, ok := set.Fields.Get(names.Title); ok {
-			if tc, err := value.ToContent(v); err == nil {
-				s.docTitle = tc
+			if title, ok := v.(value.Str); ok {
+				s.doc.Title = string(title)
 			}
+		}
+		if d, ok := documentDate(set, names.Date); ok {
+			s.doc.Date = &d
 		}
 	case "math.equation":
 		return applyMathStyle(c, set)
 	}
 	return c
+}
+
+// documentDate reads a date-valued `document` property, which is either a
+// datetime or a `yyyy-mm-dd` string. The second result is false when the set
+// rule doesn't name the property at all.
+func documentDate(set *value.Set, n name.Name) (value.Datetime, bool) {
+	v, ok := set.Fields.Get(n)
+	if !ok {
+		return value.Datetime{}, false
+	}
+	switch v := v.(type) {
+	case value.Datetime:
+		return v, true
+	case value.Str:
+		return value.ParseDate(string(v))
+	}
+	return value.Datetime{}, false
 }
 
 // applyMathStyle folds the font-style properties of a `math.equation` set into
@@ -567,7 +633,12 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 	case *value.Equation:
 		return &value.Equation{Block: c.Block, Body: f(c.Body), Label: c.Label}
 	case *value.Document:
-		return &value.Document{Title: c.Title, Body: f(c.Body)}
+		// Copied wholesale rather than field by field: the root carries
+		// document properties that have nothing to do with the rewrite, and a
+		// property added later must not go missing here.
+		d := *c
+		d.Body = f(c.Body)
+		return &d
 	case *value.ListItem:
 		return &value.ListItem{Body: f(c.Body), Label: c.Label}
 	case *value.EnumItem:

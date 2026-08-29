@@ -176,6 +176,15 @@ func generate(filename string) ([]byte, error) {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
 					}
 					fmt.Fprintf(&buf, "\t\treturn n.%s\n", f.Name)
+				case "*Datetime":
+					// The pointer is only the struct's encoding of "unset": a
+					// Datetime is a value type in the value world, and every
+					// datetime method asserts value.Datetime, so hand out the
+					// pointee rather than the pointer.
+					if !f.Required {
+						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
+					}
+					fmt.Fprintf(&buf, "\t\treturn *n.%s\n", f.Name)
 				case "name.Name":
 					fmt.Fprintf(&buf, "\t\treturn Str(n.%s.String())\n", f.Name)
 				default:
@@ -215,7 +224,7 @@ func generate(filename string) ([]byte, error) {
 					} else {
 						fmt.Fprintf(&buf, "\t\treturn true\n")
 					}
-				case "*Label", "Content", "Value":
+				case "*Label", "Content", "Value", "*Datetime":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\treturn n.%s != nil\n", f.Name)
 					} else {
@@ -275,6 +284,34 @@ func generate(filename string) ([]byte, error) {
 		} else {
 			fmt.Fprintf(&buf, "\treturn nil\n")
 		}
+		fmt.Fprintf(&buf, "}\n\n")
+
+		// walk method: yields the node, then descends into its content fields
+		// in declaration order, which is document order. Recursing here rather than
+		// handing back a slice of children keeps the traversal allocation-free —
+		// the yield function is passed down untouched, so nothing is built along
+		// the way. See [All].
+		fmt.Fprintf(&buf, "func (n *%s) walk(yield func(Content) bool) bool {\n", typeName)
+		fmt.Fprintf(&buf, "\tif !yield(n) { return false }\n")
+		for _, f := range fields {
+			switch f.Type {
+			case "Content":
+				// Nil-checked whether or not the field is required: a half-built
+				// node is not worth a panic in a walk.
+				fmt.Fprintf(&buf, "\tif n.%s != nil && !n.%s.walk(yield) { return false }\n", f.Name, f.Name)
+			case "[]Content", "[]*ListItem", "[]*EnumItem", "[]*TermItem":
+				fmt.Fprintf(&buf, "\tfor _, c := range n.%s {\n", f.Name)
+				fmt.Fprintf(&buf, "\t\tif !c.walk(yield) { return false }\n")
+				fmt.Fprintf(&buf, "\t}\n")
+			case "[][]Content":
+				fmt.Fprintf(&buf, "\tfor _, row := range n.%s {\n", f.Name)
+				fmt.Fprintf(&buf, "\t\tfor _, c := range row {\n")
+				fmt.Fprintf(&buf, "\t\t\tif !c.walk(yield) { return false }\n")
+				fmt.Fprintf(&buf, "\t\t}\n")
+				fmt.Fprintf(&buf, "\t}\n")
+			}
+		}
+		fmt.Fprintf(&buf, "\treturn true\n")
 		fmt.Fprintf(&buf, "}\n\n")
 	}
 

@@ -277,22 +277,14 @@ func datetimeTodayImpl(call *value.FunctionCallContext, _ []value.Value, named v
 	return d, nil
 }
 
-// dateLayout is the only shape `datetime.parse_date` accepts: a four-digit
-// year, a two-digit month, and a two-digit day, separated by hyphens.
-const dateLayout = "2006-01-02"
-
 func datetimeParseDateImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	s := string(args[0].(value.Str))
-	// time.Parse with a fixed-width layout is strict in exactly the ways this
-	// needs: it rejects unpadded components, leading or trailing text, and
-	// days that don't exist in the given month.
-	t, err := time.Parse(dateLayout, s)
-	if err != nil {
+	d, ok := value.ParseDate(s)
+	if !ok {
 		e := value.ArgErrorPosf(0, "invalid date: %q", s)
 		e.Hint("dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`")
 		return nil, e
 	}
-	d, _ := value.NewDate(t.Year(), int(t.Month()), t.Day())
 	return d, nil
 }
 

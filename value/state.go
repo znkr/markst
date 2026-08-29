@@ -49,7 +49,8 @@ func (n *StateUpdate) Equal(other Value) bool {
 func (n *StateUpdate) Format(f *formatter.Formatter) {
 	f.FuncCall("state", []formatter.Arg{formatter.PositionalArg(n.Key)})
 	f.Str(".update(")
-	n.Update.Format(f)
+	// Already inside the call, so the value needs no `#` of its own.
+	codeValue{n.Update}.Format(f)
 	f.Str(")")
 }
 

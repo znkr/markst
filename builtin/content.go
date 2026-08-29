@@ -211,6 +211,21 @@ func imageImpl(_ *value.FunctionCallContext, args []value.Value, named value.Nam
 	}, nil
 }
 
+// Metadata is the metadata element; it builds a [value.Metadata]. It produces
+// no output: its value rides along in the document, to be found again by the
+// label attached to it (see znkr.io/writst.Query).
+var Metadata = value.NewElement[*value.Metadata](value.Function{
+	Name: "metadata",
+	Positional: []value.Param{
+		{Name: "value", Type: types.Any},
+	},
+	F: metadataImpl,
+})
+
+func metadataImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.Metadata{Value: args[0]}, nil
+}
+
 // Ref is a cross-reference to a label; it builds a [value.Ref].
 var Ref = value.NewElement[*value.Ref](value.Function{
 	Name: "ref",
@@ -363,9 +378,39 @@ func termItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.Name
 // configures the realized [value.Document]. It has no constructor (F == nil) —
 // the root is assembled by the realization pass, not called — so `#document(…)`
 // reports "not callable".
+//
+// The root carries only what the whole document is: its title and its date.
+// Everything else a presenter might want to know about a document — a summary,
+// a revision date, tags — is [Metadata], found by label rather than named here.
+//
+// `date` takes a datetime, or a `yyyy-mm-dd` string as a shorthand for
+// `datetime.parse_date` of the same text.
 var Document = value.NewElement[*value.Document](value.Function{
 	Name: "document",
 	Named: value.NamedParams{
-		names.Title: {Name: "title", Type: types.Any},
+		names.Title: {Name: "title", Type: types.SetOf(types.Str)},
+		names.Date:  {Name: "date", Type: types.SetOf(types.Datetime, types.Str)},
 	},
+	Validate: validateDocument,
 })
+
+// validateDocument rejects a `date` string that isn't a date. It has to happen
+// here rather than where the set rule is applied: applying happens during
+// realization, which has no span to hang a diagnostic on.
+func validateDocument(named value.NamedArgs) *value.FunctionCallError {
+	v, ok := named.Get(names.Date)
+	if !ok {
+		return nil
+	}
+	// A datetime needs no checking; bind already rejected everything else.
+	s, ok := v.(value.Str)
+	if !ok {
+		return nil
+	}
+	if _, ok := value.ParseDate(string(s)); !ok {
+		e := value.ArgErrorNamedf(names.Date, "invalid date: %q", string(s))
+		e.Hint("dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`")
+		return e
+	}
+	return nil
+}

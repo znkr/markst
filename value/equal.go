@@ -469,7 +469,22 @@ func (n *Image) Equal(other Value) bool {
 	return ok && n.Path == o.Path && n.Alt == o.Alt && labelEqual(n.Label, o.Label)
 }
 
+func (n *Metadata) Equal(other Value) bool {
+	o, ok := other.(*Metadata)
+	return ok && optEqual(n.Value, o.Value) && labelEqual(n.Label, o.Label)
+}
+
 func (n *Document) Equal(other Value) bool {
 	o, ok := other.(*Document)
-	return ok && contentEqual(n.Title, o.Title) && contentEqual(n.Body, o.Body)
+	return ok && n.Title == o.Title &&
+		datetimeEqual(n.Date, o.Date) &&
+		contentEqual(n.Body, o.Body)
+}
+
+// datetimeEqual compares two optional datetimes, either of which may be unset.
+func datetimeEqual(a, b *Datetime) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

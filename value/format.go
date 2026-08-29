@@ -277,6 +277,19 @@ func (b contentBlock) Format(f *formatter.Formatter) {
 	f.SetMode(prev)
 }
 
+// codeValue wraps a Value so FuncCall renders it as the code-mode expression it
+// is. Inside an argument list there is no transition into code left to mark, so
+// the `#` that [formatter.Formatter.Prefix] writes in markup mode would be
+// wrong. It is the mirror of [contentBlock].
+type codeValue struct{ v Value }
+
+func (a codeValue) Format(f *formatter.Formatter) {
+	prev := f.Mode()
+	f.SetMode(syntax.ModeCode)
+	a.v.Format(f)
+	f.SetMode(prev)
+}
+
 func (n *Strong) Format(f *formatter.Formatter) {
 	f.FuncCall("strong", nil, contentBlock{n.Body})
 }
@@ -549,22 +562,34 @@ func (n *Image) Format(f *formatter.Formatter) {
 	f.FuncCall("image", args)
 }
 
+// Format renders metadata with its label, which no other element does: a label
+// elsewhere is styling and reference bookkeeping, but a metadata value is
+// *identified* by its label — without it there is no telling one entry from
+// another.
+func (n *Metadata) Format(f *formatter.Formatter) {
+	// Content carried as data still reads best as content, the way it does
+	// everywhere else; anything else is a code-mode value.
+	arg := formatter.PositionalArg(codeValue{n.Value})
+	if c, ok := n.Value.(Content); ok {
+		arg = formatter.PositionalArg(contentBlock{c})
+	}
+	f.FuncCall("metadata", []formatter.Arg{arg})
+	if n.Label != nil {
+		f.Str(" <")
+		f.Str(n.Label.Name.String())
+		f.Str(">")
+	}
+}
+
 func (n *Document) Format(f *formatter.Formatter) {
-	f.Prefix()
-	f.Str("document")
-	if n.Title != nil {
-		f.Str("(title: ")
-		contentBlock{n.Title}.Format(f)
-		f.Str(")")
+	var args []formatter.Arg
+	if n.Title != "" {
+		args = append(args, formatter.NamedArg("title", n.Title))
 	}
-	prev := f.Mode()
-	f.SetMode(syntax.ModeMarkup)
-	if n.Body != nil {
-		f.BracketedList(contentItems(n.Body))
-	} else {
-		f.Str("[]")
+	if n.Date != nil {
+		args = append(args, formatter.NamedArg("date", *n.Date))
 	}
-	f.SetMode(prev)
+	f.FuncCall("document", args, contentBlock{n.Body})
 }
 
 // Label ///////////////////////////////////////////////////////////////////////

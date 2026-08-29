@@ -88,7 +88,7 @@ After the list.
 --- realize-document-title ---
 #set document(title: "My Document")
 = Hello
-│ #document(title: [My Document])[#heading(level: 1)[Hello]]
+│ #document(title: "My Document")[#heading(level: 1)[Hello]]
 
 --- realize-inline-not-paragraphed-in-heading ---
 = A *bold* title
@@ -99,3 +99,20 @@ After the list.
 --- realize-document-not-callable ---
 // Error: 2-10 element document is not callable
 #document()
+
+--- realize-invisible-alone-not-paragraphed ---
+// A state update is invisible, like `#metadata` (see
+// introspection/metadata.test): a line holding nothing but invisible elements
+// makes no paragraph, and the space separating them goes with it.
+Before.
+
+#state("s").update(1)
+#state("s").update(2)
+
+After.
+│ #document[
+│   #par[Before.]
+│   #state("s").update(1)
+│   #state("s").update(2)
+│   #par[After.]
+│ ]

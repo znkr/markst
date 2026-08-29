@@ -1,0 +1,95 @@
+// Tests for `#set document(…)`, the one set rule that survives the realization
+// pass: its arguments are hoisted onto the document root rather than styling
+// the content they scope over. `date` takes a datetime or a `yyyy-mm-dd`
+// string.
+//
+// The root names only what the whole document is. Everything else a presenter
+// wants to know about it — a summary, a revision date, tags — is `#metadata`
+// found by label; see introspection/metadata.test.
+
+--- document-title ---
+#set document(title: "My Post")
+= Hello
+│ #document(title: "My Post")[#heading(level: 1)[Hello]]
+
+--- document-date-datetime ---
+#set document(date: datetime(year: 2024, month: 2, day: 29))
+Body.
+│ #document(date: #datetime(year: 2024, month: 2, day: 29))[#par[Body.]]
+
+--- document-date-parse-date ---
+#set document(date: datetime.parse_date("2024-02-29"))
+Body.
+│ #document(date: #datetime(year: 2024, month: 2, day: 29))[#par[Body.]]
+
+--- document-date-string ---
+// A `yyyy-mm-dd` string is shorthand for the datetime above; all three
+// spellings realize to the same document.
+#set document(date: "2024-02-29")
+Body.
+│ #document(date: #datetime(year: 2024, month: 2, day: 29))[#par[Body.]]
+
+--- document-all-fields ---
+#set document(
+  title: "My Post",
+  date: "2024-02-29",
+)
+= Hello
+│ #document(
+│   title: "My Post",
+│   date: #datetime(year: 2024, month: 2, day: 29),
+│ )[#heading(level: 1)[Hello]]
+
+--- document-sets-merge ---
+// Separate rules contribute separate properties rather than replacing the whole
+// document.
+#set document(title: "My Post")
+#set document(date: "2024-02-29")
+Body.
+│ #document(
+│   title: "My Post",
+│   date: #datetime(year: 2024, month: 2, day: 29),
+│ )[#par[Body.]]
+
+--- document-repeated-set-outer-wins ---
+// When two rules name the same property, the one in the outer scope wins — a
+// set rule scopes over its following siblings, so the second rule below sits
+// inside the first's scope, and realization applies the inner scope first. This
+// is long-standing `set document(title:)` behaviour, not new to the property
+// beside it.
+#set document(title: "First")
+#set document(title: "Second")
+Body.
+│ #document(title: "First")[#par[Body.]]
+
+--- document-set-in-block-hoists ---
+// The root is a single element, so a `set document` is never scoped to the
+// block it sits in.
+#{
+  set document(title: "From a block")
+  [A]
+}
+│ #document(title: "From a block")[#par[A]]
+
+--- document-date-invalid ---
+// Error: 21-33 invalid date: "not-a-date"
+// Hint: 21-33 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#set document(date: "not-a-date")
+
+--- document-date-day-out-of-range ---
+// Error: 21-33 invalid date: "2023-02-30"
+// Hint: 21-33 dates must be written as `yyyy-mm-dd`, e.g. `2024-02-29`
+#set document(date: "2023-02-30")
+
+--- document-title-not-content ---
+// The title is plain text: it is a string on the document root, not content.
+// Error: 22-31 expected string, found content
+#set document(title: [My Post])
+
+--- document-date-bad-type ---
+// Error: 21-22 expected string or datetime, found integer
+#set document(date: 3)
+
+--- document-unknown-property ---
+// Error: 15-31 unexpected argument: subtitle
+#set document(subtitle: "Nope")
