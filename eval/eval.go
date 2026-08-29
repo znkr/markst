@@ -41,7 +41,7 @@ func Eval(mod *expr.Module) (doc *value.Document, warn []Error, err []Error) {
 	// A top-level markup body of a single item skips the ContentResult
 	// assembly (lowerMarkup's single-item shortcut), so a lone/trailing set or
 	// show rule reaches here unfolded. Collapse it the same way assembly would.
-	v = foldTemplates(v)
+	v = foldStyles(v)
 	cc, cerr := value.ToContent(v)
 	// Only surface a content-coercion failure if no other errors were
 	// recorded during eval. When other errors exist, the "non-content
@@ -54,7 +54,7 @@ func Eval(mod *expr.Module) (doc *value.Document, warn []Error, err []Error) {
 		cc = &value.Sequence{}
 	}
 	// Turn the recorded content tree into a realized document: paragraphs
-	// formed, list/enum/term items grouped, templates resolved, wrapped in a
+	// formed, list/enum/term items grouped, styles resolved, wrapped in a
 	// Document root.
 	doc = s.realizeDocument(cc)
 	warn = s.warnings
@@ -547,7 +547,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			fr.vals[r] = value.None{}
 			break
 		}
-		if isTemplateUpdate(c) {
+		if isStyleUpdate(c) {
 			// A set/show update can never carry a label. The label attaches to
 			// the update's *scope* siblings, not the transient node itself — so
 			// with nothing else preceding it, the label is unattached.
@@ -838,7 +838,7 @@ func (fr *frame) evalCodeJoin(c *expr.CodeJoin) value.Value {
 			return fr.error(it.span, err.Error())
 		}
 	}
-	return foldTemplates(j.Result())
+	return foldStyles(j.Result())
 }
 
 // joinValues runs the code-mode joiner over a slice of values. Returns
@@ -884,11 +884,11 @@ func (fr *frame) joinValues(values []value.Value, span syntax.Span) value.Value 
 			return fr.error(span, err.Error())
 		}
 	}
-	return foldTemplates(j.Result())
+	return foldStyles(j.Result())
 }
 
 // evalSetRule evaluates a `set target(args) [if cond]` rule to a transient
-// [value.TemplateUpdate] carrying the resolved [value.Set]. A false condition
+// [value.StyleUpdate] carrying the resolved [value.Set]. A false condition
 // makes the rule a no-op ([value.None], stripped downstream). The target must
 // resolve to a [value.Element], and the arguments are validated against that
 // element's signature (a set rule overrides a subset of its properties).
@@ -912,15 +912,15 @@ func (fr *frame) evalSetRule(i *expr.SetRule) value.Value {
 	if e != nil {
 		return e
 	}
-	set, err := elem.BindTemplateSet(&args)
+	set, err := elem.BindStyleSet(&args)
 	if err != nil {
 		return fr.applyErr(&elem.Function, fr.span(i.Result()), i.Args, err)
 	}
-	return &value.TemplateUpdate{Set: set}
+	return &value.StyleUpdate{Set: set}
 }
 
 // evalShowRule evaluates a `show selector: transform` rule to a transient
-// [value.TemplateUpdate] carrying the resolved [value.Recipe]. The transform is
+// [value.StyleUpdate] carrying the resolved [value.Recipe]. The transform is
 // captured as-is; the realization pass applies it to matching content.
 func (fr *frame) evalShowRule(i *expr.ShowRule) value.Value {
 	sel, e := fr.evalSelector(i.Selector, fr.span(i.Result()))
@@ -928,7 +928,7 @@ func (fr *frame) evalShowRule(i *expr.ShowRule) value.Value {
 		return e
 	}
 	transform := fr.get(i.Transform)
-	return &value.TemplateUpdate{Recipe: &value.Recipe{Selector: sel, Transform: transform}}
+	return &value.StyleUpdate{Recipe: &value.Recipe{Selector: sel, Transform: transform}}
 }
 
 // evalSelector resolves a show-rule selector operand. A [expr.NoRef] operand is
@@ -968,20 +968,20 @@ func whereMethod(e *value.Element) *value.Function {
 	}
 }
 
-// applyTemplates folds each [value.TemplateUpdate] into a [value.Templated]
-// wrapper around the remaining siblings, giving one template per set/show
-// scope. A trailing update (no following siblings) is dropped as a no-op.
-func applyTemplates(children []value.Content) []value.Content {
+// applyStyles folds each [value.StyleUpdate] into a [value.Styled] wrapper
+// around the remaining siblings, giving one style scope per set/show scope. A
+// trailing update (no following siblings) is dropped as a no-op.
+func applyStyles(children []value.Content) []value.Content {
 	for i, c := range children {
-		tu, ok := c.(*value.TemplateUpdate)
+		tu, ok := c.(*value.StyleUpdate)
 		if !ok {
 			continue
 		}
-		tail := applyTemplates(children[i+1:])
+		tail := applyStyles(children[i+1:])
 		if len(tail) == 0 {
 			return children[:i:i]
 		}
-		w := &value.Templated{Body: seqOf(tail)}
+		w := &value.Styled{Body: seqOf(tail)}
 		if tu.Set != nil {
 			w.Sets = append(w.Sets, tu.Set)
 		}
@@ -1001,13 +1001,13 @@ func seqOf(children []value.Content) value.Content {
 	return &value.Sequence{Children: children}
 }
 
-// foldTemplates applies [applyTemplates] to a code-mode join result so a `set`
-// or `show` inside a code block scopes over the trailing joined siblings. A
-// lone trailing update collapses to [value.None] (a no-op).
-func foldTemplates(v value.Value) value.Value {
+// foldStyles applies [applyStyles] to a code-mode join result so a `set` or
+// `show` inside a code block scopes over the trailing joined siblings. A lone
+// trailing update collapses to [value.None] (a no-op).
+func foldStyles(v value.Value) value.Value {
 	switch c := v.(type) {
 	case *value.Sequence:
-		folded := applyTemplates(c.Children)
+		folded := applyStyles(c.Children)
 		if len(folded) == len(c.Children) {
 			return v // nothing folded
 		}
@@ -1015,7 +1015,7 @@ func foldTemplates(v value.Value) value.Value {
 			return folded[0]
 		}
 		return &value.Sequence{Children: folded, Label: c.Label}
-	case *value.TemplateUpdate:
+	case *value.StyleUpdate:
 		return value.None{}
 	}
 	return v
@@ -1048,7 +1048,7 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 			}
 			// A set/show update can never carry a label; a label landing on one
 			// is unattached and warned about rather than silently dropped.
-			if isTemplateUpdate(ret[len(ret)-1]) {
+			if isStyleUpdate(ret[len(ret)-1]) {
 				lblSpan := fr.span(c.Result())
 				if r.IsLocal() {
 					lblSpan = fr.fn.RefSpans[r]
@@ -1084,18 +1084,18 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 			lastSpan = fr.span(c.Result())
 		}
 	}
-	ret = applyTemplates(ret)
+	ret = applyStyles(ret)
 	if len(ret) == 1 {
 		return ret[0]
 	}
 	return &value.Sequence{Children: ret}
 }
 
-// isTemplateUpdate reports whether c is a transient set/show update — content
-// that will be folded into a [value.Templated] wrapper by [applyTemplates] and
+// isStyleUpdate reports whether c is a transient set/show update — content
+// that will be folded into a [value.Styled] wrapper by [applyStyles] and
 // never survives on its own.
-func isTemplateUpdate(c value.Content) bool {
-	_, ok := c.(*value.TemplateUpdate)
+func isStyleUpdate(c value.Content) bool {
+	_, ok := c.(*value.StyleUpdate)
 	return ok
 }
 

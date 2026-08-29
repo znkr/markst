@@ -14,8 +14,8 @@ import (
 // don't survive into final output.
 //
 // Element, Set, Recipe, and the Selector variants are plain values. The two
-// content nodes — TemplateUpdate and Templated — are hand-written like
-// [StateUpdate] and opt out of the fieldaccessgen generator.
+// content nodes — StyleUpdate and Styled — are hand-written like [StateUpdate]
+// and opt out of the fieldaccessgen generator.
 
 // Element is a constructor function for elements and a set/show target such as
 // `heading` or `text`.
@@ -53,14 +53,14 @@ func (n *Element) produced(c Content) bool {
 	return n.produces != nil && n.produces(c)
 }
 
-// BindTemplateSet validates a set-rule's arguments against the element's own
+// BindStyleSet validates a set-rule's arguments against the element's own
 // signature and, on success, collects the named arguments into a [Set]. It uses
 // [Function.bind] — which rejects unknown arguments and type mismatches but,
 // unlike [Function.Apply], does not require the missing parameters — because a
 // set rule overrides only a subset of an element's properties. Positional
 // arguments are dropped from the recorded [Set]: an element's properties are its
 // named parameters.
-func (n *Element) BindTemplateSet(args *Arguments) (*Set, error) {
+func (n *Element) BindStyleSet(args *Arguments) (*Set, error) {
 	if _, _, err := n.Function.bind(args); err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (n *Set) equal(o *Set) bool {
 // Recipe is one resolved show-rule effect: a selector (nil for a bare
 // `show: transform`) and the transform applied to matching content by the
 // realization pass. Transform is a *Function, Content, *Element, or
-// *TemplateUpdate.
+// *StyleUpdate.
 type Recipe struct {
 	Selector  Selector
 	Transform Value
@@ -220,22 +220,22 @@ func (n *WhereSelector) Match(v Value) bool {
 	return ok && n.Element.produced(c) && contentHasLabel(c, n.Label)
 }
 
-// TemplateUpdate is the transient content node a set/show rule evaluates to. It
+// StyleUpdate is the transient content node a set/show rule evaluates to. It
 // rides the content sequence — analogous to [StateUpdate] — and is consumed by
-// the assembly step (folded into a [Templated] wrapper), never surviving into
+// the assembly step (folded into a [Styled] wrapper), never surviving into
 // final output.
-type TemplateUpdate struct {
+type StyleUpdate struct {
 	Set    *Set
 	Recipe *Recipe
 	Label  *Label
 }
 
-func (*TemplateUpdate) aValue()          {}
-func (*TemplateUpdate) aContent()        {}
-func (*TemplateUpdate) Type() types.Type { return types.Content }
+func (*StyleUpdate) aValue()          {}
+func (*StyleUpdate) aContent()        {}
+func (*StyleUpdate) Type() types.Type { return types.Content }
 
-func (n *TemplateUpdate) Equal(other Value) bool {
-	o, ok := other.(*TemplateUpdate)
+func (n *StyleUpdate) Equal(other Value) bool {
+	o, ok := other.(*StyleUpdate)
 	if !ok || !labelEqual(n.Label, o.Label) {
 		return false
 	}
@@ -251,9 +251,9 @@ func (n *TemplateUpdate) Equal(other Value) bool {
 	return true
 }
 
-func (n *TemplateUpdate) Format(f *formatter.Formatter) {
+func (n *StyleUpdate) Format(f *formatter.Formatter) {
 	f.Prefix()
-	f.Str("template(")
+	f.Str("style(")
 	switch {
 	case n.Set != nil:
 		n.Set.Format(f)
@@ -263,37 +263,37 @@ func (n *TemplateUpdate) Format(f *formatter.Formatter) {
 	f.Str(")")
 }
 
-func (n *TemplateUpdate) Field(name.Name) Value   { return nil }
-func (n *TemplateUpdate) HasField(name.Name) bool { return false }
-func (n *TemplateUpdate) Fields() *Dict           { return new(Dict) }
-func (n *TemplateUpdate) Name() string            { return "template" }
-func (n *TemplateUpdate) IsBlock() bool           { return false }
-func (n *TemplateUpdate) SetLabel(label *Label) *Label {
+func (n *StyleUpdate) Field(name.Name) Value   { return nil }
+func (n *StyleUpdate) HasField(name.Name) bool { return false }
+func (n *StyleUpdate) Fields() *Dict           { return new(Dict) }
+func (n *StyleUpdate) Name() string            { return "style" }
+func (n *StyleUpdate) IsBlock() bool           { return false }
+func (n *StyleUpdate) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
 }
-func (n *TemplateUpdate) GetLabel() *Label {
+func (n *StyleUpdate) GetLabel() *Label {
 	return n.Label
 }
 
-// Templated is the reified per-scope template: one wrapper per set/show scope,
+// Styled is the reified style scope: one wrapper per set/show scope,
 // recording the rules that apply to Body (the remaining siblings after the
 // rule). Mirrors Typst's StyledElem. The realization pass (eval/realize.go)
 // resolves it — applying recipes to Body and dropping the wrapper.
-type Templated struct {
+type Styled struct {
 	Sets    []*Set
 	Recipes []*Recipe
 	Body    Content
 	Label   *Label
 }
 
-func (*Templated) aValue()          {}
-func (*Templated) aContent()        {}
-func (*Templated) Type() types.Type { return types.Content }
+func (*Styled) aValue()          {}
+func (*Styled) aContent()        {}
+func (*Styled) Type() types.Type { return types.Content }
 
-func (n *Templated) Equal(other Value) bool {
-	o, ok := other.(*Templated)
+func (n *Styled) Equal(other Value) bool {
+	o, ok := other.(*Styled)
 	if !ok || len(n.Sets) != len(o.Sets) || len(n.Recipes) != len(o.Recipes) || !labelEqual(n.Label, o.Label) {
 		return false
 	}
@@ -310,9 +310,9 @@ func (n *Templated) Equal(other Value) bool {
 	return contentEqual(n.Body, o.Body)
 }
 
-func (n *Templated) Format(f *formatter.Formatter) {
+func (n *Styled) Format(f *formatter.Formatter) {
 	f.Prefix()
-	f.Str("templated(")
+	f.Str("styled(")
 	first := true
 	sep := func() {
 		if !first {
@@ -334,16 +334,16 @@ func (n *Templated) Format(f *formatter.Formatter) {
 	f.Str(")")
 }
 
-func (n *Templated) Field(name.Name) Value   { return nil }
-func (n *Templated) HasField(name.Name) bool { return false }
-func (n *Templated) Fields() *Dict           { return new(Dict) }
-func (n *Templated) Name() string            { return "templated" }
-func (n *Templated) IsBlock() bool           { return false }
-func (n *Templated) SetLabel(label *Label) *Label {
+func (n *Styled) Field(name.Name) Value   { return nil }
+func (n *Styled) HasField(name.Name) bool { return false }
+func (n *Styled) Fields() *Dict           { return new(Dict) }
+func (n *Styled) Name() string            { return "styled" }
+func (n *Styled) IsBlock() bool           { return false }
+func (n *Styled) SetLabel(label *Label) *Label {
 	old := n.Label
 	n.Label = label
 	return old
 }
-func (n *Templated) GetLabel() *Label {
+func (n *Styled) GetLabel() *Label {
 	return n.Label
 }

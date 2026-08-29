@@ -11,7 +11,7 @@ import (
 //
 // These are plain functions rather than elements, mirroring Typst, where a style
 // function is a scoped `set` on the equation element rather than an element of
-// its own. Each returns a [value.Templated] recording that set; the realization
+// its own. Each returns a [value.Styled] recording that set; the realization
 // pass folds it into the math leaves it reaches (see session.applySet).
 var (
 	Bold    = mathStyle("math.bold", names.Bold, value.Bool(true))
@@ -43,7 +43,7 @@ func mathStyle(fname string, field name.Name, val value.Value) *value.Function {
 			}
 			set := &value.Set{Element: Equation}
 			set.Fields.Put(field, val)
-			return &value.Templated{Sets: []*value.Set{set}, Body: body}, nil
+			return &value.Styled{Sets: []*value.Set{set}, Body: body}, nil
 		},
 	}
 }

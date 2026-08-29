@@ -11,7 +11,7 @@ import (
 
 // realizeDocument turns the recorded content tree into a realized
 // [value.Document]: paragraphs are formed, list/enum/term items grouped,
-// `*value.Templated` wrappers resolved (show recipes applied, `set document`
+// `*value.Styled` wrappers resolved (show recipes applied, `set document`
 // title hoisted). It runs inside [Eval] while the session — and any closures
 // captured by show transforms — are still live.
 func (s *session) realizeDocument(c value.Content) *value.Document {
@@ -40,14 +40,14 @@ func (s *session) realizeBody(children []value.Content, label *value.Label) valu
 }
 
 // flattenAndRealize realizes each child and splices unlabeled sequences (and
-// resolved templates) into a single flat run, so paragraph/item grouping sees
+// resolved style scopes) into a single flat run, so paragraph/item grouping sees
 // across nested-sequence boundaries.
 func (s *session) flattenAndRealize(children []value.Content) []value.Content {
 	var out []value.Content
 	for _, ch := range children {
 		switch c := ch.(type) {
-		case *value.Templated:
-			appendFlat(&out, s.resolveTemplated(c, s.realize))
+		case *value.Styled:
+			appendFlat(&out, s.resolveStyled(c, s.realize))
 		case *value.Sequence:
 			if c.Label == nil {
 				out = append(out, s.flattenAndRealize(c.Children)...)
@@ -69,14 +69,14 @@ func appendFlat(out *[]value.Content, c value.Content) {
 	*out = append(*out, c)
 }
 
-// realize realizes one content node in block context: templates resolve,
+// realize realizes one content node in block context: style scopes resolve,
 // sequences group into paragraphs, and block bodies (list/enum/term items) are
 // recursed into. Inline bodies (heading/strong/emph/link/par) use
 // [session.realizeInline] so their content isn't wrapped in paragraphs.
 func (s *session) realize(c value.Content) value.Content {
 	switch c := c.(type) {
-	case *value.Templated:
-		return s.resolveTemplated(c, s.realize)
+	case *value.Styled:
+		return s.resolveStyled(c, s.realize)
 	case *value.Sequence:
 		return s.realizeBody(c.Children, c.Label)
 	case *value.Heading:
@@ -145,13 +145,13 @@ func (s *session) realizeInlineBlock(c value.Content) value.Content {
 }
 
 // realizeInlineRun realizes inline content without forming paragraphs: it
-// resolves templates and recurses into wrapper bodies but leaves sequences
+// resolves style scopes and recurses into wrapper bodies but leaves sequences
 // flat. edges says whether the run this builds ends on block boundaries; it
 // reaches the run's own ends through [trimRun] and [trimEdges].
 func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 	switch c := c.(type) {
-	case *value.Templated:
-		return s.resolveTemplated(c, func(body value.Content) value.Content {
+	case *value.Styled:
+		return s.resolveStyled(c, func(body value.Content) value.Content {
 			return s.realizeInlineRun(body, edges)
 		})
 	case *value.Sequence:
@@ -422,12 +422,12 @@ func isItem(c value.Content) bool {
 	return false
 }
 
-// resolveTemplated realizes a template scope: it realizes the body, applies the
+// resolveStyled realizes a style scope: it realizes the body, applies the
 // recorded set rules and show recipes to it, and returns the result with the
 // wrapper gone. realize is the caller's own realization step, so that a scope
 // reached from inline content (a math style function, say) doesn't have its
 // body grouped into paragraphs.
-func (s *session) resolveTemplated(t *value.Templated, realize func(value.Content) value.Content) value.Content {
+func (s *session) resolveStyled(t *value.Styled, realize func(value.Content) value.Content) value.Content {
 	body := realize(t.Body)
 	for _, set := range t.Sets {
 		body = s.applySet(body, set)
@@ -470,7 +470,7 @@ func (s *session) applySet(c value.Content, set *value.Set) value.Content {
 // left to the general set behaviour described on applySet.
 //
 // A property already set on a leaf is left alone, so the nearest style function
-// wins: resolveTemplated realizes a body before applying its own sets, so in
+// wins: resolveStyled realizes a body before applying its own sets, so in
 // `sans(frak(x))` the inner frak lands first.
 func applyMathStyle(c value.Content, set *value.Set) value.Content {
 	bold, hasBold := set.Fields.Get(names.Bold)

@@ -6,9 +6,9 @@
 //
 // Set-rule arguments are still validated against the element's own parameters,
 // so the tests use `level` (heading's one modeled property); a bogus property
-// errors (see template-set-unknown-property).
+// errors (see style-set-unknown-property).
 
---- template-set-scopes-following-siblings ---
+--- style-set-scopes-following-siblings ---
 = A
 #set heading(level: 2)
 = B
@@ -17,23 +17,23 @@
 │   #heading(level: 1)[B]
 │ ]
 
---- template-set-if-false-noop ---
+--- style-set-if-false-noop ---
 #set heading(level: 2) if false
 = B
 │ #document[#heading(level: 1)[B]]
 
---- template-set-if-true ---
+--- style-set-if-true ---
 #set heading(level: 2) if true
 = B
 │ #document[#heading(level: 1)[B]]
 
---- template-consecutive-sets-nest ---
+--- style-consecutive-sets-nest ---
 #set heading(level: 2)
 #set heading(level: 3)
 = B
 │ #document[#heading(level: 1)[B]]
 
---- template-set-code-mode ---
+--- style-set-code-mode ---
 #{
   [A]
   set heading(level: 2)
@@ -41,32 +41,32 @@
 }
 │ #document[#par[AB]]
 
---- template-set-unknown-property ---
+--- style-set-unknown-property ---
 // Error: 14-29 unexpected argument: numbering
 #set heading(numbering: "1.")
 = B
 
---- template-unattached-label-warn ---
+--- style-unattached-label-warn ---
 #set heading(level: 2)
 // Warning: 1-4 label `<a>` is not attached to anything
 <a>
 │ #document[]
 
---- template-show-element ---
+--- style-show-element ---
 #show heading: emph
 = A
 │ #document[#par[#emph[#heading(level: 1)[A]]]]
 
---- template-show-where-selector ---
+--- style-show-where-selector ---
 #show heading.where(label: <x>): emph
 = A <x>
 │ #document[#par[#emph[#heading(level: 1)[A]]]]
 
---- template-show-label-selector ---
+--- style-show-label-selector ---
 #show <x>: emph
 = A <x>
 │ #document[#par[#emph[#heading(level: 1)[A]]]]
 
---- template-element-constructor-call ---
+--- style-element-constructor-call ---
 #heading(level: 2)[Title]
 │ #document[#heading(level: 2)[Title]]
