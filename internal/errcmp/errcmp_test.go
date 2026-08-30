@@ -180,7 +180,7 @@ func TestDiff(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			root := parser.Parse(tc.src)
+			root := parser.Parse([]byte(tc.src))
 
 			var got []Error
 			for _, e := range tc.got {

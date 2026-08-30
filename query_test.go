@@ -22,7 +22,7 @@ Body text with #metadata(42) <inline> in the middle of it.
 `
 
 func TestQuery(t *testing.T) {
-	doc, warnings, err := writst.Compile(frontMatter)
+	doc, warnings, err := writst.Compile([]byte(frontMatter))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestQuery(t *testing.T) {
 // TestQueryDocumentOrder pins the answer Query gives when a label is reused:
 // the first in document order, and a warning saying so.
 func TestQueryDocumentOrder(t *testing.T) {
-	doc, warnings, err := writst.Compile("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n")
+	doc, warnings, err := writst.Compile([]byte("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestQueryDocumentOrder(t *testing.T) {
 // document that failed and one that merely has something to say: a warning
 // must not come back as err, or callers would reject documents that are fine.
 func TestCompileWarningIsNotFailure(t *testing.T) {
-	doc, warnings, err := writst.Compile("= Hello <a> <b>\n")
+	doc, warnings, err := writst.Compile([]byte("= Hello <a> <b>\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v, want no error", err)
 	}
@@ -103,7 +103,7 @@ func TestCompileWarningIsNotFailure(t *testing.T) {
 
 // TestCompileError checks the other half of that split.
 func TestCompileError(t *testing.T) {
-	_, _, err := writst.Compile("#metadata()\n")
+	_, _, err := writst.Compile([]byte("#metadata()\n"))
 	if err == nil {
 		t.Fatal("Compile() = nil, want an error for the missing argument")
 	}

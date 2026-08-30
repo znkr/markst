@@ -30,7 +30,7 @@ func TestParse(t *testing.T) {
 						t.Skip(tc.Skip)
 					}
 
-					node := parser.Parse(tc.Input)
+					node := parser.Parse([]byte(tc.Input))
 					got := format.Format(node)
 
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
@@ -60,10 +60,10 @@ func TestTextRoundTripGolden(t *testing.T) {
 			t.Parallel()
 			for _, tc := range testfile.Read(t, file) {
 				t.Run(tc.Name, func(t *testing.T) {
-					node := parser.Parse(tc.Input)
+					node := parser.Parse([]byte(tc.Input))
 					got := node.Text()
-					if got != tc.Input {
-						t.Errorf("Text() != Input:\n  input: %q\n  got:   %q", tc.Input, got)
+					if got != string(tc.Input) {
+						t.Errorf("Text() != Input:\n  input: %q\n  got:   %q", string(tc.Input), got)
 					}
 				})
 			}
@@ -93,7 +93,7 @@ func FuzzTextRoundTrip(f *testing.F) {
 				t.Skipf("parser panicked: %v", r)
 			}
 		}()
-		node := parser.Parse(src)
+		node := parser.Parse([]byte(src))
 		got := node.Text()
 		if got != src {
 			t.Errorf("Text() != src:\n  src: %q\n  got: %q", src, got)

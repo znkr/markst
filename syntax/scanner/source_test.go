@@ -196,7 +196,7 @@ func TestSource_Position(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &source{content: tt.content, newlines: tt.newlines}
+			f := &source{content: []byte(tt.content), newlines: tt.newlines}
 			got := f.Position(tt.offset)
 			if got != tt.expected {
 				t.Errorf("Position(%d) = %+v, want %+v", tt.offset, got, tt.expected)
@@ -306,7 +306,7 @@ func TestSource_Offset(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &source{content: tt.content, newlines: tt.newlines}
+			f := &source{content: []byte(tt.content), newlines: tt.newlines}
 			got := f.Offset(tt.pos)
 			if got != tt.expected {
 				t.Errorf("Offset(%+v) = %d, want %d", tt.pos, got, tt.expected)

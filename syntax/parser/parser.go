@@ -42,7 +42,7 @@ var stopParse = syntax.SetOf(syntax.KindEnd)
 //
 // Parse never returns an error; invalid input is represented by [syntax.Error]
 // nodes in the tree.
-func Parse(src string) syntax.RootNode {
+func Parse(src []byte) syntax.RootNode {
 	p := newParser(src)
 	p.parseMarkup(stopParse, mfAtStart|mfWrapTrivia)
 	if p.cur.kind != syntax.KindEnd {
@@ -125,7 +125,7 @@ type token struct {
 	indent   int
 }
 
-func newParser(src string) *parser {
+func newParser(src []byte) *parser {
 	p := &parser{
 		s:         scanner.New(src),
 		memos:     make(map[int]memo),

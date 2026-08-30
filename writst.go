@@ -20,7 +20,7 @@ import (
 // are fine. err is an [eval.ErrorList] when it is non-nil, so the individual
 // diagnostics — each carrying the span it was reported at — are reachable
 // through errors.As or its Unwrap.
-func Compile(src string) (*value.Document, []eval.Error, error) {
+func Compile(src []byte) (*value.Document, []eval.Error, error) {
 	root := parser.Parse(src)
 	mod := analyzer.Analyze(root)
 	doc, warnings, errs := eval.Eval(mod)

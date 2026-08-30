@@ -71,7 +71,7 @@ func TestWritst(t *testing.T) {
 						},
 					}
 
-					root := parser.Parse(tc.Input)
+					root := parser.Parse([]byte(tc.Input))
 					mod = analyzer.Analyze(root, analyzer.WithBindings(bindings))
 					contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
 
@@ -138,7 +138,7 @@ func TestApproximationsPreserveOutput(t *testing.T) {
 	// the formatted document, and the diagnostics in the order they were
 	// reported.
 	render := func(src string, opts ...analyzer.Option) string {
-		root := parser.Parse(src)
+		root := parser.Parse([]byte(src))
 		mod := analyzer.Analyze(root, append([]analyzer.Option{analyzer.WithBindings(bindings)}, opts...)...)
 		contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
 		var sb strings.Builder

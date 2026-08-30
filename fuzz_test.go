@@ -126,7 +126,7 @@ func FuzzAnalyze(f *testing.F) {
 			}
 			panic(r)
 		}()
-		root := parser.Parse(src)
+		root := parser.Parse([]byte(src))
 		analyzer.Analyze(root)
 		// The approximations-off path lowers strictly more, so it reaches code
 		// the default path skips. TestApproximationsPreserveOutput is what

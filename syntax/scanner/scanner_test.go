@@ -815,7 +815,7 @@ func TestScanner_MarkupMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := New(tt.input)
+			s := New([]byte(tt.input))
 			var got []syntax.Node
 			for {
 				kind, node := s.Next()
@@ -875,7 +875,7 @@ func TestScanner_Newline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := New(tt.input)
+			s := New([]byte(tt.input))
 			var got []bool
 			for {
 				kind, _ := s.Next()
@@ -1400,7 +1400,7 @@ func TestScanner_CodeMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := New(tt.input)
+			s := New([]byte(tt.input))
 			s.SetMode(syntax.ModeCode)
 			var got []syntax.Node
 			for {
@@ -1552,7 +1552,7 @@ func TestScanner_MathMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := New(tt.input)
+			s := New([]byte(tt.input))
 			s.SetMode(syntax.ModeMath)
 			var got []syntax.Node
 			for {
@@ -1592,7 +1592,7 @@ func TestScanner_Seek(t *testing.T) {
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			// First pass: scan sequentially and record state before each token
-			s := New(input)
+			s := New([]byte(input))
 			var records []record
 			for {
 				offset := s.Offset()
@@ -1604,7 +1604,7 @@ func TestScanner_Seek(t *testing.T) {
 			}
 
 			// Second pass: seek forward through all offsets and verify
-			s2 := New(input)
+			s2 := New([]byte(input))
 			for _, rec := range records {
 				s2.Seek(rec.offset)
 				kind, _ := s2.Next()
@@ -1617,7 +1617,7 @@ func TestScanner_Seek(t *testing.T) {
 			}
 
 			// Third pass: seek backward through all offsets and verify
-			s3 := New(input)
+			s3 := New([]byte(input))
 			for _, rec := range slices.Backward(records) {
 				s3.Seek(rec.offset)
 				kind, _ := s3.Next()
@@ -1634,7 +1634,7 @@ func TestScanner_Seek(t *testing.T) {
 
 func TestScanner_Column(t *testing.T) {
 	code := "h\nello"
-	s := New(code)
+	s := New([]byte(code))
 
 	if c := s.Column(); c != 0 {
 		t.Errorf("initial Column() = %d, want 0", c)

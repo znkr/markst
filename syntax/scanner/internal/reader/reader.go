@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"bytes"
 	"unicode/utf8"
 )
 
@@ -13,7 +14,7 @@ const EOF rune = -1
 // lookbehind, conditional consumption, seeking, and tracks newline offsets and
 // column positions.
 type Reader struct {
-	src      string
+	src      []byte
 	ch       rune
 	chw      int
 	col      int // Current column number (0-based). < 0 if invalid.
@@ -22,7 +23,7 @@ type Reader struct {
 }
 
 // New returns a new reader.
-func New(src string) *Reader {
+func New(src []byte) *Reader {
 	b := &Reader{
 		src: src,
 	}
@@ -36,7 +37,7 @@ func (b *Reader) fill() {
 		b.chw = 0
 		return
 	}
-	r, n := utf8.DecodeRuneInString(b.src[b.cur:])
+	r, n := utf8.DecodeRune(b.src[b.cur:])
 	b.ch = r
 	b.chw = n
 }
@@ -47,7 +48,7 @@ func (b *Reader) Column() int {
 		// Invalid column, recompute by scanning backwards to newline or start.
 		b.col = 0
 		for cur := b.cur; cur > 0; {
-			ch, chw := utf8.DecodeLastRuneInString(b.src[:cur])
+			ch, chw := utf8.DecodeLastRune(b.src[:cur])
 			if ch == '\n' || ch == '\r' {
 				break
 			}
@@ -103,10 +104,10 @@ func (b *Reader) Scout(dist int) (rune, bool) {
 			if pos == 0 {
 				return utf8.RuneError, false
 			}
-			_, width := utf8.DecodeLastRuneInString(b.src[:pos])
+			_, width := utf8.DecodeLastRune(b.src[:pos])
 			pos -= width
 		}
-		r, _ := utf8.DecodeRuneInString(b.src[pos:])
+		r, _ := utf8.DecodeRune(b.src[pos:])
 		return r, true
 	}
 
@@ -121,14 +122,14 @@ func (b *Reader) Scout(dist int) (rune, bool) {
 		if pos >= len(b.src) {
 			return utf8.RuneError, false
 		}
-		_, width := utf8.DecodeRuneInString(b.src[pos:])
+		_, width := utf8.DecodeRune(b.src[pos:])
 		pos += width
 	}
 
 	if pos >= len(b.src) {
 		return utf8.RuneError, false
 	}
-	r, _ := utf8.DecodeRuneInString(b.src[pos:])
+	r, _ := utf8.DecodeRune(b.src[pos:])
 	return r, true
 }
 
@@ -139,7 +140,7 @@ func (b *Reader) Backup() {
 	if b.cur == 0 {
 		panic("backup: cannot backup past the beginning")
 	}
-	ch, n := utf8.DecodeLastRuneInString(b.src[:b.cur])
+	ch, n := utf8.DecodeLastRune(b.src[:b.cur])
 	b.cur -= n
 	b.ch = ch
 	b.chw = n
@@ -153,7 +154,7 @@ func (b *Reader) ContinuesWith(s string) bool {
 	if len(b.src)-b.cur < len(s) {
 		return false
 	}
-	return b.src[b.cur:b.cur+len(s)] == s
+	return bytes.Equal(b.src[b.cur:b.cur+len(s)], []byte(s))
 }
 
 // ConsumeIf consumes s if the remaining input starts with it and returns true.
@@ -168,7 +169,7 @@ func (b *Reader) ConsumeIf(s string) bool {
 }
 
 // ConsumeWhile consumes runes while cond returns true and returns the consumed string.
-func (b *Reader) ConsumeWhile(cond func(rune) bool) string {
+func (b *Reader) ConsumeWhile(cond func(rune) bool) []byte {
 	start := b.cur
 	for b.ch != EOF && cond(b.ch) {
 		b.Next()
@@ -179,7 +180,7 @@ func (b *Reader) ConsumeWhile(cond func(rune) bool) string {
 // BackupWhile moves the reader backwards while cond returns true for the preceding rune.
 func (b *Reader) BackupWhile(cond func(rune) bool) {
 	for b.cur != 0 {
-		ch, n := utf8.DecodeLastRuneInString(b.src[:b.cur])
+		ch, n := utf8.DecodeLastRune(b.src[:b.cur])
 		if !cond(ch) {
 			break
 		}
@@ -206,17 +207,17 @@ func (b *Reader) Offset() int {
 }
 
 // From returns the substring from start to the current position.
-func (b *Reader) From(start int) string {
+func (b *Reader) From(start int) []byte {
 	return b.src[start:b.cur]
 }
 
 // Upto returns the substring from the beginning of the input to end.
-func (b *Reader) Upto(end int) string {
+func (b *Reader) Upto(end int) []byte {
 	return b.src[0:end]
 }
 
 // Source returns the full source text.
-func (b *Reader) Source() string {
+func (b *Reader) Source() []byte {
 	return b.src
 }
 

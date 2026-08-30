@@ -10,7 +10,7 @@ import (
 )
 
 func TestEmpty(t *testing.T) {
-	r := New("")
+	r := New(nil)
 
 	if ch := r.Next(); ch != EOF {
 		t.Errorf("r.Next() = %q, want EOF", ch)
@@ -32,7 +32,7 @@ func TestNext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.in)
+			r := New([]byte(tt.in))
 			in := tt.in
 
 			var runes []rune
@@ -60,7 +60,7 @@ func TestNext(t *testing.T) {
 }
 
 func TestPeek(t *testing.T) {
-	r := New("世界")
+	r := New([]byte("世界"))
 	if got, want := r.Peek(), '世'; got != want {
 		t.Errorf("(first rune) r.Peek() = %v, want %v", got, want)
 	}
@@ -75,7 +75,7 @@ func TestPeek(t *testing.T) {
 }
 
 func TestBackup(t *testing.T) {
-	r := New("Hello")
+	r := New([]byte("Hello"))
 
 	if ch := r.Next(); ch != 'H' {
 		t.Errorf("1st r.Next() = %q, want 'H'", ch)
@@ -98,7 +98,7 @@ func TestBackup(t *testing.T) {
 func TestBackup_Newlines(t *testing.T) {
 	// Test the column recalculation logic
 	input := "a\nb\nc"
-	r := New(input)
+	r := New([]byte(input))
 
 	// Read 'a', '\n', 'b'
 	r.Next() // a
@@ -130,7 +130,7 @@ func TestBackup_Newlines(t *testing.T) {
 }
 
 func TestContinuesWith(t *testing.T) {
-	r := New("Hello World")
+	r := New([]byte("Hello World"))
 
 	if !r.ContinuesWith("Hello") {
 		t.Error("HasPrefix('Hello') failed")
@@ -207,7 +207,7 @@ func TestConsumeIf(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.input)
+			r := New([]byte(tt.input))
 			if tt.setup != nil {
 				tt.setup(t, r)
 			}
@@ -267,13 +267,13 @@ func TestConsumeWhile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.input)
+			r := New([]byte(tt.input))
 			if tt.setup != nil {
 				tt.setup(t, r)
 			}
 			got := r.ConsumeWhile(tt.cond)
-			if got != tt.want {
-				t.Errorf("ConsumeWhile() = %q, want %q", got, tt.want)
+			if string(got) != tt.want {
+				t.Errorf("ConsumeWhile() = %q, want %q", string(got), tt.want)
 			}
 			if got := r.Peek(); got != tt.wantPeek {
 				t.Errorf("Peek() = %q, want %q", got, tt.wantPeek)
@@ -283,7 +283,7 @@ func TestConsumeWhile(t *testing.T) {
 }
 
 func TestBackupWhile(t *testing.T) {
-	r := New("Hello World")
+	r := New([]byte("Hello World"))
 	// Consume everything
 	r.ConsumeWhile(func(rune) bool { return true })
 
@@ -317,7 +317,7 @@ func TestBackupWhile(t *testing.T) {
 
 func TestScout(t *testing.T) {
 	input := "abc"
-	r := New(input)
+	r := New([]byte(input))
 	if ch, ok := r.Scout(1); ch != 'b' || !ok {
 		t.Errorf("Scout(1) = %q, %v; want 'b', true", ch, ok)
 	}
@@ -391,7 +391,7 @@ func TestColumn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.in)
+			r := New([]byte(tt.in))
 			var cols []int
 			for r.Peek() != EOF {
 				cols = append(cols, r.Column())
@@ -458,7 +458,7 @@ func TestSeek(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.input)
+			r := New([]byte(tt.input))
 			r.Seek(tt.pos)
 			if got := r.Peek(); got != tt.wantPeek {
 				t.Errorf("Peek() = %q, want %q", got, tt.wantPeek)
@@ -494,7 +494,7 @@ func TestSeek_MatchesSequentialScan(t *testing.T) {
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			// First pass: scan sequentially and record column at each offset
-			r := New(input)
+			r := New([]byte(input))
 			var records []record
 			for r.Peek() != EOF {
 				records = append(records, record{r.Offset(), r.Column()})
@@ -503,7 +503,7 @@ func TestSeek_MatchesSequentialScan(t *testing.T) {
 			records = append(records, record{r.Offset(), r.Column()})
 
 			// Second pass: seek forward through all offsets
-			r2 := New(input)
+			r2 := New([]byte(input))
 			for _, rec := range records {
 				r2.Seek(rec.offset)
 				if got := r2.Column(); got != rec.col {
@@ -512,7 +512,7 @@ func TestSeek_MatchesSequentialScan(t *testing.T) {
 			}
 
 			// Third pass: seek backward through all offsets
-			r3 := New(input)
+			r3 := New([]byte(input))
 			for _, rec := range slices.Backward(records) {
 				r3.Seek(rec.offset)
 				if got := r3.Column(); got != rec.col {
@@ -525,20 +525,20 @@ func TestSeek_MatchesSequentialScan(t *testing.T) {
 
 func TestFromUpto(t *testing.T) {
 	input := "Hello World"
-	r := New(input)
+	r := New([]byte(input))
 
 	r.ConsumeIf("Hello")
-	if got := r.From(0); got != "Hello" {
-		t.Errorf("From(0) = %q, want %q", got, "Hello")
+	if got := r.From(0); string(got) != "Hello" {
+		t.Errorf("From(0) = %q, want %q", string(got), "Hello")
 	}
 
-	if got := r.Upto(5); got != "Hello" {
-		t.Errorf("Upto(5) = %q, want %q", got, "Hello")
+	if got := r.Upto(5); string(got) != "Hello" {
+		t.Errorf("Upto(5) = %q, want %q", string(got), "Hello")
 	}
 
 	r.ConsumeIf(" ")
-	if got := r.From(5); got != " " {
-		t.Errorf("From(5) = %q, want %q", got, " ")
+	if got := r.From(5); string(got) != " " {
+		t.Errorf("From(5) = %q, want %q", string(got), " ")
 	}
 }
 
@@ -607,7 +607,7 @@ func TestNewlines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.in)
+			r := New([]byte(tt.in))
 			// Consume entire input to populate newlines
 			for r.Next() != EOF {
 			}
@@ -667,7 +667,7 @@ func TestNewlines_NoDuplicates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := New(tt.in)
+			r := New([]byte(tt.in))
 			tt.action(r)
 			if diff := cmp.Diff(r.Newlines(), tt.want); diff != "" {
 				t.Errorf("Newlines() mismatch [-got,+want]:\n%s", diff)

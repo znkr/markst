@@ -15,6 +15,7 @@
 package scanner
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -52,7 +53,7 @@ type protoerr struct {
 }
 
 // New creates a scanner for the given source text, starting in markup mode.
-func New(src string) *Scanner {
+func New(src []byte) *Scanner {
 	return &Scanner{r: reader.New(src)}
 }
 
@@ -109,12 +110,12 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	if err := s.err; err != nil {
 		s.err = nil
 		s.node = nil
-		return syntax.KindError, syntax.NewError(span, err.message, text, err.hints...)
+		return syntax.KindError, syntax.NewError(span, err.message, string(text), err.hints...)
 	} else if node := s.node; node != nil {
 		s.node = nil
 		return kind, node
 	} else {
-		return kind, syntax.NewLeaf(kind, span, text)
+		return kind, syntax.NewLeaf(kind, span, string(text))
 	}
 }
 
@@ -280,7 +281,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	for found < backticks {
 		switch s.r.Next() {
 		case reader.EOF:
-			return syntax.KindError, syntax.NewError(s.spanFrom(start), "unclosed raw text", s.r.From(start))
+			return syntax.KindError, syntax.NewError(s.spanFrom(start), "unclosed raw text", string(s.r.From(start)))
 		case '`':
 			found++
 		default:
@@ -292,7 +293,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	var nodes []syntax.Node
 	prevStart := start
 	push := func(kind syntax.Kind) {
-		nodes = append(nodes, syntax.NewLeaf(kind, s.spanFrom(prevStart), s.r.From(prevStart)))
+		nodes = append(nodes, syntax.NewLeaf(kind, s.spanFrom(prevStart), string(s.r.From(prevStart))))
 		prevStart = s.r.Offset()
 	}
 
@@ -346,7 +347,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 	// Language tag
 	tag := s.r.ConsumeWhile(func(ch rune) bool { return !unicode.IsSpace(ch) && ch != '`' })
-	if tag != "" {
+	if len(tag) != 0 {
 		push(syntax.KindRawLang)
 	}
 
@@ -356,7 +357,7 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 	var lines []string
 	for s.r.Offset() < rawEnd {
 		if ch := s.r.Peek(); isNewline(ch) {
-			lines = append(lines, s.r.From(prevStart))
+			lines = append(lines, string(s.r.From(prevStart)))
 			s.consumeNewline()
 			prevStart = s.r.Offset()
 			continue
@@ -365,7 +366,7 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 	}
 	// Capture the final segment (from last newline to rawEnd)
 	s.r.Seek(rawEnd)
-	lines = append(lines, s.r.From(prevStart))
+	lines = append(lines, string(s.r.From(prevStart)))
 	s.r.Seek(start)
 
 	// Determine dedent level. Whitespace-only lines (except the last) are
@@ -577,7 +578,7 @@ func (s *Scanner) scanNumbering(start int) syntax.Kind {
 	s.r.ConsumeWhile(isASCIIDigit)
 	number := s.r.From(start)
 	if s.r.ConsumeIf(".") && s.spaceOrEnd() {
-		_, err := strconv.ParseInt(number, 10, 64)
+		_, err := strconv.ParseInt(string(number), 10, 64)
 		if err != nil {
 			return s.errorf("invalid list numbering: %s", s.r.From(start))
 		}
@@ -592,7 +593,7 @@ func (s *Scanner) scanBackslash() syntax.Kind {
 		if !s.r.ConsumeIf("}") {
 			return s.errorf("unclosed Unicode escape sequence")
 		}
-		x, err := strconv.ParseInt(seq, 16, 64)
+		x, err := strconv.ParseInt(string(seq), 16, 64)
 		if err != nil || x > unicode.MaxRune || (0xD800 <= x && x < 0xE000) {
 			return s.error("invalid Unicode escape sequence")
 		}
@@ -720,7 +721,7 @@ func (s *Scanner) scanMath(start int, ch rune) syntax.Kind {
 // s.node) if the identifier is followed by one or more `.field` accesses.
 func (s *Scanner) scanMathIdentOrField(start int) syntax.Kind {
 	kind := syntax.KindMathIdent
-	var node syntax.Node = syntax.NewLeaf(kind, s.spanFrom(start), s.r.From(start))
+	var node syntax.Node = syntax.NewLeaf(kind, s.spanFrom(start), string(s.r.From(start)))
 	for {
 		identStart, ok := s.maybeDotIdent()
 		if !ok {
@@ -728,7 +729,7 @@ func (s *Scanner) scanMathIdentOrField(start int) syntax.Kind {
 		}
 		identEnd := s.r.Offset()
 		dot := syntax.NewLeaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, ".")
-		ident := syntax.NewLeaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, s.r.From(identStart))
+		ident := syntax.NewLeaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, string(s.r.From(identStart)))
 		kind = syntax.KindFieldAccess
 		node = syntax.NewInner(kind, []syntax.Node{node, dot, ident})
 	}
@@ -780,10 +781,10 @@ func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
 		// A colon must directly follow, and not the `:=`/`::=` shorthands.
 		if s.r.Peek() == ':' && !s.r.ContinuesWith(":=") && !s.r.ContinuesWith("::=") {
 			text := s.r.From(start)
-			if text != "_" {
-				return syntax.NewLeaf(syntax.KindIdent, s.spanFrom(start), text)
+			if !bytes.Equal(text, []byte("_")) {
+				return syntax.NewLeaf(syntax.KindIdent, s.spanFrom(start), string(text))
 			}
-			return syntax.NewError(s.spanFrom(start), "expected identifier, found underscore", text)
+			return syntax.NewError(s.spanFrom(start), "expected identifier, found underscore", string(text))
 		}
 	}
 	s.r.Seek(cursor)
@@ -801,7 +802,7 @@ func (s *Scanner) MaybeMathSpreadArg(start int) syntax.Node {
 		// Don't infer a spread before trivia/end, a dot (`...` shorthand), or an
 		// argument terminator (spreads nothing).
 		if ch := s.r.Peek(); !s.spaceOrEnd() && ch != '.' && ch != ',' && ch != ';' && ch != ')' && ch != '$' {
-			return syntax.NewLeaf(syntax.KindDots, s.spanFrom(start), s.r.From(start))
+			return syntax.NewLeaf(syntax.KindDots, s.spanFrom(start), string(s.r.From(start)))
 		}
 	}
 	s.r.Seek(cursor)
@@ -998,10 +999,10 @@ var keywords = map[string]syntax.Kind{
 
 func (s *Scanner) scanIdent(start int) syntax.Kind {
 	s.r.ConsumeWhile(isIDContinue)
-	ident := s.r.From(start)
+	ident := string(s.r.From(start))
 
 	prev := s.r.Upto(start)
-	if (!strings.HasSuffix(prev, ".") || strings.HasSuffix(prev, "..")) && !strings.HasSuffix(prev, "@") {
+	if (!bytes.HasSuffix(prev, []byte(".")) || bytes.HasSuffix(prev, []byte(".."))) && !bytes.HasSuffix(prev, []byte("@")) {
 		if kind, ok := keywords[ident]; ok {
 			return kind
 		}
@@ -1053,7 +1054,7 @@ func (s *Scanner) scanString() syntax.Kind {
 				// Validate the code point itself, not just the shape, so the
 				// analyzer never has to decode an escape that isn't a
 				// character (mirrors [Scanner.scanBackslash] for markup).
-				if x, perr := strconv.ParseInt(seq, 16, 64); perr != nil || x > unicode.MaxRune || (0xD800 <= x && x < 0xE000) {
+				if x, perr := strconv.ParseInt(string(seq), 16, 64); perr != nil || x > unicode.MaxRune || (0xD800 <= x && x < 0xE000) {
 					if err == "" {
 						err = "invalid unicode escape sequence"
 					}
@@ -1145,24 +1146,24 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 
 	// Handle numbers with a trailing incomplete exponent like `1e` as an invalid floating point
 	// number rather than an invalid suffix.
-	if suffix == "e" || suffix == "E" {
+	if bytes.Equal(suffix, []byte("e")) || bytes.Equal(suffix, []byte("E")) {
 		number = s.r.From(start)
-		suffix = ""
+		suffix = []byte{}
 		isFloat = true
 	}
 
 	var suffixErr string
-	if suffix != "" {
-		if _, ok := numberSuffixes[suffix]; !ok {
-			suffixErr = fmt.Sprintf("invalid number suffix: %s", suffix)
+	if len(suffix) != 0 {
+		if _, ok := numberSuffixes[string(suffix)]; !ok {
+			suffixErr = fmt.Sprintf("invalid number suffix: %s", string(suffix))
 		}
 	}
 
 	var numberErr string
 	switch {
 	case isFloat:
-		if _, err := strconv.ParseFloat(number, 64); err != nil && !errors.Is(err, strconv.ErrRange) {
-			numberErr = fmt.Sprintf("invalid floating point number: %s", number)
+		if _, err := strconv.ParseFloat(string(number), 64); err != nil && !errors.Is(err, strconv.ErrRange) {
+			numberErr = fmt.Sprintf("invalid floating point number: %s", string(number))
 		}
 	default:
 		var name string
@@ -1176,14 +1177,14 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 		case 16:
 			name = "hexadecimal"
 		}
-		value, err := strconv.ParseInt(number[prefix:], base, 64)
+		value, err := strconv.ParseInt(string(number[prefix:]), base, 64)
 		if err != nil {
-			numberErr = fmt.Sprintf("invalid %s number: %s", name, number)
+			numberErr = fmt.Sprintf("invalid %s number: %s", name, string(number))
 			break
 		}
-		if suffix != "" && base != 10 {
+		if len(suffix) != 0 && base != 10 {
 			if suffixErr == "" {
-				suffixErr = fmt.Sprintf("try using a decimal number %d%s", value, suffix)
+				suffixErr = fmt.Sprintf("try using a decimal number %d%s", value, string(suffix))
 			}
 			numberErr = fmt.Sprintf("%s numbers cannot have a unit suffix", name)
 			break
@@ -1198,7 +1199,7 @@ func (s *Scanner) scanNumber(start int, first rune) syntax.Kind {
 		return s.error(numberErr)
 	case numberErr == "" && suffixErr != "":
 		return s.error(suffixErr)
-	case suffix != "":
+	case len(suffix) != 0:
 		return syntax.KindNumeric
 	default:
 		if isFloat {

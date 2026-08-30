@@ -41,7 +41,7 @@ func TestEmbeddedCodeContexts(t *testing.T) {
 		for _, code := range codes {
 			in := fmt.Sprintf(context, code)
 			t.Run(in, func(t *testing.T) {
-				analyzer.Analyze(parser.Parse(in))
+				analyzer.Analyze(parser.Parse([]byte(in)))
 			})
 		}
 	}

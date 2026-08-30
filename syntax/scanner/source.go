@@ -11,7 +11,7 @@ import (
 // scanning. It maps between byte offsets and line/column positions using
 // binary search over the newline table.
 type source struct {
-	content  string
+	content  []byte
 	newlines []uint32
 }
 
@@ -27,13 +27,11 @@ func (f *source) Position(offset uint32) syntax.Position {
 	if line > 0 {
 		lineStart = f.newlines[line-1]
 	}
-	var column uint32
-	for i := range f.content[lineStart:] {
-		if lineStart+uint32(i) >= offset {
-			break
-		}
-		column++
+	end := offset
+	if end > uint32(len(f.content)) {
+		end = uint32(len(f.content))
 	}
+	column := uint32(utf8.RuneCount(f.content[lineStart:end]))
 	return syntax.Position{Line: uint32(line + 1), Column: column + 1}
 }
 
@@ -47,7 +45,7 @@ func (f *source) Offset(pos syntax.Position) uint32 {
 		offset = f.newlines[pos.Line-2]
 	}
 	for range pos.Column - 1 {
-		_, chw := utf8.DecodeRuneInString(f.content[offset:])
+		_, chw := utf8.DecodeRune(f.content[offset:])
 		offset += uint32(chw)
 	}
 	return offset

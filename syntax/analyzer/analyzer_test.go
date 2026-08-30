@@ -40,7 +40,7 @@ func TestAnalyze(t *testing.T) {
 					// that also renumbers every value after it. Realization trims
 					// it anyway (see testdata/text/spacing.test), so drop it here
 					// and keep the golden about the lowering under test.
-					root := parser.Parse(strings.TrimSuffix(tc.Input, "\n"))
+					root := parser.Parse([]byte(strings.TrimSuffix(tc.Input, "\n")))
 					mod := analyzer.Analyze(root)
 					got := expr.FormatModule(mod)
 					if diff := textdiff.Unified(tc.Want, got); diff != "" {
@@ -88,7 +88,7 @@ func TestAnalyzeWithBindings(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			root := parser.Parse(tc.src)
+			root := parser.Parse([]byte(tc.src))
 			mod := analyzer.Analyze(root, analyzer.WithBindings(tc.bindings))
 			got := expr.FormatModule(mod)
 			if tc.wantSubstr != "" && !strings.Contains(got, tc.wantSubstr) {
