@@ -17,17 +17,23 @@ import (
 // Warnings are returned separately from err, because they describe a document
 // that compiled: a label used twice, content discarded where it can have no
 // effect. A caller that folded them into failure would reject documents that
-// are fine. err is an [eval.ErrorList] when it is non-nil, so the individual
-// diagnostics — each carrying the span it was reported at — are reachable
-// through errors.As or its Unwrap.
-func Compile(src []byte) (*value.Document, []eval.Error, error) {
+// are fine. err is a [DiagnosticList] when it is non-nil, so the individual
+// diagnostics are reachable through errors.As or its Unwrap, and its Error
+// method names all of them rather than only the first.
+//
+// Every returned [Diagnostic] carries a resolved [syntax.Location] — byte
+// offsets and the line/column they correspond to — so a caller holding only
+// these return values can report where a problem is without going back to the
+// source bytes. [FormatDiagnostics] renders them.
+func Compile(src []byte) (*value.Document, []Diagnostic, error) {
 	root := parser.Parse(src)
 	mod := analyzer.Analyze(root)
 	doc, warnings, errs := eval.Eval(mod)
+	warns := diagnose(root.Source, Warning, warnings)
 	if len(errs) > 0 {
-		return doc, warnings, eval.ErrorList(errs)
+		return doc, warns, DiagnosticList(diagnose(root.Source, Error, errs))
 	}
-	return doc, warnings, nil
+	return doc, warns, nil
 }
 
 // Query returns the value carried by the [value.Metadata] element in doc

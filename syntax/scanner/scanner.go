@@ -72,9 +72,21 @@ func (s *Scanner) SetMode(mode syntax.Mode) {
 // positions for the text being scanned. It should be called after scanning
 // is complete, as newline positions are tracked during scanning.
 func (s *Scanner) Source() syntax.Source {
+	content := s.r.Source()
+	newlines := s.r.Newlines()
+	// The reader records a line start when it consumes EOF, which keeps its
+	// own column tracking right but invents a line that does not exist unless
+	// the input actually ends in a line terminator. Trim it here rather than
+	// in the reader, so positions never name a line past the end of the
+	// source. For input that does end in a terminator the reader's dedupe
+	// guard has already collapsed the EOF entry into the real line start, so
+	// there is nothing to trim.
+	if n := len(newlines); n > 0 && newlines[n-1] == uint32(len(content)) && !endsWithLineBreak(content) {
+		newlines = newlines[:n-1]
+	}
 	return &source{
-		content:  s.r.Source(),
-		newlines: s.r.Newlines(),
+		content:  content,
+		newlines: newlines,
 	}
 }
 
@@ -1231,6 +1243,15 @@ func isSpace(m syntax.Mode, ch rune) bool {
 
 func isNewline(ch rune) bool {
 	return ch == '\n' || ch == '\r'
+}
+
+// endsWithLineBreak reports whether content ends in a line terminator. A lone
+// CR counts, just as [isNewline] accepts it.
+func endsWithLineBreak(content []byte) bool {
+	if len(content) == 0 {
+		return false
+	}
+	return isNewline(rune(content[len(content)-1]))
 }
 func isValidInLabelLiteral(ch rune) bool {
 	return isIDContinue(ch) || ch == ':' || ch == '.'

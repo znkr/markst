@@ -62,7 +62,7 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	// value" diagnostic is almost always a cascading consequence and
 	// would just add noise.
 	if cerr != nil && len(s.errors) == 0 {
-		s.recordError(&value.Error{Msg: cerr.Error()})
+		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: cerr.Error()})
 	}
 	if cc == nil {
 		cc = &value.Sequence{}

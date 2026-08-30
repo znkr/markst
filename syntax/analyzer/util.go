@@ -39,11 +39,10 @@ func (a *analyzer) internal(n syntax.Node, format string, args ...any) {
 	var sb strings.Builder
 	sb.WriteString("analyzer internal error: ")
 	fmt.Fprintf(&sb, format, args...)
-	span := syntax.Span{}
 	if n != nil {
-		span = n.Span()
-		fmt.Fprintf(&sb, "\n  at node: kind=%s span=[%d,%d) text=%q",
-			n.Kind().String(), a.source.Position(span.Start), a.source.Position(span.End), truncate(n.Text(), 60))
+		loc := syntax.Locate(a.source, n.Span())
+		fmt.Fprintf(&sb, "\n  at node: kind=%s span=%s text=%q",
+			n.Kind().String(), loc, truncate(n.Text(), 60))
 	}
 	panic(sb.String())
 }

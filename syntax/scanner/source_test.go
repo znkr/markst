@@ -314,3 +314,118 @@ func TestSource_Offset(t *testing.T) {
 		})
 	}
 }
+
+// TestScannerSource_Position exercises the [syntax.Source] a real [Scanner]
+// hands out, rather than a hand-built source. The reader records a line start
+// when it consumes EOF; [Scanner.Source] trims that entry unless the input
+// genuinely ends in a line terminator, so a position never names a line past
+// the end of the source.
+func TestScannerSource_Position(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []syntax.Position // want[i] is the position of offset i
+	}{
+		{
+			name:    "no_trailing_newline",
+			content: "abc",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 1, Column: 3},
+				{Line: 1, Column: 4}, // EOF stays on line 1
+			},
+		},
+		{
+			name:    "empty",
+			content: "",
+			want:    []syntax.Position{{Line: 1, Column: 1}},
+		},
+		{
+			name:    "trailing_lf",
+			content: "a\n",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 2, Column: 1}, // there really is an empty line 2
+			},
+		},
+		{
+			name:    "trailing_cr",
+			content: "a\r",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 2, Column: 1},
+			},
+		},
+		{
+			name:    "trailing_crlf",
+			content: "a\r\n",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 1, Column: 3}, // the pair is one break, so LF is still line 1
+				{Line: 2, Column: 1},
+			},
+		},
+		{
+			name:    "multiple_lines_no_trailing_newline",
+			content: "ab\ncd",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 1, Column: 3},
+				{Line: 2, Column: 1},
+				{Line: 2, Column: 2},
+				{Line: 2, Column: 3},
+			},
+		},
+		{
+			name:    "lone_cr_is_a_line_break",
+			content: "ab\rcd",
+			want: []syntax.Position{
+				{Line: 1, Column: 1},
+				{Line: 1, Column: 2},
+				{Line: 1, Column: 3},
+				{Line: 2, Column: 1},
+				{Line: 2, Column: 2},
+				{Line: 2, Column: 3},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := scanAll(t, tt.content)
+			lines := uint32(1)
+			for _, p := range tt.want {
+				lines = max(lines, p.Line)
+			}
+			for offset, want := range tt.want {
+				got := src.Position(uint32(offset))
+				if got != want {
+					t.Errorf("Position(%d) = %v, want %v", offset, got, want)
+				}
+				if got.Line > lines {
+					t.Errorf("Position(%d).Line = %d, past the last line %d", offset, got.Line, lines)
+				}
+			}
+		})
+	}
+}
+
+// scanAll runs the scanner over content to the end of input and returns the
+// resulting [syntax.Source]. Source must be called after scanning, because
+// line starts accumulate as the reader advances.
+func scanAll(t *testing.T, content string) syntax.Source {
+	t.Helper()
+	s := New([]byte(content))
+	for {
+		kind, _ := s.Next()
+		if kind == syntax.KindEnd {
+			break
+		}
+	}
+	return s.Source()
+}

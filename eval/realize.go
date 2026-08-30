@@ -8,6 +8,7 @@ import (
 
 	"znkr.io/writst/internal/names"
 	"znkr.io/writst/name"
+	"znkr.io/writst/syntax"
 	"znkr.io/writst/value"
 )
 
@@ -600,12 +601,12 @@ func (s *session) applyTransform(node value.Content, transform value.Value) valu
 func (s *session) callTransform(fn *value.Function, node value.Content) value.Content {
 	res, err := fn.Apply(&value.FunctionCallContext{Now: s.now}, &value.Arguments{Positional: []value.Value{node}})
 	if err != nil {
-		s.recordError(&value.Error{Msg: err.Error()})
+		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: err.Error()})
 		return node
 	}
 	c, cerr := value.ToContent(res)
 	if cerr != nil {
-		s.recordError(&value.Error{Msg: cerr.Error()})
+		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: cerr.Error()})
 		return node
 	}
 	if c == nil {

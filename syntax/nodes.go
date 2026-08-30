@@ -148,17 +148,3 @@ func ConvertNode(node Node, kind Kind) Node {
 		panic(fmt.Sprintf("unexpected node type: %T", node))
 	}
 }
-
-// ErrorList is a list of syntax errors that implements error as well.
-type ErrorList []*Error
-
-func (e ErrorList) Error() string {
-	var sb strings.Builder
-	for i, err := range e {
-		if i > 0 {
-			sb.WriteByte('\n')
-		}
-		sb.WriteString(err.Error())
-	}
-	return sb.String()
-}
