@@ -599,7 +599,11 @@ func (s *session) applyTransform(node value.Content, transform value.Value) valu
 }
 
 func (s *session) callTransform(fn *value.Function, node value.Content) value.Content {
-	res, err := fn.Apply(&value.FunctionCallContext{Now: s.now}, &value.Arguments{Positional: []value.Value{node}})
+	// Realization has no spans left to point at, so there is no call site to
+	// push; Runtime still has to be set, or a show rule whose transform is a
+	// user closure would have no session to run against.
+	fcc := value.FunctionCallContext{Now: s.now, Runtime: s}
+	res, err := fn.Apply(&fcc, &value.Arguments{Positional: []value.Value{node}})
 	if err != nil {
 		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: err.Error()})
 		return node

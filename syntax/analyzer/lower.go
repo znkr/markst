@@ -265,6 +265,13 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 		return a.lowerContextual(n)
 	case syntax.KindModuleInclude:
 		return a.lowerModuleInclude(n)
+	case syntax.KindModuleImport:
+		// The parser understands the full import grammar, but nothing below it
+		// does. Report it rather than falling through to the panic below: this
+		// is reachable from ordinary source, and the shape a host reaches for
+		// first when told that writst has libraries.
+		return a.emitError(n.Span(), "imports are not supported",
+			"a library's bindings are supplied by the host and need no import; see writst.CompileLibrary")
 	case syntax.KindError:
 		return a.emitSyntaxError(n.(*syntax.Error))
 	// Math

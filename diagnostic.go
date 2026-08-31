@@ -43,9 +43,34 @@ func (s Severity) String() string {
 // from — and its Loc reports false from [syntax.Location.IsValid].
 type Diagnostic struct {
 	Severity Severity
-	Loc      syntax.Location
-	Msg      string
-	Hints    []string
+
+	// Origin is the display name of the source Loc points into — the name
+	// given to [CompileLibrary], or set by [WithName]. It is empty when the
+	// host named neither.
+	//
+	// It is per-diagnostic rather than per-compile because one compile can
+	// report on more than one source: a document that calls a library function
+	// gets that library's failures, located in the library's own text.
+	Origin string
+
+	Loc   syntax.Location
+	Msg   string
+	Hints []string
+
+	// Trace is the chain of calls that led here, outermost first, holding only
+	// the calls that crossed from one source into another. It is empty for a
+	// failure that happened in the source Loc already points at.
+	Trace []Frame
+}
+
+// Frame is one call site on the path to a [Diagnostic]: where the call was
+// written, in the source that wrote it.
+type Frame struct {
+	Origin string
+	Loc    syntax.Location
+
+	// Callee names the function being called, empty if it is anonymous.
+	Callee string
 }
 
 // Error returns the diagnostic prefixed with its position, so a bare %v of a
@@ -53,10 +78,23 @@ type Diagnostic struct {
 // the standard library error interface; the parts are reachable individually
 // through the fields.
 func (d Diagnostic) Error() string {
-	if !d.Loc.IsValid() {
-		return d.Msg
+	if pos := d.position(); pos != "" {
+		return pos + ": " + d.Msg
 	}
-	return fmt.Sprintf("%s: %s", d.Loc.Start, d.Msg)
+	return d.Msg
+}
+
+// position renders the "file:line:col" prefix, omitting either half the
+// diagnostic does not have. It is empty when it has neither.
+func (d Diagnostic) position() string {
+	switch {
+	case d.Origin != "" && d.Loc.IsValid():
+		return d.Origin + ":" + d.Loc.Start.String()
+	case d.Loc.IsValid():
+		return d.Loc.Start.String()
+	default:
+		return d.Origin
+	}
 }
 
 // DiagnosticList is the error [Compile] returns when a document fails to
@@ -94,32 +132,28 @@ const (
 )
 
 // FormatDiagnostics writes diags to w in the conventional compiler form, one
-// per line, with any hints indented beneath:
+// per line, with any hints and call sites indented beneath:
 //
 //	doc.wr:3:12: unknown variable: foo
 //	doc.wr:7:1: missing argument: body
 //	  hint: dates must be written as
 //	        datetime(year: …)
-//	doc.wr: cannot convert integer to content
+//	lib.wr:5:9: invalid date: 2024-13-01
+//	  note: called from doc.wr:1:2 in article
+//	cannot convert integer to content
 //
-// name is the document's display name — writst has no file concept of its own,
-// so the caller supplies it here rather than storing it on each diagnostic. An
-// empty name omits the prefix, and a diagnostic with no location omits the
-// line:col, as the last line above shows.
+// Each diagnostic names its own source, so a compile that reached into a
+// library reports the library's failures against the library's text — see
+// [Diagnostic.Origin]. A diagnostic with neither a name nor a location prints
+// bare, as the last line above shows.
 //
 // Errors print bare, as a compiler's do; a warning is labelled, so a list
 // holding both stays readable.
-func FormatDiagnostics(w io.Writer, name string, diags []Diagnostic) error {
+func FormatDiagnostics(w io.Writer, diags []Diagnostic) error {
 	for _, d := range diags {
 		var sb strings.Builder
-		sb.WriteString(name)
-		if d.Loc.IsValid() {
-			if name != "" {
-				sb.WriteByte(':')
-			}
-			sb.WriteString(d.Loc.Start.String())
-		}
-		if sb.Len() > 0 {
+		if pos := d.position(); pos != "" {
+			sb.WriteString(pos)
 			sb.WriteString(": ")
 		}
 		if d.Severity != Error {
@@ -139,6 +173,18 @@ func FormatDiagnostics(w io.Writer, name string, diags []Diagnostic) error {
 				sb.WriteByte('\n')
 			}
 		}
+		// Innermost last, so the notes read outward-in from the diagnostic
+		// above them: the call nearest the failure sits nearest to it.
+		for i := len(d.Trace) - 1; i >= 0; i-- {
+			f := d.Trace[i]
+			sb.WriteString(hintIndent + "note: called from ")
+			sb.WriteString(Diagnostic{Origin: f.Origin, Loc: f.Loc}.position())
+			if f.Callee != "" {
+				sb.WriteString(" in ")
+				sb.WriteString(f.Callee)
+			}
+			sb.WriteByte('\n')
+		}
 		if _, err := io.WriteString(w, sb.String()); err != nil {
 			return err
 		}
@@ -146,19 +192,31 @@ func FormatDiagnostics(w io.Writer, name string, diags []Diagnostic) error {
 	return nil
 }
 
-// diagnose resolves each evaluator diagnostic's span against src, turning the
-// offsets the pipeline works in into locations a caller can read.
-func diagnose(src syntax.Source, sev Severity, errs []eval.Error) []Diagnostic {
+// diagnose resolves each evaluator diagnostic against its own origin, turning
+// the offsets the pipeline works in into locations a caller can read. Each
+// error carries the source its span indexes, so a run that touched several
+// files resolves every diagnostic against the right one.
+func diagnose(sev Severity, errs []eval.Error) []Diagnostic {
 	if len(errs) == 0 {
 		return nil
 	}
 	r := make([]Diagnostic, 0, len(errs))
 	for _, e := range errs {
+		var trace []Frame
+		for _, f := range e.Trace {
+			trace = append(trace, Frame{
+				Origin: f.Origin.Name,
+				Loc:    syntax.Locate(f.Origin.Source, f.Span),
+				Callee: f.Callee,
+			})
+		}
 		r = append(r, Diagnostic{
 			Severity: sev,
-			Loc:      syntax.Locate(src, e.Span),
+			Origin:   e.Origin.Name,
+			Loc:      syntax.Locate(e.Origin.Source, e.Span),
 			Msg:      e.Msg,
 			Hints:    e.Hints,
+			Trace:    trace,
 		})
 	}
 	return r

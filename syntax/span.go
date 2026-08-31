@@ -42,6 +42,39 @@ type Source interface {
 	Offset(pos Position) uint32
 }
 
+// Origin identifies the source a [Span] belongs to: the bytes needed to
+// resolve it and the name to report it under. A document and a library are the
+// same kind of thing here — the only difference is that a library is always
+// named, while a host compiling a one-off document may not bother.
+//
+// The zero Origin degrades gracefully: [Locate] resolves any span against a nil
+// [Source] to the zero [Location], which is the same "no location" outcome a
+// [NoSpan] produces.
+type Origin struct {
+	// Name is the display name diagnostics about this source are reported
+	// under, e.g. "lib.wrt". Empty when the host supplied none.
+	Name string
+
+	// Source resolves offsets within this origin to line/column positions.
+	Source Source
+}
+
+// Frame is one call site on the path to a diagnostic: the place a call was
+// written, in the source that wrote it. Frames are recorded only where a call
+// crosses from one [Origin] into another, so a diagnostic raised inside a
+// library function can say which document called it without a stack trace's
+// worth of noise.
+type Frame struct {
+	// Origin is the source Span points into — the caller's, not the callee's.
+	Origin Origin
+
+	// Span covers the call expression.
+	Span Span
+
+	// Callee names the function being called, empty if it is anonymous.
+	Callee string
+}
+
 // Location is a [Span] resolved against a [Source]: the byte offsets together
 // with the line/column positions they correspond to. It exists so a diagnostic
 // can be self-describing — a caller holding one needs neither the [Source] nor

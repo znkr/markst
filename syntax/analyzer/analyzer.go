@@ -79,8 +79,10 @@
 package analyzer
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
+	"slices"
 
 	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
@@ -124,6 +126,35 @@ func WithoutApproximations() Option {
 	}
 }
 
+// WithName sets the display name diagnostics about this source are reported
+// under, e.g. "lib.wrt". It lands on [expr.Module.Origin] and travels with
+// every span the module produces, so a failure inside a function defined here
+// still names this source when it fires during another module's evaluation.
+//
+// Without it the origin still carries the source — spans remain resolvable to
+// line and column — and is simply unnamed.
+func WithName(name string) Option {
+	return func(a *analyzer) {
+		a.name = name
+	}
+}
+
+// WithExports makes the top-level function return the file's top-level
+// bindings alongside its body, so a host can compile a file for the values it
+// defines rather than the document it produces. The returned value is a
+// two-element array: the body content, and a dict mapping each top-level
+// binding's name to its value as of the end of the file.
+//
+// Only bindings introduced at the top level are exported. Names bound inside a
+// block have gone out of scope by the time the exports are read, and constants
+// (the built-in universe, anything from [WithBindings]) name no variable and
+// are not the file's to export.
+func WithExports() Option {
+	return func(a *analyzer) {
+		a.exports = true
+	}
+}
+
 // Analyze converts the syntax tree rooted at n into an SSA [expr.Module].
 // Errors discovered during lowering (along with embedded scanner/parser
 // errors from the syntax tree) are emitted into the module as [expr.Error]
@@ -145,16 +176,54 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 
 	a.b = a.mb.NewBuilder()
 	// Push a new scope to avoid confusion about global names.
-	a.openScope()
+	top := a.openScope()
 	a.frames = []*frame{{b: a.b, scope: a.scope}}
 	result := a.lowerMarkup(n)
+	if a.exports {
+		result = a.b.MakeArray(n.Span(), []expr.ArrayItem{
+			{Value: result, Span: n.Span()},
+			{Value: a.exportDict(top, n.Span()), Span: n.Span()},
+		})
+	}
 	a.b.Return(n.Span(), result)
 	a.b.Finalize()
 
 	mod := a.mb.Module()
 	mod.Top = a.b.Function()
 	mod.ParseErrors = a.parseErrors
+	mod.Origin = syntax.Origin{Name: a.name, Source: n.Source}
 	return mod
+}
+
+// exportDict emits a dict of every variable bound in the top-level scope,
+// keyed by source name; see [WithExports]. Each value is read at the current
+// block — the end of the file — so a binding that was reassigned or defined
+// conditionally exports the value it ended up with.
+//
+// The entries are sorted by name. Scope bindings live in a map, and the IR is
+// golden-tested, so an arbitrary iteration order would make the module differ
+// between runs of the same source.
+func (a *analyzer) exportDict(top *scope, span syntax.Span) expr.Ref {
+	names := make([]name.Name, 0, len(top.bindings))
+	for n, b := range top.bindings {
+		// Only variables are the file's to export: a valueBinding names a
+		// constant it did not define (the universe, or [WithBindings]), and a
+		// selfBinding cannot appear at the top level.
+		if _, ok := b.(varBinding); ok {
+			names = append(names, n)
+		}
+	}
+	slices.SortFunc(names, func(x, y name.Name) int { return cmp.Compare(x.String(), y.String()) })
+
+	entries := make([]expr.DictEntry, 0, len(names))
+	for _, n := range names {
+		v := top.bindings[n].(varBinding).v
+		entries = append(entries, expr.DictEntry{
+			Key:   a.b.Const(span, value.Str(n.String())),
+			Value: a.b.ReadVar(v, a.b.CurrentBlock()),
+		})
+	}
+	return a.b.MakeDict(span, entries)
 }
 
 type analyzer struct {
@@ -180,6 +249,13 @@ type analyzer struct {
 	// disableApprox disables the lowering approximations; see
 	// [WithoutApproximations].
 	disableApprox bool
+
+	// name is the display name for this source; see [WithName].
+	name string
+
+	// exports makes the top-level function return its bindings; see
+	// [WithExports].
+	exports bool
 }
 
 // frame is one nesting level of SSA construction. Pushed at closure entry by

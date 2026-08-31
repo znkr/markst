@@ -171,39 +171,47 @@ func TestCompileWarningsCarryPositionsAndHints(t *testing.T) {
 }
 
 func TestFormatDiagnostics(t *testing.T) {
-	diags := []writst.Diagnostic{
-		{
-			Severity: writst.Error,
-			Loc: syntax.Location{
-				Span:  syntax.Span{Start: 20, End: 23},
-				Start: syntax.Position{Line: 3, Column: 12},
-				End:   syntax.Position{Line: 3, Column: 15},
+	// origin is per-diagnostic, so the same list is built twice: once as a
+	// compile that knew what the file was called, once as one that did not.
+	diags := func(origin string) []writst.Diagnostic {
+		return []writst.Diagnostic{
+			{
+				Severity: writst.Error,
+				Origin:   origin,
+				Loc: syntax.Location{
+					Span:  syntax.Span{Start: 20, End: 23},
+					Start: syntax.Position{Line: 3, Column: 12},
+					End:   syntax.Position{Line: 3, Column: 15},
+				},
+				Msg: "unknown variable: foo",
 			},
-			Msg: "unknown variable: foo",
-		},
-		{
-			Severity: writst.Error,
-			Loc: syntax.Location{
-				Span:  syntax.Span{Start: 40, End: 44},
-				Start: syntax.Position{Line: 7, Column: 1},
-				End:   syntax.Position{Line: 7, Column: 5},
+			{
+				Severity: writst.Error,
+				Origin:   origin,
+				Loc: syntax.Location{
+					Span:  syntax.Span{Start: 40, End: 44},
+					Start: syntax.Position{Line: 7, Column: 1},
+					End:   syntax.Position{Line: 7, Column: 5},
+				},
+				Msg:   "missing argument: body",
+				Hints: []string{"dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"},
 			},
-			Msg:   "missing argument: body",
-			Hints: []string{"dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"},
-		},
-		{
-			Severity: writst.Warning,
-			Loc: syntax.Location{
-				Span:  syntax.Span{Start: 50, End: 51},
-				Start: syntax.Position{Line: 9, Column: 3},
-				End:   syntax.Position{Line: 9, Column: 4},
+			{
+				Severity: writst.Warning,
+				Origin:   origin,
+				Loc: syntax.Location{
+					Span:  syntax.Span{Start: 50, End: 51},
+					Start: syntax.Position{Line: 9, Column: 3},
+					End:   syntax.Position{Line: 9, Column: 4},
+				},
+				Msg: "content labelled multiple times",
 			},
-			Msg: "content labelled multiple times",
-		},
-		{
-			Severity: writst.Error,
-			Msg:      "cannot convert integer to content",
-		},
+			{
+				Severity: writst.Error,
+				Origin:   origin,
+				Msg:      "cannot convert integer to content",
+			},
+		}
 	}
 
 	tests := []struct {
@@ -238,7 +246,7 @@ cannot convert integer to content
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := writst.FormatDiagnostics(&sb, tt.docName, diags); err != nil {
+			if err := writst.FormatDiagnostics(&sb, diags(tt.docName)); err != nil {
 				t.Fatalf("FormatDiagnostics() = %v", err)
 			}
 			if got := sb.String(); got != tt.want {
@@ -248,17 +256,53 @@ cannot convert integer to content
 	}
 }
 
+// TestFormatDiagnosticsTrace checks that a diagnostic reached through a call
+// into another source prints the crossings that led to it, nearest the failure
+// last.
+func TestFormatDiagnosticsTrace(t *testing.T) {
+	diags := []writst.Diagnostic{{
+		Severity: writst.Error,
+		Origin:   "lib.wr",
+		Loc: syntax.Location{
+			Span:  syntax.Span{Start: 20, End: 23},
+			Start: syntax.Position{Line: 5, Column: 9},
+			End:   syntax.Position{Line: 5, Column: 12},
+		},
+		Msg: "invalid date: 2024-13-01",
+		Trace: []writst.Frame{{
+			Origin: "doc.wr",
+			Loc: syntax.Location{
+				Span:  syntax.Span{Start: 1, End: 8},
+				Start: syntax.Position{Line: 1, Column: 2},
+				End:   syntax.Position{Line: 1, Column: 9},
+			},
+			Callee: "article",
+		}},
+	}}
+
+	var sb strings.Builder
+	if err := writst.FormatDiagnostics(&sb, diags); err != nil {
+		t.Fatalf("FormatDiagnostics() = %v", err)
+	}
+	want := `lib.wr:5:9: invalid date: 2024-13-01
+  note: called from doc.wr:1:2 in article
+`
+	if got := sb.String(); got != want {
+		t.Errorf("FormatDiagnostics() =\n%s\nwant:\n%s", got, want)
+	}
+}
+
 // TestFormatDiagnosticsEndToEnd is the acceptance check for the whole change:
 // compile a document, hold only Compile's return values, and render them.
 // Nothing here touches the source bytes.
 func TestFormatDiagnosticsEndToEnd(t *testing.T) {
-	_, _, err := writst.Compile([]byte(threeErrors))
+	_, _, err := writst.Compile([]byte(threeErrors), writst.WithName("doc.wr"))
 	var diags writst.DiagnosticList
 	if !errors.As(err, &diags) {
 		t.Fatalf("Compile() error is %T, want writst.DiagnosticList", err)
 	}
 	var sb strings.Builder
-	if err := writst.FormatDiagnostics(&sb, "doc.wr", diags); err != nil {
+	if err := writst.FormatDiagnostics(&sb, diags); err != nil {
 		t.Fatalf("FormatDiagnostics() = %v", err)
 	}
 	want := `doc.wr:1:2: unknown variable: foo

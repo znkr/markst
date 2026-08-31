@@ -113,13 +113,13 @@ func argumentsNamedImpl(_ *value.FunctionCallContext, args []value.Value, named 
 	return dict, nil
 }
 
-func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func argumentsFilterImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	v := args[0].(*value.Arguments)
 	test := args[1].(*value.Function)
 
 	var filteredPos []value.Value
 	for _, elem := range v.Positional {
-		include, poison, err := applyPredicate(test, elem)
+		include, poison, err := applyPredicate(call, test, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
 		}
@@ -133,7 +133,7 @@ func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named
 
 	var filteredNamed value.NamedArgs
 	for k, elem := range v.Named.All() {
-		include, poison, err := applyPredicate(test, elem)
+		include, poison, err := applyPredicate(call, test, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
 		}
@@ -148,13 +148,13 @@ func argumentsFilterImpl(_ *value.FunctionCallContext, args []value.Value, named
 	return &value.Arguments{Positional: filteredPos, Named: filteredNamed}, nil
 }
 
-func argumentsMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func argumentsMapImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	v := args[0].(*value.Arguments)
 	mapper := args[1].(*value.Function)
 
 	mappedPos := make([]value.Value, len(v.Positional))
 	for i, elem := range v.Positional {
-		res, poison, err := applyMapper(mapper, elem)
+		res, poison, err := applyMapper(call, mapper, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
 		}
@@ -166,7 +166,7 @@ func argumentsMapImpl(_ *value.FunctionCallContext, args []value.Value, named va
 
 	var mappedNamed value.NamedArgs
 	for k, elem := range v.Named.All() {
-		res, poison, err := applyMapper(mapper, elem)
+		res, poison, err := applyMapper(call, mapper, elem)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
 		}

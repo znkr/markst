@@ -20,9 +20,17 @@ import (
 //
 // err is the other kind: a failure that is not yet recorded anywhere, to be
 // wrapped and returned by the builtin in the usual way.
-func applyCallback(fn *value.Function, args ...value.Value) (res value.Value, poison *value.Error, err error) {
-	fcc := &value.FunctionCallContext{} // TODO: no span for the call context!
-	res, err = fn.Apply(fcc, &value.Arguments{Positional: args})
+// call is the context of the builtin invoking the callback, forwarded rather
+// than replaced with a fresh one. It carries the evaluator state the callback
+// must run against ([value.FunctionCallContext.Runtime]) and the instant the
+// document is rendered at, both of which a callback can observe — a closure
+// records its diagnostics on the running session, and `datetime.today()` reads
+// Now. It also means the callback reports against the builtin's call site,
+// which is the nearest span there is.
+func applyCallback(call *value.FunctionCallContext, fn *value.Function, args ...value.Value) (res value.Value, poison *value.Error, err error) {
+	fcc := *call
+	fcc.Setter = nil // the callback's result is not a place; see value.Function.Accessor
+	res, err = fn.Apply(&fcc, &value.Arguments{Positional: args})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -35,8 +43,8 @@ func applyCallback(fn *value.Function, args ...value.Value) (res value.Value, po
 // applyPredicate calls fn with v as its sole positional argument and returns
 // the resulting boolean. It is used by filter-like builtins. See
 // [applyCallback] for poison.
-func applyPredicate(fn *value.Function, v value.Value) (include bool, poison *value.Error, err error) {
-	res, poison, err := applyCallback(fn, v)
+func applyPredicate(call *value.FunctionCallContext, fn *value.Function, v value.Value) (include bool, poison *value.Error, err error) {
+	res, poison, err := applyCallback(call, fn, v)
 	if err != nil || poison != nil {
 		return false, poison, err
 	}
@@ -49,6 +57,6 @@ func applyPredicate(fn *value.Function, v value.Value) (include bool, poison *va
 
 // applyMapper calls fn with v as its sole positional argument and returns the
 // result. It is used by map-like builtins. See [applyCallback] for poison.
-func applyMapper(fn *value.Function, v value.Value) (res value.Value, poison *value.Error, err error) {
-	return applyCallback(fn, v)
+func applyMapper(call *value.FunctionCallContext, fn *value.Function, v value.Value) (res value.Value, poison *value.Error, err error) {
+	return applyCallback(call, fn, v)
 }

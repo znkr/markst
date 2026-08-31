@@ -59,6 +59,63 @@ func TestAnalyze(t *testing.T) {
 	}
 }
 
+// TestAnalyzeWithExports pins the shape WithExports produces: the top-level
+// function returns [body, exports], and the dict names every top-level binding
+// — closures included, which is the point: nothing must let dead-code
+// elimination drop a function that only the export dict uses.
+func TestAnalyzeWithExports(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			// Declared zeta-first to show the entries come back sorted:
+			// bindings live in a map, and an arbitrary order would make the
+			// same source analyze differently from run to run.
+			name: "closures and values, name-sorted",
+			src:  "#let zeta = 1\n#let alpha(x) = x\n",
+			want: "v1 = make_dict (alpha: v0, zeta: 1)\n    v2 = make_array [none, v1]",
+		},
+		{
+			name: "block-scoped bindings are not exported",
+			src:  "#{ let hidden = 1 }\n#let shown = 2\n",
+			want: "make_dict (shown: 2)",
+		},
+		{
+			name: "a file that binds nothing exports nothing",
+			src:  "hello\n",
+			want: "make_dict ()",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := parser.Parse([]byte(tc.src))
+			got := expr.FormatModule(analyzer.Analyze(root, analyzer.WithExports()))
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("expected IR to contain:\n%s\ngot:\n%s", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestAnalyzeWithName checks that the name reaches the module, since every
+// span the module ever produces is reported under it.
+func TestAnalyzeWithName(t *testing.T) {
+	root := parser.Parse([]byte("hello\n"))
+	mod := analyzer.Analyze(root, analyzer.WithName("lib.wrt"))
+	if mod.Origin.Name != "lib.wrt" {
+		t.Errorf("Origin.Name = %q, want %q", mod.Origin.Name, "lib.wrt")
+	}
+	if mod.Origin.Source == nil {
+		t.Errorf("Origin.Source = nil; spans would not resolve")
+	}
+	// Without the option the source is still there, so spans stay locatable.
+	if bare := analyzer.Analyze(parser.Parse([]byte("hello\n"))); bare.Origin.Source == nil {
+		t.Errorf("Origin.Source = nil without WithName; spans would not resolve")
+	}
+}
+
 func TestAnalyzeWithBindings(t *testing.T) {
 	tests := []struct {
 		name     string

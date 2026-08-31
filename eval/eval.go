@@ -33,20 +33,7 @@ func WithNow(t time.Time) Option {
 // are returned separately. Free names in the module have already been
 // resolved to constants by the analyzer, so Eval needs no scope of its own.
 func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, err []Error) {
-	s := &session{mod: mod}
-	for _, opt := range opts {
-		opt(s)
-	}
-
-	// Parse errors are diagnostics on the source, reported regardless of
-	// which code paths run — and this is their only reporting channel: the
-	// corresponding IR Error instructions are marked Reported and evaluate to
-	// unrecorded poison values.
-	for _, e := range mod.ParseErrors {
-		s.recordError(e)
-	}
-
-	v := runFunction(s, functionCall{fn: mod.Top})
+	s, v := runTop(mod, opts)
 	// If the top-level value is itself an Error, the failure was already
 	// recorded on the session; drop it and emit empty content.
 	if _, ok := value.IsError(v); ok {
@@ -76,17 +63,77 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	return
 }
 
+// EvalExports evaluates a module analyzed with [analyzer.WithExports] and
+// returns its top-level bindings as values, along with the body content the
+// file would have produced. It is how a source file becomes something other
+// files can be compiled against: the closures in exports are ordinary
+// [value.Function]s, ready to be handed to [analyzer.WithBindings].
+//
+// The returned closures outlive this call. Each one remembers the module it
+// was written in — for its constant pool, its nested functions and its
+// [syntax.Origin] — but takes the session it runs under from its caller, so a
+// later invocation records its diagnostics on whatever document is being
+// compiled at the time.
+func EvalExports(mod *expr.Module, opts ...Option) (body value.Value, exports *value.Dict, warn []Error, err []Error) {
+	s, v := runTop(mod, opts)
+	// The pair analyzer.WithExports emits. Anything else means the module was
+	// analyzed without the option, which is a programming error in the host,
+	// not something a document can cause — except when the top-level value is
+	// poison, where the failure is already recorded and there is nothing to
+	// take apart.
+	if _, ok := value.IsError(v); !ok {
+		pair, ok := v.(*value.Array)
+		if !ok || len(pair.Elems) != 2 {
+			panic(fmt.Sprintf("eval: EvalExports on a module analyzed without WithExports (top-level value is %T)", v))
+		}
+		body = foldStyles(pair.Elems[0])
+		exports, _ = pair.Elems[1].(*value.Dict)
+	}
+	if exports == nil {
+		exports = &value.Dict{}
+	}
+	return body, exports, s.warnings, s.errors
+}
+
+// runTop applies opts, reports the module's parse errors, and runs its
+// top-level function. Shared by [Eval] and [EvalExports], which differ only in
+// what they make of the value that comes back.
+func runTop(mod *expr.Module, opts []Option) (*session, value.Value) {
+	s := &session{}
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	// Parse errors are diagnostics on the source, reported regardless of
+	// which code paths run — and this is their only reporting channel: the
+	// corresponding IR Error instructions are marked Reported and evaluate to
+	// unrecorded poison values.
+	for _, e := range mod.ParseErrors {
+		e.Origin = mod.Origin
+		s.recordError(e)
+	}
+
+	return s, runFunction(s, functionCall{mod: mod, fn: mod.Top})
+}
+
 // maxCallDepth bounds the number of nested user-closure calls before
 // evaluation aborts with "maximum function call depth exceeded", guarding the
 // Go stack against unbounded recursion (e.g. `let rec(n) = rec(n) + 1`).
 const maxCallDepth = 64
 
 // session is the [Eval]-wide state shared by every running SSA function: the
-// module being evaluated, the document-level label set, and the accumulated
-// warning list. Each [frame] holds a back-pointer to its session so eval
-// helpers don't have to thread it as a separate parameter.
+// document-level label set, the document properties collected from set rules,
+// and the accumulated diagnostics. Each [frame] holds a back-pointer to its
+// session so eval helpers don't have to thread it as a separate parameter.
+//
+// A session is per-render, and deliberately holds nothing about the *code*
+// being run — that lives on [expr.Module], reached through [frame.mod]. The
+// split is what lets a closure defined in one module be called during another
+// module's evaluation: the closure keeps its own module for constants, nested
+// functions and spans, but takes the running session from its caller, so its
+// errors, warnings, labels and `set document` rules land on the document
+// actually being compiled.
 type session struct {
-	mod    *expr.Module
 	labels map[name.Name]struct{}
 
 	// metadataLabels is the subset of labels attached to a [value.Metadata].
@@ -101,10 +148,15 @@ type session struct {
 	// that care read the system clock themselves.
 	now time.Time
 
-	// callDepth counts the number of user-closure calls currently on the stack.
-	// Incremented on entry to a closure in [frame.evalCall] and decremented on
+	// stack is the chain of user-closure calls currently running, outermost
+	// first. Pushed on entry to a closure in [frame.evalCall] and popped on
 	// return; when it would exceed [maxCallDepth] the call is refused.
-	callDepth int
+	//
+	// It doubles as the source of [value.Error.Trace]: [session.trace] reads
+	// off the entries where a call crossed from one [syntax.Origin] into
+	// another, which is what tells a reader which document called the library
+	// function that failed.
+	stack []callSite
 
 	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
@@ -125,6 +177,39 @@ type session struct {
 	// order), so the slice-shift cost amortizes; binary search keeps the
 	// containment lookup off the hot path.
 	errors []Error
+}
+
+// callSite is one entry on [session.stack]: a call in progress, recorded where
+// it was written.
+type callSite struct {
+	// mod is the *caller's* module — span points into its source, since that
+	// is where the call expression is written. It also stands for the source's
+	// identity in [session.trace]: comparing modules rather than the
+	// [syntax.Source] interface keeps that comparison total, since Source is
+	// exported and an implementation of it need not be comparable.
+	mod    *expr.Module
+	span   syntax.Span
+	callee string
+}
+
+// trace returns the call sites that crossed a module boundary on the way into
+// mod, outermost first. Calls within a single module contribute nothing: a
+// failure two frames deep in the same file already points at the right line,
+// and listing every frame would bury the one boundary crossing that matters
+// under up to [maxCallDepth] notes.
+func (s *session) trace(mod *expr.Module) []syntax.Frame {
+	var frames []syntax.Frame
+	inner := mod
+	for i := len(s.stack) - 1; i >= 0; i-- {
+		c := s.stack[i]
+		if c.mod == inner {
+			continue
+		}
+		frames = append(frames, syntax.Frame{Origin: c.mod.Origin, Span: c.span, Callee: c.callee})
+		inner = c.mod
+	}
+	slices.Reverse(frames)
+	return frames
 }
 
 // recordError inserts e into s.errors in sorted order unless an existing error
@@ -207,7 +292,16 @@ func propagatesFromOperands(inst expr.Instruction) bool {
 
 // frame is the per-call SSA evaluation state.
 type frame struct {
-	s    *session
+	s *session
+
+	// mod is the module fn was compiled from, and the one its Refs and Spans
+	// are meaningful in. It is carried per-frame rather than per-session
+	// because a single evaluation can run functions from several modules: a
+	// closure exported by a library keeps resolving its module constants,
+	// nested functions and source positions against the library, while
+	// everything else about the call belongs to s.
+	mod *expr.Module
+
 	fn   *expr.Function
 	vals []value.Value
 
@@ -218,12 +312,12 @@ type frame struct {
 }
 
 // get returns the value stored for ref. Module-constant refs are looked up
-// in the session's [expr.Module.Constants] pool. The builder rewrites every
+// in the frame's [expr.Module.Constants] pool. The builder rewrites every
 // operand through the trivial-param rename map at [expr.Builder.Finalize]
 // time, so no further resolution is needed here.
 func (fr *frame) get(ref expr.Ref) value.Value {
 	if ref.IsModConst() {
-		return fr.s.mod.Constants[ref.ModConstID()]
+		return fr.mod.Constants[ref.ModConstID()]
 	}
 	if ref == expr.NoRef {
 		return value.None{}
@@ -243,7 +337,7 @@ func (fr *frame) span(r expr.Ref) syntax.Span { return fr.fn.RefSpans[r] }
 // processing the current instruction. Replaces the previous panic-based
 // raise mechanism.
 func (fr *frame) error(span syntax.Span, msg string, hints ...string) *value.Error {
-	ve := &value.Error{Span: span, Msg: msg, Hints: hints}
+	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: hints, Trace: fr.s.trace(fr.mod)}
 	fr.s.recordError(ve)
 	return ve
 }
@@ -257,7 +351,7 @@ func (fr *frame) errorf(span syntax.Span, format string, args ...any) *value.Err
 // it does not write a [*value.Error] to the value table, so evaluation of
 // the surrounding expression continues normally.
 func (fr *frame) warn(span syntax.Span, msg string, hints ...string) {
-	ve := &value.Error{Span: span, Msg: msg, Hints: hints}
+	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: hints, Trace: fr.s.trace(fr.mod)}
 	fr.s.recordWarning(ve)
 }
 
@@ -301,6 +395,8 @@ func (fr *frame) attachLabel(c value.Content, lbl *value.Label, warnSpan syntax.
 // functionCall bundles the arguments for [runFunction] into a single struct
 // to make call sites self-documenting.
 type functionCall struct {
+	// mod is the module fn was compiled from; see [frame.mod].
+	mod *expr.Module
 	// fn is the SSA function to execute.
 	fn *expr.Function
 	// args carries positional argument values in declaration order (with a sink
@@ -317,7 +413,7 @@ type functionCall struct {
 func runFunction(s *session, call functionCall) value.Value {
 	fn := call.fn
 	args, captures, self := call.args, call.captures, call.self
-	fr := &frame{s: s, fn: fn, vals: make([]value.Value, fn.NumRefs())}
+	fr := &frame{s: s, mod: call.mod, fn: fn, vals: make([]value.Value, fn.NumRefs())}
 	// Pre-fill parameter, capture, and self slots.
 	for i, p := range fn.Params {
 		fr.vals[p.Ref] = args[i]
@@ -780,7 +876,11 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		fr.vals[r] = fr.evalSetRule(i)
 	case *expr.ShowRule:
 		fr.vals[r] = fr.evalShowRule(i)
-	case *expr.Contextual, *expr.ModuleInclude:
+	case *expr.ModuleInclude:
+		// Parsed and lowered, but never implemented past that. Reachable from
+		// ordinary source, so it has to be a diagnostic and not a crash.
+		fr.vals[r] = fr.error(fr.span(r), "includes are not supported")
+	case *expr.Contextual:
 		panic(fmt.Sprintf("TODO: ssa eval %T", i))
 	default:
 		panic(fmt.Sprintf("ssa eval not implemented: %T", inst))
@@ -1604,19 +1704,35 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 	// closures count toward the depth (matching where the runtime actually
 	// recurses); built-ins do not nest evaluation this way.
 	if fn.Closure {
-		if fr.s.callDepth >= maxCallDepth {
+		if len(fr.s.stack) >= maxCallDepth {
 			return fr.error(fr.span(c.Result()), "maximum function call depth exceeded")
 		}
-		fr.s.callDepth++
-		defer func() { fr.s.callDepth-- }()
+		defer fr.pushCall(fr.span(c.Result()), fn)()
 	}
 
-	fcc := value.FunctionCallContext{Span: fr.span(c.Result()), Now: fr.s.now}
+	fcc := fr.callContext(fr.span(c.Result()))
 	v, err := fn.Apply(&fcc, &args)
 	if err != nil {
 		return fr.applyErr(fn, fr.span(c.Result()), c.Args, err)
 	}
 	return v
+}
+
+// callContext builds the context handed to a called function. Runtime carries
+// the running session so that a closure — which remembers the module it was
+// written in, but not the evaluation that created it — records what it does on
+// the document being compiled now.
+func (fr *frame) callContext(span syntax.Span) value.FunctionCallContext {
+	return value.FunctionCallContext{Span: span, Now: fr.s.now, Runtime: fr.s}
+}
+
+// pushCall records a call in progress on the session stack and returns the
+// function that pops it, for `defer fr.pushCall(...)()`. The entry holds the
+// *calling* frame's origin, because span points at the call expression, which
+// is written in the caller's source.
+func (fr *frame) pushCall(span syntax.Span, fn *value.Function) func() {
+	fr.s.stack = append(fr.s.stack, callSite{mod: fr.mod, span: span, callee: fn.Name})
+	return func() { fr.s.stack = fr.s.stack[:len(fr.s.stack)-1] }
 }
 
 // receiverIsPlace reports whether a method call's receiver denotes a mutable
@@ -1656,7 +1772,8 @@ func (fr *frame) evalCallSet(c *expr.CallSet) {
 	}
 
 	var setter func(value.Value)
-	fcc := value.FunctionCallContext{Span: c.Span(), Setter: &setter, Now: fr.s.now}
+	fcc := fr.callContext(c.Span())
+	fcc.Setter = &setter
 	cur, err := fn.Apply(&fcc, &args)
 	if err != nil {
 		fr.applyErr(fn, c.Span(), c.Args, err)
@@ -1749,12 +1866,12 @@ func locateArgErrSpan(fn *value.Function, callSpan syntax.Span, callArgs []expr.
 // runtime to dispatch when invoked. Self-reference is handled by
 // [expr.Function.SelfRef] at call time, not by patching captures.
 func makeClosureWithFrame(fr *frame, m *expr.MakeClosure) value.Value {
-	innerFn := fr.s.mod.Functions[m.Func]
+	innerFn := fr.mod.Functions[m.Func]
 	caps := make([]value.Value, len(m.Captures))
 	for i, r := range m.Captures {
 		caps[i] = fr.get(r)
 	}
-	return buildFunctionValue(fr.s, innerFn, caps)
+	return buildFunctionValue(fr.mod, innerFn, caps)
 }
 
 // buildFunctionValue creates a [value.Function] whose F invokes the SSA
@@ -1765,7 +1882,16 @@ func makeClosureWithFrame(fr *frame, m *expr.MakeClosure) value.Value {
 // but [value.Function.Positional] only carries positional and sink params. We
 // build a posToParam mapping so the runtime can route each value.Function arg
 // slot back to the correct fn.Params index.
-func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *value.Function {
+//
+// The result closes over mod but not over any session: the module is what fn
+// means (its constant pool, its nested functions, the source its spans index),
+// while the session is whichever evaluation happens to be calling. Binding the
+// creating session here instead would make a library function record its
+// errors, labels and `set document` rules on the library's own long-finished
+// evaluation rather than on the document being compiled. The live session
+// arrives per call through [value.FunctionCallContext.Runtime]; see
+// [frame.callContext].
+func buildFunctionValue(mod *expr.Module, fn *expr.Function, caps []value.Value) *value.Function {
 	out := &value.Function{Name: fn.Name, Closure: true}
 	posToParam := make([]int, 0, len(fn.Params))
 	var sinkIdx *int
@@ -1796,7 +1922,7 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 			switch {
 			case p.Default == expr.NoRef:
 			case p.Default.IsModConst():
-				defaultVal = s.mod.Constants[p.Default.ModConstID()]
+				defaultVal = mod.Constants[p.Default.ModConstID()]
 			default:
 				for idx, r := range fn.Captures {
 					if r == p.Default {
@@ -1825,7 +1951,16 @@ func buildFunctionValue(s *session, fn *expr.Function, caps []value.Value) *valu
 				paramArgs[i] = named.Get(p.Name)
 			}
 		}
-		return runFunction(s, functionCall{fn: fn, args: paramArgs, captures: caps, self: out}), nil
+		s, ok := call.Runtime.(*session)
+		if !ok {
+			// Every path that reaches a closure goes through the evaluator,
+			// which always sets Runtime — including builtins invoking a
+			// callback, which forward the context they were given. A missing
+			// one means a host called the value directly, with no evaluation
+			// for its diagnostics to land on.
+			return nil, fmt.Errorf("cannot call a writst function outside an evaluation")
+		}
+		return runFunction(s, functionCall{mod: mod, fn: fn, args: paramArgs, captures: caps, self: out}), nil
 	}
 	return out
 }

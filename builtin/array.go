@@ -374,11 +374,11 @@ func arrayAtImpl(call *value.FunctionCallContext, args []value.Value, named valu
 	return arr.Elems[index], nil
 }
 
-func arrayPositionImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayPositionImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	fn := args[1].(*value.Function)
 	for i, v := range arr.Elems {
-		match, poison, err := applyCallback(fn, v)
+		match, poison, err := applyCallback(call, fn, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling searcher function: %w", err)
 		}
@@ -756,7 +756,7 @@ func arrayChunksImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	return &value.Array{Elems: chunks}, nil
 }
 
-func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arraySortedImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	sortedElems := slices.Clone(arr.Elems)
 
@@ -818,7 +818,7 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	}
 	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
 		val = func(v value.Value) (value.Value, error) {
-			res, p, err := applyCallback(keyFunc, v)
+			res, p, err := applyCallback(call, keyFunc, v)
 			if p != nil {
 				// Hand the poison on as the key; cmp above picks it up.
 				return p, nil
@@ -850,7 +850,7 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 				}
 				return false, nil
 			}
-			lt0, p, err := applyCallback(byFunc, a0, b0)
+			lt0, p, err := applyCallback(call, byFunc, a0, b0)
 			if err != nil {
 				return false, err
 			}
@@ -901,13 +901,13 @@ func arraySortedImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	return &value.Array{Elems: sortedElems}, nil
 }
 
-func arrayFilterImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayFilterImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	test := args[1].(*value.Function)
 
 	var filtered []value.Value
 	for _, v := range arr.Elems {
-		include, poison, err := applyPredicate(test, v)
+		include, poison, err := applyPredicate(call, test, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling test function: %w", err)
 		}
@@ -921,13 +921,13 @@ func arrayFilterImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	return &value.Array{Elems: filtered}, nil
 }
 
-func arrayMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayMapImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	mapper := args[1].(*value.Function)
 
 	mapped := make([]value.Value, len(arr.Elems))
 	for i, v := range arr.Elems {
-		res, poison, err := applyMapper(mapper, v)
+		res, poison, err := applyMapper(call, mapper, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling mapper function: %w", err)
 		}
@@ -939,14 +939,14 @@ func arrayMapImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 	return &value.Array{Elems: mapped}, nil
 }
 
-func arrayFoldImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayFoldImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	init := args[1]
 	folder := args[2].(*value.Function)
 
 	acc := init
 	for _, v := range arr.Elems {
-		res, poison, err := applyCallback(folder, acc, v)
+		res, poison, err := applyCallback(call, folder, acc, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling folder function: %w", err)
 		}
@@ -958,7 +958,7 @@ func arrayFoldImpl(_ *value.FunctionCallContext, args []value.Value, named value
 	return acc, nil
 }
 
-func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayReduceImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	reducer := args[1].(*value.Function)
 
@@ -968,7 +968,7 @@ func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named val
 
 	acc := arr.Elems[0]
 	for _, v := range arr.Elems[1:] {
-		res, poison, err := applyCallback(reducer, acc, v)
+		res, poison, err := applyCallback(call, reducer, acc, v)
 		if err != nil {
 			return nil, fmt.Errorf("error calling reducer function: %w", err)
 		}
@@ -980,13 +980,13 @@ func arrayReduceImpl(_ *value.FunctionCallContext, args []value.Value, named val
 	return acc, nil
 }
 
-func arrayDedupImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+func arrayDedupImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 
 	key := func(v value.Value) (value.Value, *value.Error, error) { return v, nil, nil }
 	if keyFunc, ok := named.Get(names.Key).(*value.Function); ok {
 		key = func(v value.Value) (value.Value, *value.Error, error) {
-			return applyCallback(keyFunc, v)
+			return applyCallback(call, keyFunc, v)
 		}
 	}
 

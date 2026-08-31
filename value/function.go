@@ -334,6 +334,18 @@ type FunctionCallContext struct {
 	// a function call, e.g. array.at(). This is a bit of a hack and there's
 	// probably better ways to support this, but it works for now.
 	Setter *func(Value)
+
+	// Runtime is the evaluator state this call is running under, set by the
+	// evaluator and opaque to everything else. A closure needs it because it
+	// outlives the evaluation that created it: a function defined in a library
+	// and called while compiling a document must record its diagnostics,
+	// labels and document properties on the *document* being compiled, not on
+	// the long-finished evaluation of the library.
+	//
+	// Builtins ignore it, but must pass it on: a builtin that invokes a user
+	// callback forwards the whole context (see the builtin package's
+	// applyCallback), so the callback lands in the same runtime as its caller.
+	Runtime any
 }
 
 // Apply calls the function with the given arguments. It merges WithArgs,

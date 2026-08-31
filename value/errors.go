@@ -21,9 +21,22 @@ import (
 // require a non-error operand skip silently because the upstream Error is
 // already in the list.
 type Error struct {
-	Span  syntax.Span
+	Span syntax.Span
+
+	// Origin is the source Span points into. It is what makes a diagnostic
+	// self-locating once more than one source is in play: a failure inside a
+	// library function is raised while a *document* is being compiled, but its
+	// span indexes the library's bytes, so resolving it against the document
+	// would name the wrong line.
+	Origin syntax.Origin
+
 	Msg   string
 	Hints []string
+
+	// Trace is the chain of call sites that led here, outermost first, holding
+	// only the calls that crossed from one [syntax.Origin] into another. A
+	// failure entirely within one source has an empty Trace.
+	Trace []syntax.Frame
 }
 
 func (e *Error) Type() types.Type { return types.Error }

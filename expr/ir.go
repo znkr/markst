@@ -41,6 +41,13 @@ type Module struct {
 	Functions []*Function   // closures, indexed by FuncID
 	Constants []value.Value // module-wide constant pool, indexed by ModConstID
 
+	// Origin is the source every [syntax.Span] in this module indexes into.
+	// It travels with the module because a [Function] outlives the evaluation
+	// that built it: a closure from one module can be called during another
+	// module's evaluation, and its spans must still resolve against the source
+	// it was written in.
+	Origin syntax.Origin
+
 	// ParseErrors are syntax errors lowered from the tree, collected so they
 	// surface regardless of whether their containing function is ever executed
 	// (parse errors are diagnostics on the source, not on a code path). Eval
