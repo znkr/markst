@@ -21,12 +21,13 @@ func All(c Content) iter.Seq[Content] {
 	}
 }
 
-// The hand-written content nodes ([StateUpdate], [StyleUpdate], [Styled]) opt
-// out of the generator, so they carry their own walk. The two updates are
-// leaves; a Styled wraps the content it scopes over.
+// The hand-written content nodes ([StateUpdate], [StyleUpdate], [Styled],
+// [Custom]) opt out of the generator, so they carry their own walk. All but
+// Styled are leaves; a Styled wraps the content it scopes over.
 
 func (n *StateUpdate) walk(yield func(Content) bool) bool { return yield(n) }
 func (n *StyleUpdate) walk(yield func(Content) bool) bool { return yield(n) }
+func (n *Custom) walk(yield func(Content) bool) bool      { return yield(n) }
 
 func (n *Styled) walk(yield func(Content) bool) bool {
 	if !yield(n) {
