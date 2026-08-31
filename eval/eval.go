@@ -32,6 +32,9 @@ func WithNow(t time.Time) Option {
 // [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
 // are returned separately. Free names in the module have already been
 // resolved to constants by the analyzer, so Eval needs no scope of its own.
+//
+// The content it returns is realized: paragraphs formed, style scopes
+// resolved, and every heading labelled — see [session.realizeDocument].
 func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, err []Error) {
 	s, v := runTop(mod, opts)
 	// If the top-level value is itself an Error, the failure was already

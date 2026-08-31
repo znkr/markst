@@ -15,12 +15,18 @@ import (
 // realizeDocument turns the recorded content tree into a realized
 // [value.Document]: paragraphs are formed, list/enum/term items grouped,
 // `*value.Styled` wrappers resolved (show recipes applied, `set document`
-// properties hoisted). It runs inside [Eval] while the session — and any
-// closures captured by show transforms — are still live.
+// properties hoisted), and every unlabelled heading given a label to be linked
+// by. It runs inside [Eval] while the session — and any closures captured by
+// show transforms — are still live.
 func (s *session) realizeDocument(c value.Content) *value.Document {
 	// Realize first: the body is where the `set document` rules live, so
 	// s.doc isn't populated until it has been walked.
 	body := s.realizeBody(topChildren(c), nil)
+	// Heading labels come after, not during: a show rule runs as part of the
+	// pass above and can both reword a heading and attach labels of its own,
+	// so neither the text a label is derived from nor the set of names already
+	// taken is settled until the pass has finished.
+	s.assignHeadingLabels(body)
 	doc := s.doc
 	doc.Body = body
 	return &doc

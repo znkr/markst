@@ -103,6 +103,13 @@ func (c *config) evalOpts() []eval.Option {
 // [znkr.io/writst/smartquote] for the one part of that a presenter cannot do
 // on its own.
 //
+// Every heading in the returned document carries a [value.Label], so there is
+// always an anchor to link a section by. A heading the source left unlabelled
+// gets one derived from its text — after show rules, so it describes the
+// heading a reader sees — marked [value.Label.Auto] and made unique against
+// every label the document already uses. Only the labels the source wrote are
+// part of the document's namespace: `@ref` does not resolve a generated one.
+//
 // Warnings are returned separately from err, because they describe a document
 // that compiled: a label used twice, content discarded where it can have no
 // effect. A caller that folded them into failure would reject documents that
