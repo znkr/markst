@@ -33,6 +33,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Fraction:   reflectedTypes[types.Fraction],
 	names.Function:   reflectedTypes[types.Function],
 	names.Footnote:   Footnote,
+	names.H:          H,
 	names.Heading:    Heading,
 	names.Html:       Html,
 	names.Image:      Image,
@@ -61,6 +62,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Table:      Table,
 	names.Terms:      Terms,
 	names.Text:       Text,
+	names.Underline:  UnderlineMarkup,
 	names.Type:       reflectedTypes[types.ReflectedType],
 }
 

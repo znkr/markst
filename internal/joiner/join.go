@@ -127,11 +127,7 @@ func (j *contentJoiner) Add(v value.Value) error {
 	if v == (value.None{}) {
 		return nil
 	}
-	c, err := value.ToContent(v)
-	if err != nil {
-		return err
-	}
-	j.content = append(j.content, c)
+	j.content = append(j.content, value.ToContent(v))
 	return nil
 }
 func (j *contentJoiner) Result() value.Value {

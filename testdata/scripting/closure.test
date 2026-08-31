@@ -146,7 +146,7 @@
   a
 }
 #f()
-│ #document[#par[#raw("(\"b\": 10)\n")]]
+│ #document[#par[#raw("(b: 10)")]]
 
 --- closure-capture-mut-error ---
 #let x = ()

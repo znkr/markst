@@ -1258,13 +1258,11 @@ func isValidInLabelLiteral(ch rune) bool {
 }
 
 func isIDStart(ch rune) bool {
-	// TODO: Use unicode XID_Start property?
-	return unicode.IsLetter(ch) || ch == '_'
+	return syntax.IsIdentStart(ch)
 }
 
 func isIDContinue(ch rune) bool {
-	// TODO: Use unicode XID_Continue property?
-	return isAlphanumeric(ch) || ch == '-' || ch == '_'
+	return syntax.IsIdentContinue(ch)
 }
 
 // isMathIDStart reports whether ch can start a math identifier. Unlike code

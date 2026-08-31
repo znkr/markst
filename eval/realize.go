@@ -637,11 +637,7 @@ func (s *session) callTransform(fn *value.Function, node value.Content) value.Co
 		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: err.Error()})
 		return node
 	}
-	c, cerr := value.ToContent(res)
-	if cerr != nil {
-		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: cerr.Error()})
-		return node
-	}
+	c := value.ToContent(res)
 	if c == nil {
 		return &value.Sequence{}
 	}
@@ -660,6 +656,8 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Strong{Body: f(c.Body), Label: c.Label}
 	case *value.Emph:
 		return &value.Emph{Body: f(c.Body), Label: c.Label}
+	case *value.Underline:
+		return &value.Underline{Body: f(c.Body), Label: c.Label}
 	case *value.Par:
 		return &value.Par{Body: f(c.Body), Label: c.Label}
 	case *value.Link:
@@ -704,6 +702,8 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Terms{Children: items, Label: c.Label}
 	case *value.Table:
 		return &value.Table{Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.MathOp:
+		return &value.MathOp{Text: f(c.Text), Limits: c.Limits, Label: c.Label}
 	case *value.MathAttach:
 		return &value.MathAttach{Base: f(c.Base), Top: mapOpt(c.Top, f), Bottom: mapOpt(c.Bottom, f), Label: c.Label}
 	case *value.MathFrac:

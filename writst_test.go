@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"znkr.io/diff/textdiff"
+	"znkr.io/writst/builtin"
 	"znkr.io/writst/eval"
 	"znkr.io/writst/expr"
 	"znkr.io/writst/internal/errcmp"
@@ -57,6 +58,24 @@ func TestWritst(t *testing.T) {
 							Positional: []value.Param{{Type: types.Any}, {Type: types.Any}},
 							F: func(fcc *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 								got, want := args[0], args[1]
+								if !value.Equal(got, want) {
+									t.Errorf("%s", formatTestFailure(tc.Input, fcc.Span, mod, want, got))
+								}
+								return value.None{}, nil
+							},
+						},
+						name.Make("test-repr"): &value.Function{
+							Name:       "test-repr",
+							Positional: []value.Param{{Type: types.Any}, {Type: types.Any}},
+							F: func(fcc *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+								got, err := builtin.Repr.F(fcc, args[:1], named)
+								if err != nil {
+									return nil, err
+								}
+								want, err := builtin.Repr.F(fcc, args[1:], named)
+								if err != nil {
+									return nil, err
+								}
 								if !value.Equal(got, want) {
 									t.Errorf("%s", formatTestFailure(tc.Input, fcc.Span, mod, want, got))
 								}
@@ -215,7 +234,7 @@ func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
 			Span:    w.Span,
 			Type:    "Warning",
 			Message: w.Error(),
-			Hints:   w.Hints,
+			Hints:   errcmpHints(w.Hints),
 		})
 	}
 	for _, e := range errors {
@@ -223,8 +242,16 @@ func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
 			Span:    e.Span,
 			Type:    "Error",
 			Message: e.Error(),
-			Hints:   e.Hints,
+			Hints:   errcmpHints(e.Hints),
 		})
+	}
+	return ret
+}
+
+func errcmpHints(hints []value.Hint) []errcmp.Hint {
+	var ret []errcmp.Hint
+	for _, h := range hints {
+		ret = append(ret, errcmp.Hint{Span: h.Span, Msg: h.Msg})
 	}
 	return ret
 }

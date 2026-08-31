@@ -184,7 +184,7 @@ func CompileLibrary(name string, src []byte, opts ...Option) (*Library, []Diagno
 			Severity: Warning,
 			Origin:   name,
 			Msg:      "content in a library is discarded",
-			Hints:    []string{"a library is compiled for the bindings it defines; move the content into a document"},
+			Hints:    []Hint{{Msg: "a library is compiled for the bindings it defines; move the content into a document"}},
 		})
 	}
 
@@ -212,9 +212,9 @@ func isEmptyBody(body value.Value) bool {
 	if body == nil {
 		return true
 	}
-	c, err := value.ToContent(body)
-	if err != nil || c == nil {
-		return err == nil
+	c := value.ToContent(body)
+	if c == nil {
+		return true
 	}
 	for n := range value.All(c) {
 		switch n := n.(type) {

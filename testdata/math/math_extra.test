@@ -104,13 +104,23 @@ $pi$
 │   ]
 │ ]
 
---- unresolved-ident-is-text ---
+--- unknown-ident-only-in-universe ---
+// A name math does not have but the universe does was reached for in the wrong
+// mode, and the hints say how to get at it. This is upstream's
+// `issue-2885-math-var-only-in-global` with a name writst implements.
+// Error: 2-6 unknown variable: emph
+// Hint: 2-6 `emph` is not available directly in math, but is in the standard library
+// Hint: 2-6 to access `emph` in code mode you can add a hash: `#emph`
+// Hint: 2-6 or access `emph` in math mode by using the `std` module: `std.emph`
+$emph(x)$
+
+--- unknown-ident-is-an-error ---
+// Several letters in a row name a variable; the letters themselves are
+// written with spaces or in quotes, which is what the hints say.
+// Error: 2-5 unknown variable: foo
+// Hint: 2-5 if you meant to display multiple letters as is, try adding spaces between each letter: `f o o`
+// Hint: 2-5 or if you meant to display this as text, try placing it in quotes: `"foo"`
 $foo$
-│ #document[
-│   #par[
-│     #math.equation(block: false)[#math.text("foo")]
-│   ]
-│ ]
 
 --- frac-call ---
 $frac(a, b)$

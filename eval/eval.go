@@ -46,14 +46,7 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	// assembly (lowerMarkup's single-item shortcut), so a lone/trailing set or
 	// show rule reaches here unfolded. Collapse it the same way assembly would.
 	v = foldStyles(v)
-	cc, cerr := value.ToContent(v)
-	// Only surface a content-coercion failure if no other errors were
-	// recorded during eval. When other errors exist, the "non-content
-	// value" diagnostic is almost always a cascading consequence and
-	// would just add noise.
-	if cerr != nil && len(s.errors) == 0 {
-		s.recordError(&value.Error{Span: syntax.NoSpan, Msg: cerr.Error()})
-	}
+	cc := value.ToContent(v)
 	if cc == nil {
 		cc = &value.Sequence{}
 	}
@@ -340,6 +333,14 @@ func (fr *frame) span(r expr.Ref) syntax.Span { return fr.fn.RefSpans[r] }
 // processing the current instruction. Replaces the previous panic-based
 // raise mechanism.
 func (fr *frame) error(span syntax.Span, msg string, hints ...string) *value.Error {
+	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: value.Hints(hints...), Trace: fr.s.trace(fr.mod)}
+	fr.s.recordError(ve)
+	return ve
+}
+
+// errorHints is [frame.error] for a diagnostic whose hints do not all belong
+// at the diagnostic's own span.
+func (fr *frame) errorHints(span syntax.Span, msg string, hints []value.Hint) *value.Error {
 	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: hints, Trace: fr.s.trace(fr.mod)}
 	fr.s.recordError(ve)
 	return ve
@@ -354,7 +355,7 @@ func (fr *frame) errorf(span syntax.Span, format string, args ...any) *value.Err
 // it does not write a [*value.Error] to the value table, so evaluation of
 // the surrounding expression continues normally.
 func (fr *frame) warn(span syntax.Span, msg string, hints ...string) {
-	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: hints, Trace: fr.s.trace(fr.mod)}
+	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: value.Hints(hints...), Trace: fr.s.trace(fr.mod)}
 	fr.s.recordWarning(ve)
 }
 
@@ -680,7 +681,7 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		if i.Reported {
 			// Parse errors are already reported via Module.ParseErrors;
 			// yield the poison value without recording again.
-			fr.vals[r] = &value.Error{Span: fr.span(r), Msg: i.Msg, Hints: i.Hints}
+			fr.vals[r] = &value.Error{Span: fr.span(r), Msg: i.Msg, Hints: value.Hints(i.Hints...)}
 		} else {
 			fr.vals[r] = fr.error(fr.span(r), i.Msg, i.Hints...)
 		}
@@ -688,8 +689,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		// Coerce the prior content to value.Content, attach the label, emit
 		// a warning if overwriting, and register the label.
 		v := fr.get(i.Content)
-		c, err := value.ToContent(v)
-		if err != nil || c == nil {
+		c := value.ToContent(v)
+		if c == nil {
 			// The preceding value isn't content (e.g. a let-binding result of
 			// None). Drop the label silently.
 			fr.vals[r] = value.None{}
@@ -737,29 +738,13 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		}
 		fr.vals[r] = fr.joinValues(arr.Elems, fr.span(r))
 	case *expr.Heading:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.Heading{Depth: i.Level, Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.Heading{Depth: i.Level, Body: contentOf(fr.get(i.Body))}
 	case *expr.Strong:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.Strong{Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.Strong{Body: contentOf(fr.get(i.Body))}
 	case *expr.Emph:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.Emph{Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.Emph{Body: contentOf(fr.get(i.Body))}
 	case *expr.Link:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.Link{Dest: i.Dest, Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.Link{Dest: i.Dest, Body: contentOf(fr.get(i.Body))}
 	case *expr.RefMarkup:
 		if _, ok := fr.s.labels[i.Target]; !ok {
 			fr.vals[r] = fr.errorf(fr.span(r), "label `<%s>` does not exist in the document", i.Target.String())
@@ -767,114 +752,48 @@ func evalInst(fr *frame, inst expr.Instruction) {
 		}
 		v := &value.Ref{Target: i.Target}
 		if i.Supplement != expr.NoRef {
-			body, e := fr.contentOf(fr.get(i.Supplement), fr.span(r))
-			if e != nil {
-				fr.vals[r] = e
-				return
-			}
-			v.Supplement = body
+			v.Supplement = contentOf(fr.get(i.Supplement))
 		}
 		fr.vals[r] = v
 	case *expr.ListItem:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.ListItem{Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.ListItem{Body: contentOf(fr.get(i.Body))}
 	case *expr.EnumItem:
-		if body, e := fr.contentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.EnumItem{Number: i.Number, Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.EnumItem{Number: i.Number, Body: contentOf(fr.get(i.Body))}
 	case *expr.TermItem:
-		term, e := fr.contentOf(fr.get(i.Term), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
+		fr.vals[r] = &value.TermItem{
+			Term:        contentOf(fr.get(i.Term)),
+			Description: contentOf(fr.get(i.Description)),
 		}
-		desc, e := fr.contentOf(fr.get(i.Description), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		fr.vals[r] = &value.TermItem{Term: term, Description: desc}
 	case *expr.Equation:
-		if body, e := fr.mathContentOf(fr.get(i.Body), fr.span(r)); e == nil {
-			fr.vals[r] = &value.Equation{Block: i.Block, Body: body}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.Equation{Block: i.Block, Body: mathContentOf(fr.get(i.Body))}
 	case *expr.MathAttach:
-		base, e := fr.mathContentOf(fr.get(i.Base), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		var top, bottom value.Content
+		a := &value.MathAttach{Base: mathContentOf(fr.get(i.Base))}
 		if i.Top != expr.NoRef {
-			if top, e = fr.mathContentOf(fr.get(i.Top), fr.span(r)); e != nil {
-				fr.vals[r] = e
-				return
-			}
+			a.Top = mathContentOf(fr.get(i.Top))
 		}
 		if i.Bottom != expr.NoRef {
-			if bottom, e = fr.mathContentOf(fr.get(i.Bottom), fr.span(r)); e != nil {
-				fr.vals[r] = e
-				return
-			}
+			a.Bottom = mathContentOf(fr.get(i.Bottom))
 		}
-		fr.vals[r] = &value.MathAttach{Base: base, Top: top, Bottom: bottom}
+		fr.vals[r] = a
 	case *expr.MathFrac:
-		num, e := fr.mathContentOf(fr.get(i.Num), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
+		fr.vals[r] = &value.MathFrac{
+			Num:   mathContentOf(fr.get(i.Num)),
+			Denom: mathContentOf(fr.get(i.Denom)),
 		}
-		denom, e := fr.mathContentOf(fr.get(i.Denom), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		fr.vals[r] = &value.MathFrac{Num: num, Denom: denom}
 	case *expr.MathRoot:
-		var index value.Content
-		var e *value.Error
+		root := &value.MathRoot{Radicand: mathContentOf(fr.get(i.Radicand))}
 		if i.Index != expr.NoRef {
-			if index, e = fr.mathContentOf(fr.get(i.Index), fr.span(r)); e != nil {
-				fr.vals[r] = e
-				return
-			}
+			root.Index = mathContentOf(fr.get(i.Index))
 		}
-		radicand, e := fr.mathContentOf(fr.get(i.Radicand), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		fr.vals[r] = &value.MathRoot{Index: index, Radicand: radicand}
+		fr.vals[r] = root
 	case *expr.MathPrimes:
-		if base, e := fr.mathContentOf(fr.get(i.Base), fr.span(r)); e == nil {
-			fr.vals[r] = &value.MathPrimes{Base: base, Count: i.Count}
-		} else {
-			fr.vals[r] = e
-		}
+		fr.vals[r] = &value.MathPrimes{Base: mathContentOf(fr.get(i.Base)), Count: i.Count}
 	case *expr.MathDelimited:
-		open, e := fr.mathContentOf(fr.get(i.Open), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
+		fr.vals[r] = &value.MathDelimited{
+			Open:  mathContentOf(fr.get(i.Open)),
+			Body:  mathContentOf(fr.get(i.Body)),
+			Close: mathContentOf(fr.get(i.Close)),
 		}
-		body, e := fr.mathContentOf(fr.get(i.Body), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		clos, e := fr.mathContentOf(fr.get(i.Close), fr.span(r))
-		if e != nil {
-			fr.vals[r] = e
-			return
-		}
-		fr.vals[r] = &value.MathDelimited{Open: open, Body: body, Close: clos}
 	case *expr.SetRule:
 		fr.vals[r] = fr.evalSetRule(i)
 	case *expr.ShowRule:
@@ -909,34 +828,24 @@ func containsIntrospection(c value.Content) bool {
 	return false
 }
 
-// mathContentOf coerces a value to content in math context: [value.ToContent]
-// with symbols, strings and numbers turned into [value.MathText] rather than
-// upright text, so that, e.g., `$s$` and `$sym.basic$` — a letter and a symbol
-// resolving to the same character — compare equal. Error reporting and the
-// empty-Sequence normalization match [frame.contentOf].
-func (fr *frame) mathContentOf(v value.Value, span syntax.Span) (value.Content, *value.Error) {
-	c, err := value.ToMathContent(v)
-	if err != nil {
-		return nil, fr.error(span, err.Error())
+// mathContentOf is [contentOf] in math context: symbols, strings and numbers
+// become [value.MathText] rather than upright text, so that, e.g., `$s$` and
+// `$sym.basic$` — a letter and a symbol resolving to the same character —
+// compare equal.
+func mathContentOf(v value.Value) value.Content {
+	if c := value.ToMathContent(v); c != nil {
+		return c
 	}
-	if c == nil {
-		return &value.Sequence{}, nil
-	}
-	return c, nil
+	return &value.Sequence{}
 }
 
-// contentOf coerces a value to content. Returns (nil-content, error) when
-// the value isn't content-coercible; on success the second return is nil.
-// A nil content from value.ToContent is normalized to an empty Sequence.
-func (fr *frame) contentOf(v value.Value, span syntax.Span) (value.Content, *value.Error) {
-	c, err := value.ToContent(v)
-	if err != nil {
-		return nil, fr.error(span, err.Error())
+// contentOf shows a value as content. The nothing that [value.None] shows as
+// becomes an empty Sequence: an element's body has to hold something.
+func contentOf(v value.Value) value.Content {
+	if c := value.ToContent(v); c != nil {
+		return c
 	}
-	if c == nil {
-		return &value.Sequence{}, nil
-	}
-	return c, nil
+	return &value.Sequence{}
 }
 
 // evalCodeJoin runs the code-mode joiner over a list of value Refs and
@@ -1213,17 +1122,7 @@ func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 			fr.attachLabel(ret[len(ret)-1], lbl, lastSpan)
 			continue
 		}
-		cv, err := toContent(v)
-		if err != nil {
-			// Point at the offending item, not at the whole join: the join
-			// spans the entire markup body, which is usually the whole file.
-			span := fr.span(c.Result())
-			if r.IsLocal() {
-				span = fr.fn.RefSpans[r]
-			}
-			fr.error(span, err.Error())
-			continue
-		}
+		cv := toContent(v)
 		if cv == nil {
 			continue
 		}
@@ -1564,31 +1463,43 @@ func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldS
 // resolveCallee unwraps a callee value into the underlying function.
 // Returns (nil, err) when the value isn't callable.
 func (fr *frame) resolveCallee(callee value.Value, span syntax.Span) (*value.Function, *value.Error) {
+	fn, msg := calleeFunc(callee)
+	if fn == nil {
+		return nil, fr.error(span, msg)
+	}
+	return fn, nil
+}
+
+// calleeFunc returns the function a callee value denotes, or nil and the reason
+// it denotes none. Reporting is left to the caller: a math call whose callee is
+// not a function is juxtaposition rather than a mistake (see
+// [frame.evalMathFallback]).
+func calleeFunc(callee value.Value) (*value.Function, string) {
 	switch cc := callee.(type) {
 	case *value.Function:
-		return cc, nil
+		return cc, ""
 	case *value.Type:
 		if cc.Constructor == nil {
-			return nil, fr.errorf(span, "type %s is not callable", cc.Reflected)
+			return nil, fmt.Sprintf("type %s is not callable", cc.Reflected)
 		}
-		return cc.Constructor, nil
+		return cc.Constructor, ""
 	case *value.Element:
 		// A set-only element (e.g. `document`) has no implementation and can't be
 		// called as a constructor.
 		if cc.F == nil {
-			return nil, fr.errorf(span, "element %s is not callable", cc.Name)
+			return nil, fmt.Sprintf("element %s is not callable", cc.Name)
 		}
-		return &cc.Function, nil
+		return &cc.Function, ""
 	case *value.Symbol:
 		// An accent symbol applies itself: `hat(f)` is `accent(f, hat)`. Every
 		// other symbol is not callable.
 		f, err := builtin.SymbolFunc(cc)
 		if err != nil {
-			return nil, fr.error(span, err.Error())
+			return nil, err.Error()
 		}
-		return f, nil
+		return f, ""
 	default:
-		return nil, fr.errorf(span, "expected function, found %s", callee.Type())
+		return nil, fmt.Sprintf("expected function, found %s", callee.Type())
 	}
 }
 
@@ -1665,13 +1576,20 @@ func (fr *frame) applyErr(fn *value.Function, callSpan syntax.Span, callArgs []e
 	return first
 }
 
-// evalCall lowers an SSA Call instruction to a [value.Function.Apply].
-// Returns (nil, err) when the callee can't be resolved, an argument spread
-// fails, or the call itself reports an error.
+// evalCall lowers an SSA Call instruction to a [value.Function.Apply], and
+// returns a [*value.Error] when the callee can't be resolved, an argument
+// spread fails, or the call itself reports an error. A math call whose callee
+// turns out not to be a function renders as juxtaposition instead (see
+// [frame.evalMathFallback]).
 func (fr *frame) evalCall(c *expr.Call) value.Value {
-	fn, e := fr.resolveCallee(fr.get(c.Callee.Ref), c.Callee.Span)
-	if e != nil {
-		return e
+	fn, msg := calleeFunc(fr.get(c.Callee.Ref))
+	if fn == nil {
+		// In math, calling something that isn't a function is juxtaposition:
+		// `$sin(x)$` means what `$sin (x)$` means.
+		if c.Fallback != nil {
+			return fr.evalMathFallback(c)
+		}
+		return fr.error(c.Callee.Span, msg)
 	}
 	// A mutating method (Impure) needs a mutable place to write back. In math
 	// mode there is none, so a resolved mutating method is rejected outright.
@@ -1719,6 +1637,44 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		return fr.applyErr(fn, fr.span(c.Result()), c.Args, err)
 	}
 	return v
+}
+
+// evalMathFallback renders a math call whose callee is not a function: the
+// callee's content followed by the argument list read as plain content, which
+// is what the same source without the parentheses hugging the callee produces.
+func (fr *frame) evalMathFallback(c *expr.Call) value.Value {
+	// Named and spread arguments only mean something in a real call.
+	var first *value.Error
+	for _, b := range c.Fallback.BadArgs {
+		if e := fr.errorHints(b.Span, b.Msg, b.Hints); first == nil {
+			first = e
+		}
+	}
+	if first != nil {
+		return first
+	}
+
+	callee := mathContentOf(fr.get(c.Callee.Ref))
+	var body []value.Content
+	for _, it := range c.Fallback.Items {
+		if it.Ref == expr.NoRef {
+			body = append(body, &value.MathText{Text: it.Text})
+			continue
+		}
+		if cv := value.ToMathContent(fr.get(it.Ref)); cv != nil {
+			body = append(body, cv)
+		}
+	}
+	var inner value.Content = &value.Sequence{Children: body}
+	if len(body) == 1 {
+		inner = body[0]
+	}
+	parens := &value.MathDelimited{
+		Open:  &value.MathText{Text: "("},
+		Body:  inner,
+		Close: &value.MathText{Text: ")"},
+	}
+	return &value.Sequence{Children: []value.Content{callee, parens}}
 }
 
 // callContext builds the context handed to a called function. Runtime carries

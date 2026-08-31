@@ -1,0 +1,95 @@
+// Text operator and math spacing tests specific to this implementation.
+
+--- math-op-predefined ---
+// A predefined operator is upright text, not a run of italic letters.
+$sin x + ln y$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[
+│       #math.op[#math.text("sin")]
+│       #math.text("x")
+│       #math.text("+")
+│       #math.op[#math.text("ln")]
+│       #math.text("y")
+│     ]
+│   ]
+│ ]
+
+--- math-op-limits ---
+// An operator with limits keeps them; the presenter decides where to put them.
+$ lim_(n) x quad max_(i) y $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(b: [#math.text("n")])[
+│       #math.op(limits: true)[#math.text("lim")]
+│     ]
+│     #math.text("x")
+│     #h(1em)
+│     #math.attach(b: [#math.text("i")])[
+│       #math.op(limits: true)[#math.text("max")]
+│     ]
+│     #math.text("y")
+│   ]
+│ ]
+
+--- math-op-custom ---
+// A custom operator, and one that opts into limits.
+$ op("span") = op("argmax", limits: #true)_x $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.op[#math.text("span")]
+│     #math.text("=")
+│     #math.attach(b: [#math.text("x")])[
+│       #math.op(limits: true)[#math.text("argmax")]
+│     ]
+│   ]
+│ ]
+
+--- math-op-multi-word ---
+// liminf and limsup are two words.
+$ liminf_n a_n $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(b: [#math.text("n")])[
+│       #math.op(limits: true)[#math.text("lim inf")]
+│     ]
+│     #math.attach(b: [#math.text("n")])[#math.text("a")]
+│   ]
+│ ]
+
+--- math-op-shadowed ---
+// A local binding wins over the math module, as for any other math name.
+#let sin = [not an operator]
+$sin$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[not an operator]
+│   ]
+│ ]
+
+--- math-op-code-mode ---
+#math.op("tr")
+│ #document[#par[#math.op[#math.text("tr")]]]
+
+--- math-spacing ---
+// The five spacing constants.
+$ a thin b med c thick d quad e wide f $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("a")
+│     #h(0.16666666666666666em)
+│     #math.text("b")
+│     #h(0.2222222222222222em)
+│     #math.text("c")
+│     #h(0.2777777777777778em)
+│     #math.text("d")
+│     #h(1em)
+│     #math.text("e")
+│     #h(2em)
+│     #math.text("f")
+│   ]
+│ ]
+
+--- math-spacing-outside-math ---
+Before#h(2em)after.
+│ #document[#par[Before#h(2em)after.]]

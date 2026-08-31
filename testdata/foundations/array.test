@@ -19,10 +19,10 @@
 //TODO:     , rgb("002")
 //TODO:     ,)
 │ #document[
-│   #par[#raw("()\n")]
+│   #par[#raw("()")]
 │   #par[#raw("1")]
-│   #par[#raw("(-1,)\n")]
-│   #par[#raw("(true, false)\n")]
+│   #par[#raw("(-1,)")]
+│   #par[#raw("(true, false)")]
 │ ]
 
 --- array-bad-token ---

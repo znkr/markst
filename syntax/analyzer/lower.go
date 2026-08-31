@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
+	"znkr.io/writst/internal/names"
 	"znkr.io/writst/internal/symbols"
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
@@ -408,10 +410,24 @@ func (a *analyzer) lowerIdent(n syntax.Node) expr.Ref {
 // each capture's outer Ref in its enclosing builder via resolveName, which
 // recurses through any intermediate closures.
 func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
+	return a.resolveNameIn(source, span, false)
+}
+
+// resolveMathName is [analyzer.resolveName] for a math identifier, which sees
+// the same chain [analyzer.lookupMath] does: everything written around the
+// equation and the math module, but not the universe.
+func (a *analyzer) resolveMathName(source name.Name, span syntax.Span) expr.Ref {
+	return a.resolveNameIn(source, span, true)
+}
+
+func (a *analyzer) resolveNameIn(source name.Name, span syntax.Span, mathOnly bool) expr.Ref {
 	frameIdx := len(a.frames) - 1
 	inCurrent := true
 	var fallback value.ModuleDef
 	for s := a.scope; s != nil; s = s.parent {
+		if mathOnly && s.parent == nil {
+			break // the universe: reachable from code, not from math
+		}
 		if s.mathScope != nil {
 			fallback = s.mathScope
 		}
@@ -449,6 +465,12 @@ func (a *analyzer) resolveName(source name.Name, span syntax.Span) expr.Ref {
 	if fallback != nil {
 		if v := fallback.Get(source); v != nil {
 			return a.b.Const(span, v)
+		}
+		// `std` is the way into the universe from math (see analyzer.lookupMath).
+		if source == names.Std {
+			if v := builtin.Universe[names.Std]; v != nil {
+				return a.b.Const(span, v)
+			}
 		}
 	}
 	// checkIdent already reported "unknown variable" — this is a bug if we

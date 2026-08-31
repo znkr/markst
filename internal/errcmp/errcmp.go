@@ -7,8 +7,10 @@
 package errcmp
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -22,7 +24,14 @@ type Error struct {
 	Span    syntax.Span
 	Type    string // "Error" or "Warning"
 	Message string
-	Hints   []string
+	Hints   []Hint
+}
+
+// Hint is one hint on an [Error]. Span is where the hint points, or
+// [syntax.NoSpan] to point where the error itself does.
+type Hint struct {
+	Span syntax.Span
+	Msg  string
 }
 
 // Diff extracts error expectations from inline comments in root's syntax tree
@@ -110,11 +119,27 @@ func leadingWhitespace(s string) string {
 	return ""
 }
 
+// writeError renders an error and its hints as annotation comments, ordered by
+// the span each points at. A hint that points before the error it belongs to —
+// one naming the callee of a failing call, say — is written above it, which is
+// where a reader looking at the source expects to find it.
 func writeError(buf *strings.Builder, source syntax.Source, src string, e Error, indent string, baseLine uint32) {
-	span := formatSpan(syntax.Locate(source, e.Span), src, baseLine)
-	writeComment(buf, indent, e.Type, span, e.Message)
+	type annotation struct {
+		span syntax.Span
+		typ  string
+		msg  string
+	}
+	anns := []annotation{{e.Span, e.Type, e.Message}}
 	for _, h := range e.Hints {
-		writeComment(buf, indent, "Hint", span, h)
+		span := e.Span
+		if h.Span != syntax.NoSpan {
+			span = h.Span
+		}
+		anns = append(anns, annotation{span, "Hint", h.Msg})
+	}
+	slices.SortStableFunc(anns, func(a, b annotation) int { return cmp.Compare(a.span.Start, b.span.Start) })
+	for _, a := range anns {
+		writeComment(buf, indent, a.typ, formatSpan(syntax.Locate(source, a.span), src, baseLine), a.msg)
 	}
 }
 

@@ -36,8 +36,16 @@ func (e wantError) toError(root syntax.RootNode) Error {
 		},
 		Type:    typ,
 		Message: e.Message,
-		Hints:   e.Hints,
+		Hints:   plainHints(e.Hints),
 	}
+}
+
+func plainHints(msgs []string) []Hint {
+	var ret []Hint
+	for _, m := range msgs {
+		ret = append(ret, Hint{Span: syntax.NoSpan, Msg: m})
+	}
+	return ret
 }
 
 func TestDiff(t *testing.T) {

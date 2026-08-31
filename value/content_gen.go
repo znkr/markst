@@ -358,6 +358,45 @@ func (n *Footnote) walk(yield func(Content) bool) bool {
 	return true
 }
 
+func (n *HSpace) Field(name name.Name) Value {
+	switch name {
+	case names.Amount:
+		return n.Amount
+	default:
+		return nil
+	}
+}
+
+func (n *HSpace) HasField(name name.Name) bool {
+	switch name {
+	case names.Amount:
+		return true
+	default:
+		return false
+	}
+}
+
+func (n *HSpace) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Amount.String()), n.Field(names.Amount))
+	return fields
+}
+
+func (n *HSpace) SetLabel(label *Label) *Label {
+	return nil
+}
+
+func (n *HSpace) GetLabel() *Label {
+	return nil
+}
+
+func (n *HSpace) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	return true
+}
+
 func (n *HTMLElem) Field(name name.Name) Value {
 	switch name {
 	case names.Tag:
@@ -1275,6 +1314,65 @@ func (n *MathMat) walk(yield func(Content) bool) bool {
 				return false
 			}
 		}
+	}
+	return true
+}
+
+func (n *MathOp) Field(name name.Name) Value {
+	switch name {
+	case names.Text:
+		return n.Text
+	case names.Limits:
+		return Bool(n.Limits)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathOp) HasField(name name.Name) bool {
+	switch name {
+	case names.Text:
+		return true
+	case names.Limits:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathOp) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Text.String()), n.Field(names.Text))
+	fields.Elems.Put(Str(names.Limits.String()), n.Field(names.Limits))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathOp) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathOp) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *MathOp) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Text != nil && !n.Text.walk(yield) {
+		return false
 	}
 	return true
 }
@@ -2243,6 +2341,60 @@ func (n *Text) GetLabel() *Label {
 
 func (n *Text) walk(yield func(Content) bool) bool {
 	if !yield(n) {
+		return false
+	}
+	return true
+}
+
+func (n *Underline) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *Underline) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *Underline) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *Underline) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *Underline) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *Underline) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
 		return false
 	}
 	return true

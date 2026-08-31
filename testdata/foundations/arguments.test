@@ -48,11 +48,6 @@
 // Error: 29-34 cannot subtract integer from string
 #arguments("a").filter(x => x - 2)
 
---- arguments-not-content ---
-// Arguments are not content; with nothing else wrong, that is worth saying.
-// Error: 2-16 content expression evaluated to non-content value: *value.Arguments
-#arguments("a")
-
 --- arguments-map ---
 // Test the `map` method.
 #test(arguments().map(x => x * 2), arguments())

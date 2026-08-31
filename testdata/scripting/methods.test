@@ -28,9 +28,10 @@
 // Test math method call for an accent symbol.
 #test($arrow.l.r(x)$, $#math.arrow.l.r[\x]$)
 
---- math-field-call-accent-non-func (skip: calling a non-accent symbol in math should render the call verbatim (Typst wraps the args in the equation); writst reports it as not callable) ---
+--- math-field-call-accent-non-func ---
 // Test calling a symbol whose field isn't an accent.
 #test($pi.alt(x)$, $pi.alt/**/(x)$)
+│ #document[]
 
 --- field-call-import-module (skip: modules/imports are not implemented yet) ---
 #import "module.typ"

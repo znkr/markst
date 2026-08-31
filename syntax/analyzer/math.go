@@ -1,6 +1,8 @@
 package analyzer
 
 import (
+	"strings"
+
 	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
 	"znkr.io/writst/name"
@@ -66,7 +68,9 @@ func (a *analyzer) lowerMathContent(n syntax.Node) expr.Ref {
 	}
 	switch len(items) {
 	case 0:
-		return a.b.Const(n.Span(), value.None{})
+		// Empty content, not `none`: a math run is content even when it holds
+		// nothing, which is observable for an empty argument cell.
+		return a.b.Const(n.Span(), &value.Sequence{})
 	case 1:
 		return items[0]
 	default:
@@ -85,18 +89,36 @@ func (a *analyzer) lowerMathText(n syntax.Node) expr.Ref {
 	return a.b.Const(n.Span(), &value.MathText{Text: a.leaf(n, syntax.KindMathText)})
 }
 
-// lowerMathIdent resolves a math identifier through the normal scope chain,
-// which inside an equation includes the math module as a low-precedence
-// fallback (see [analyzer.lowerEquation]). A resolvable name (a local `let`, a
-// Universe binding, or a math symbol/element) becomes that value; an
-// unresolved name renders as upright text.
+// lowerMathIdent resolves a math identifier against what math can see — a
+// local `let` or a math symbol/element, but not the universe (see
+// [analyzer.lookupMath]). A name math does not have is an error: writing
+// several letters in a row means the variable of that name, and `$a b$` is how
+// the letters themselves are written.
 func (a *analyzer) lowerMathIdent(n syntax.Node) expr.Ref {
 	ident := a.leaf(n, syntax.KindMathIdent)
 	source := name.Make(ident)
-	if _, ok := a.lookup(source); ok {
-		return a.resolveName(source, n.Span())
+	if _, ok := a.lookupMath(source); ok {
+		return a.resolveMathName(source, n.Span())
 	}
-	return a.b.Const(n.Span(), &value.MathText{Text: ident})
+	return a.emitError(n.Span(), "unknown variable: "+ident, unknownMathVarHints(a, source, ident)...)
+}
+
+// unknownMathVarHints suggests what an unknown math identifier might have meant.
+// A name the universe does have was reached for in the wrong mode; anything
+// else is most likely a run of letters that wants spaces or quotes.
+func unknownMathVarHints(a *analyzer, source name.Name, ident string) []string {
+	if _, ok := a.lookup(source); ok {
+		return []string{
+			"`" + ident + "` is not available directly in math, but is in the standard library",
+			"to access `" + ident + "` in code mode you can add a hash: `#" + ident + "`",
+			"or access `" + ident + "` in math mode by using the `std` module: `std." + ident + "`",
+		}
+	}
+	spaced := strings.Join(strings.Split(ident, ""), " ")
+	return []string{
+		"if you meant to display multiple letters as is, try adding spaces between each letter: `" + spaced + "`",
+		"or if you meant to display this as text, try placing it in quotes: `\"" + ident + "\"`",
+	}
 }
 
 // lowerMathAttach lowers a base with sub-/superscripts and/or primes (for
@@ -178,7 +200,10 @@ func (a *analyzer) lowerMathCall(n syntax.Node) expr.Ref {
 		return a.lowerMathMethodCall(n, calleeNode, argsNode)
 	}
 	callee := expr.Callee{Ref: a.lowerExpr(calleeNode), Span: calleeNode.Span()}
-	args := a.lowerMathArgs(argsNode)
+	args, fallback := a.lowerMathArgs(argsNode, calleeNode)
+	if a.mathCalleeIsFunc(calleeNode) {
+		fallback = nil
+	}
 	// vec/mat/cases lay each argument out as its own row/column and ignore
 	// linebreaks within a cell, so warn (per cell, at the cell's span) when one
 	// is present. Done here rather than at eval time because only the analyzer
@@ -186,7 +211,39 @@ func (a *analyzer) lowerMathCall(n syntax.Node) expr.Ref {
 	if word, ok := a.mathCellWord(calleeNode); ok {
 		a.warnMathCellLinebreaks(argsNode, word)
 	}
-	return a.b.Call(n.Span(), callee, args, nil, false, nil)
+	return a.b.MathCall(n.Span(), callee, args, nil, fallback)
+}
+
+// mathCalleeIsFunc reports whether a math call's callee is known at analysis
+// time to be callable. When it isn't — an unresolved name, a constant that
+// holds content, or a variable whose value is only known at runtime — the call
+// carries a [expr.MathFallback] so the evaluator can render it as
+// juxtaposition instead.
+func (a *analyzer) mathCalleeIsFunc(calleeNode syntax.Node) bool {
+	if calleeNode.Kind() != syntax.KindMathIdent {
+		return false
+	}
+	b, ok := a.lookupMath(name.Make(calleeNode.Text()))
+	if !ok {
+		return false
+	}
+	vb, ok := b.(valueBinding)
+	if !ok {
+		return false
+	}
+	// Mirrors the runtime resolution in eval's calleeFunc.
+	switch v := vb.val.(type) {
+	case *value.Function:
+		return true
+	case *value.Type:
+		return v.Constructor != nil
+	case *value.Element:
+		return v.F != nil
+	case *value.Symbol:
+		_, err := builtin.SymbolFunc(v)
+		return err == nil
+	}
+	return false
 }
 
 // mathCellWord returns the noun vec/mat/cases use in their "linebreaks are
@@ -197,7 +254,7 @@ func (a *analyzer) mathCellWord(calleeNode syntax.Node) (string, bool) {
 	if calleeNode.Kind() != syntax.KindMathIdent {
 		return "", false
 	}
-	b, ok := a.lookup(name.Make(calleeNode.Text()))
+	b, ok := a.lookupMath(name.Make(calleeNode.Text()))
 	if !ok {
 		return "", false
 	}
@@ -284,10 +341,10 @@ func (a *analyzer) lowerMathMethodCall(callNode, faNode, argsNode syntax.Node) e
 	targetRef := a.lowerExpr(targetNode)
 	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text(), true)
 	callee := expr.Callee{Ref: calleeRef, Span: faNode.Span()}
-	args := a.lowerMathArgs(argsNode)
+	args, fallback := a.lowerMathArgs(argsNode, faNode)
 
 	mut := &expr.MutCheck{RecvSpan: callNode.Span(), Math: true, MathCall: callNode.Text()}
-	return a.b.Call(callNode.Span(), callee, args, nil, false, mut)
+	return a.b.MathCall(callNode.Span(), callee, args, mut, fallback)
 }
 
 // lowerMathArgs lowers a math argument list. When the list contains row
@@ -296,30 +353,33 @@ func (a *analyzer) lowerMathMethodCall(callNode, faNode, argsNode syntax.Node) e
 // row structure; column separators (`,`) always separate cells. Without any
 // `;`, positional cells are passed flat. Named and spread arguments are passed
 // through unchanged.
-func (a *analyzer) lowerMathArgs(n syntax.Node) []expr.CallArg {
+//
+// The second result is the same list read as plain content — the cells and
+// separators in source order — for the case where the callee named by
+// calleeNode turns out not to be a function (see [expr.MathFallback]).
+func (a *analyzer) lowerMathArgs(n syntax.Node, calleeNode syntax.Node) ([]expr.CallArg, *expr.MathFallback) {
 	twoD := mathArgsHaveSemicolon(n)
 	ns := a.inner(n, syntax.KindMathArgs)
 	var args []expr.CallArg
 	var row []expr.ArrayItem
+	fallback := &expr.MathFallback{}
 	seen := make(map[string]struct{})
-	// An empty cell is held back until something follows it, so that a trailing
-	// one — what the parser leaves between two separators in `mat(a,;b)` or
-	// `mat(a;,)` — is dropped as the separator noise it is. That keeps
-	// `mat(..nums)`, `mat(..nums;)`, `mat(..nums;,)` and `mat(..nums,)` the same
-	// matrix. An empty cell that is followed by another one is a real cell:
-	// `mat(1,,2)` has three columns.
-	var pending syntax.Node
-	flushRow := func() {
-		pending = nil
-		if len(row) == 0 {
-			return
-		}
+	// A `;` ends a row even when nothing was written in it, so `f(a: b;)` has
+	// one empty row. The implicit end of the list does not: a trailing `;`
+	// closes the last row rather than opening another.
+	emitRow := func() {
 		arr := a.b.MakeArray(n.Span(), row)
 		args = append(args, expr.CallArg{Kind: expr.ArgPositional, Value: arr, Span: n.Span()})
 		row = nil
 	}
+	flushRow := func() {
+		if len(row) > 0 {
+			emitRow()
+		}
+	}
 	lowerCell := func(cell syntax.Node) {
 		ref := a.lowerExpr(cell)
+		fallback.Items = append(fallback.Items, expr.MathItem{Ref: ref})
 		if twoD {
 			row = append(row, expr.ArrayItem{Value: ref, Span: cell.Span()})
 		} else {
@@ -330,42 +390,74 @@ func (a *analyzer) lowerMathArgs(n syntax.Node) []expr.CallArg {
 		for child := range ns.inside(syntax.KindLeftParen, syntax.KindRightParen) {
 			switch child.Kind() {
 			case syntax.KindComma:
+				fallback.Items = append(fallback.Items, expr.MathItem{Ref: expr.NoRef, Text: ","})
 				continue
 			case syntax.KindSemicolon:
-				flushRow()
+				fallback.Items = append(fallback.Items, expr.MathItem{Ref: expr.NoRef, Text: ";"})
+				emitRow()
 				continue
 			case syntax.KindSpread:
-				flushRow()
-				args = append(args, expr.CallArg{Kind: expr.ArgSpread, Value: a.lowerSpread(child), Span: child.Span()})
+				fallback.BadArgs = append(fallback.BadArgs, badMathArg(child, calleeNode, "spread"))
+				ref := a.lowerSpread(child)
+				if twoD {
+					// A spread inside a row list contributes its elements to the
+					// row it stands in, not a row of its own.
+					row = append(row, expr.ArrayItem{Value: ref, Span: child.Span(), Spread: true})
+					continue
+				}
+				args = append(args, expr.CallArg{Kind: expr.ArgSpread, Value: ref, Span: child.Span()})
 			case syntax.KindNamed:
-				flushRow()
 				named := a.inner(child, syntax.KindNamed)
 				keyNode := named.node()
-				key := name.Make(a.leaf(keyNode, syntax.KindIdent))
 				named.take(syntax.KindColon)
 				valNode := named.node()
 				val := a.lowerExpr(valNode)
+				if e, ok := keyNode.(*syntax.Error); ok {
+					// The name didn't parse — a duplicate, or not an identifier at
+					// all. Pass the poison value in the argument's place so the
+					// call short-circuits on it rather than reporting a second
+					// error about an argument that is neither named nor missing.
+					poison := a.emitSyntaxError(e)
+					if twoD {
+						row = append(row, expr.ArrayItem{Value: poison, Span: child.Span()})
+					} else {
+						args = append(args, expr.CallArg{Kind: expr.ArgPositional, Value: poison, Span: child.Span()})
+					}
+					continue
+				}
+				fallback.BadArgs = append(fallback.BadArgs, badMathArg(child, calleeNode, "named"))
+				key := name.Make(a.leaf(keyNode, syntax.KindIdent))
 				if _, dup := seen[key.String()]; dup {
 					a.emitError(keyNode.Span(), "duplicate argument: "+key.String())
 				}
 				seen[key.String()] = struct{}{}
 				args = append(args, expr.CallArg{Kind: expr.ArgNamed, Name: key, Value: val, Span: valNode.Span(), PairSpan: child.Span()})
 			default:
-				if isEmptyMathCell(child) {
-					pending = child
-					continue
-				}
-				if pending != nil {
-					cell := pending
-					pending = nil
-					lowerCell(cell)
-				}
 				lowerCell(child)
 			}
 		}
 		flushRow()
 	}
-	return args
+	return args, fallback
+}
+
+// badMathArg builds the diagnostic for a named or spread argument (kind is
+// "named" or "spread") of a math call whose callee is not a function. Such an
+// argument means nothing in the juxtaposition form the call falls back to, so
+// the hint says how to write it as plain text instead.
+func badMathArg(arg, calleeNode syntax.Node, kind string) expr.MathBadArg {
+	hint := "to render the dots as text, add a space: `" + strings.Replace(arg.Text(), "..", ".. ", 1) + "`"
+	if kind == "named" {
+		hint = "to render the colon as text, escape it: `" + strings.Replace(arg.Text(), ":", `\:`, 1) + "`"
+	}
+	return expr.MathBadArg{
+		Span: arg.Span(),
+		Msg:  kind + "-argument syntax can only be used with functions",
+		Hints: []value.Hint{
+			{Span: calleeNode.Span(), Msg: "`" + calleeNode.Text() + "` is not a function"},
+			{Span: syntax.NoSpan, Msg: hint},
+		},
+	}
 }
 
 // isEmptyMathCell reports whether a cell node carries nothing. The parser leaves

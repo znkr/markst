@@ -55,12 +55,22 @@ type Diagnostic struct {
 
 	Loc   syntax.Location
 	Msg   string
-	Hints []string
+	Hints []Hint
 
 	// Trace is the chain of calls that led here, outermost first, holding only
 	// the calls that crossed from one source into another. It is empty for a
 	// failure that happened in the source Loc already points at.
 	Trace []Frame
+}
+
+// Hint is a suggestion attached to a [Diagnostic]. Loc points at what the
+// suggestion is about, which is not always where the diagnostic points: a hint
+// naming the callee of a failing call belongs on the callee, not on the
+// argument that failed. It is invalid when the hint has nothing of its own to
+// point at, in which case it is about the diagnostic's own location.
+type Hint struct {
+	Loc syntax.Location
+	Msg string
 }
 
 // Frame is one call site on the path to a [Diagnostic]: where the call was
@@ -163,7 +173,7 @@ func FormatDiagnostics(w io.Writer, diags []Diagnostic) error {
 		sb.WriteString(d.Msg)
 		sb.WriteByte('\n')
 		for _, h := range d.Hints {
-			for i, line := range strings.Split(h, "\n") {
+			for i, line := range strings.Split(h.Msg, "\n") {
 				if i == 0 {
 					sb.WriteString(hintIndent + "hint: ")
 				} else {
@@ -210,12 +220,20 @@ func diagnose(sev Severity, errs []eval.Error) []Diagnostic {
 				Callee: f.Callee,
 			})
 		}
+		var hints []Hint
+		for _, h := range e.Hints {
+			loc := syntax.Location{}
+			if h.Span != syntax.NoSpan {
+				loc = syntax.Locate(e.Origin.Source, h.Span)
+			}
+			hints = append(hints, Hint{Loc: loc, Msg: h.Msg})
+		}
 		r = append(r, Diagnostic{
 			Severity: sev,
 			Origin:   e.Origin.Name,
 			Loc:      syntax.Locate(e.Origin.Source, e.Span),
 			Msg:      e.Msg,
-			Hints:    e.Hints,
+			Hints:    hints,
 			Trace:    trace,
 		})
 	}

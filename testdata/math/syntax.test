@@ -71,7 +71,7 @@ $ underline(f' : NN -> RR) \
 │       #math.text("1")
 │       #math.text("−")
 │       #math.text("0")
-│       #math.text("thick")
+│       #h(0.2777777777777778em)
 │       #math.align-point()
 │       #math.text("…")
 │     ]
@@ -101,7 +101,7 @@ $ dot \ dots \ ast \ tilde \ star $
 │   #math.equation(block: true)[
 │     #math.text("⋅")
 │     #linebreak()
-│     #math.text("⋯")
+│     #math.text("…")
 │     #linebreak()
 │     #math.text("∗")
 │     #linebreak()

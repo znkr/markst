@@ -134,7 +134,7 @@ func TestDiagnosticAtEndOfInput(t *testing.T) {
 // realization, which works on content that has lost every link back to the
 // syntax it came from and so has nothing to point at.
 func TestDiagnosticWithoutLocation(t *testing.T) {
-	_, _, err := writst.Compile([]byte("#show heading: it => int\n= T\n"))
+	_, _, err := writst.Compile([]byte("#show heading: (a, b) => a\n= T\n"))
 	var diags writst.DiagnosticList
 	if !errors.As(err, &diags) || len(diags) != 1 {
 		t.Fatalf("Compile() = %v, want one error", err)
@@ -194,7 +194,7 @@ func TestFormatDiagnostics(t *testing.T) {
 					End:   syntax.Position{Line: 7, Column: 5},
 				},
 				Msg:   "missing argument: body",
-				Hints: []string{"dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"},
+				Hints: []writst.Hint{{Msg: "dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"}},
 			},
 			{
 				Severity: writst.Warning,

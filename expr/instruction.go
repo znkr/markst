@@ -376,6 +376,34 @@ type Call struct {
 	Blocks      []Ref
 	AllowSetter bool
 	Mut         *MutCheck
+	Fallback    *MathFallback
+}
+
+// MathFallback is the juxtaposition form of a math call, rendered when the
+// callee turns out not to be a function: `$sin(x)$` then means what `$sin (x)$`
+// means, the callee's content followed by a parenthesized group. Items are the
+// argument list's cells and separators in source order. BadArgs are the named
+// and spread arguments, which have no meaning outside a real call and are
+// reported when the fallback is taken. The analyzer leaves [Call.Fallback] nil
+// when it already knows the callee is callable.
+type MathFallback struct {
+	Items   []MathItem
+	BadArgs []MathBadArg
+}
+
+// MathItem is one piece of a [MathFallback]: an argument cell, or a literal
+// separator when Ref is [NoRef].
+type MathItem struct {
+	Ref  Ref
+	Text string // `,` or `;`, for a separator
+}
+
+// MathBadArg is a named or spread argument of a math call together with the
+// diagnostic to report if the call falls back to juxtaposition.
+type MathBadArg struct {
+	Span  syntax.Span
+	Msg   string
+	Hints []value.Hint
 }
 
 // MutCheck describes the receiver of a method call for the runtime
@@ -405,6 +433,9 @@ func (c *Call) Operands() []Ref {
 	if c.Mut != nil {
 		n += len(c.Mut.RecvAccessors)
 	}
+	if c.Fallback != nil {
+		n += len(c.Fallback.Items)
+	}
 	out := make([]Ref, 0, n)
 	out = append(out, c.Callee.Ref)
 	for _, a := range c.Args {
@@ -413,6 +444,13 @@ func (c *Call) Operands() []Ref {
 	out = append(out, c.Blocks...)
 	if c.Mut != nil {
 		out = append(out, c.Mut.RecvAccessors...)
+	}
+	if c.Fallback != nil {
+		for _, it := range c.Fallback.Items {
+			if it.Ref != NoRef {
+				out = append(out, it.Ref)
+			}
+		}
 	}
 	return out
 }
@@ -428,6 +466,13 @@ func (c *Call) RemapOperands(f func(Ref) Ref) {
 	if c.Mut != nil {
 		for i := range c.Mut.RecvAccessors {
 			c.Mut.RecvAccessors[i] = f(c.Mut.RecvAccessors[i])
+		}
+	}
+	if c.Fallback != nil {
+		for i := range c.Fallback.Items {
+			if c.Fallback.Items[i].Ref != NoRef {
+				c.Fallback.Items[i].Ref = f(c.Fallback.Items[i].Ref)
+			}
 		}
 	}
 }

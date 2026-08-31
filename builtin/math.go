@@ -18,8 +18,10 @@ var Math = &value.Module{
 		names.Cancel:    Cancel,
 		names.Equation:  Equation,
 		names.Frac:      Frac,
+		names.Op:        Op,
 		names.Root:      Root,
 		names.Sqrt:      Sqrt,
+		names.Text:      Text,
 		names.Vec:       Vec,
 		names.Mat:       Mat,
 		names.Cases:     Cases,
@@ -51,7 +53,57 @@ func (m mathModuleDef) Get(n name.Name) value.Value {
 	if v := value.SimpleModuleDef(m).Get(n); v != nil {
 		return v
 	}
+	if spec, ok := mathOps[n]; ok {
+		// A fresh element per lookup: a label attaches to the value itself, so
+		// one shared element would carry a label written in another document.
+		return &value.MathOp{Text: &value.MathText{Text: spec.text}, Limits: spec.limits}
+	}
+	if v, ok := mathSpacing[n]; ok {
+		return v
+	}
 	return Sym.Def.Get(n)
+}
+
+// mathSpacing are the spacing constants the math module defines. They can be
+// shared, unlike the operators: [value.HSpace] takes no label, so there is
+// nothing in one to write to.
+var mathSpacing = map[name.Name]*value.HSpace{
+	name.Make("thin"):  {Amount: value.Length{Em: 1.0 / 6.0}},
+	name.Make("med"):   {Amount: value.Length{Em: 2.0 / 9.0}},
+	name.Make("thick"): {Amount: value.Length{Em: 5.0 / 18.0}},
+	name.Make("quad"):  {Amount: value.Length{Em: 1}},
+	name.Make("wide"):  {Amount: value.Length{Em: 2}},
+}
+
+// mathOps are the text operators the math module predefines, taken from
+// Typst's list. limits says whether an attachment on the operator belongs
+// above and below it in a block equation.
+var mathOps = buildMathOps()
+
+type mathOpSpec struct {
+	text   string
+	limits bool
+}
+
+func buildMathOps() map[name.Name]mathOpSpec {
+	ops := make(map[name.Name]mathOpSpec)
+	for _, op := range []string{
+		"arccos", "arcsin", "arctan", "arg", "cos", "cosh", "cot", "coth",
+		"csc", "csch", "ctg", "deg", "dim", "exp", "hom", "id", "im", "ker",
+		"lg", "ln", "log", "mod", "sec", "sech", "sin", "sinc", "sinh", "tan",
+		"tanh", "tg", "tr",
+	} {
+		ops[name.Make(op)] = mathOpSpec{text: op}
+	}
+	for _, op := range []string{
+		"det", "gcd", "inf", "lcm", "lim", "max", "min", "Pr", "sup",
+	} {
+		ops[name.Make(op)] = mathOpSpec{text: op, limits: true}
+	}
+	// The two that are spelled with a space between the words.
+	ops[name.Make("liminf")] = mathOpSpec{text: "lim inf", limits: true}
+	ops[name.Make("limsup")] = mathOpSpec{text: "lim sup", limits: true}
+	return ops
 }
 
 // mathContentType is the accepted type of a math element's content argument:
@@ -74,10 +126,7 @@ var mathContentType = types.SetOf(types.Content, types.Symbol, types.Str, types.
 //
 // The result is never nil: none becomes empty content, matching frame.contentOf.
 func mathContent(v value.Value) (value.Content, error) {
-	c, err := value.ToMathContent(v)
-	if err != nil {
-		return nil, err
-	}
+	c := value.ToMathContent(v)
 	if c == nil {
 		return &value.Sequence{}, nil
 	}
@@ -86,12 +135,12 @@ func mathContent(v value.Value) (value.Content, error) {
 
 // mathCells converts a run of argument values into content cells, flattening
 // any array values (rows produced by the analyzer for `;`-separated lists).
-func mathCells(vals []value.Value) ([]value.Content, error) {
+func mathCells(vals []value.Value, cell func(value.Value) (value.Content, error)) ([]value.Content, error) {
 	var out []value.Content
 	for i, v := range vals {
 		if arr, ok := v.(*value.Array); ok {
 			for _, e := range arr.Elems {
-				c, err := mathContent(e)
+				c, err := cell(e)
 				if err != nil {
 					return nil, value.ArgErrorPosf(i, "%s", err.Error())
 				}
@@ -99,13 +148,28 @@ func mathCells(vals []value.Value) ([]value.Content, error) {
 			}
 			continue
 		}
-		c, err := mathContent(v)
+		c, err := cell(v)
 		if err != nil {
 			return nil, value.ArgErrorPosf(i, "%s", err.Error())
 		}
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// mathContentStrict is [mathContent] for the elements whose cells are declared
+// as content — vec and cases — where a number is a mistake rather than
+// something to show. mat, whose cells show whatever they are handed, uses
+// [mathContent].
+func mathContentStrict(v value.Value) (value.Content, error) {
+	c, err := value.CastMathContent(v)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return &value.Sequence{}, nil
+	}
+	return c, nil
 }
 
 // delimType is the accepted type of the vec/mat/cases `delim` property: none,
@@ -213,7 +277,7 @@ func vecImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgs
 	if err := rejectSinkNamed(sink); err != nil {
 		return nil, err
 	}
-	children, err := mathCells(sink.Positional)
+	children, err := mathCells(sink.Positional, mathContentStrict)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +303,7 @@ func casesImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedAr
 	if err := rejectSinkNamed(sink); err != nil {
 		return nil, err
 	}
-	children, err := mathCells(sink.Positional)
+	children, err := mathCells(sink.Positional, mathContentStrict)
 	if err != nil {
 		return nil, err
 	}
@@ -290,13 +354,13 @@ func matImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgs
 				rows = append(rows, []value.Content{c})
 				continue
 			}
-			row, err := mathCells(arr.Elems)
+			row, err := mathCells(arr.Elems, mathContent)
 			if err != nil {
 				return nil, err
 			}
 			rows = append(rows, row)
 		}
-	} else if row, err := mathCells(pos); err != nil {
+	} else if row, err := mathCells(pos, mathContent); err != nil {
 		return nil, err
 	} else if len(row) > 0 {
 		rows = append(rows, row)
@@ -464,6 +528,26 @@ func cancelImpl(_ *value.FunctionCallContext, args []value.Value, named value.Na
 		c.Angle = named.Get(names.Angle)
 	}
 	return c, nil
+}
+
+// Op is the `op(text, limits: false)` math element; it builds a
+// [value.MathOp]. The predefined operators (`sin`, `lim`, …) are the same
+// element under a name, see mathOps.
+var Op = value.NewElement[*value.MathOp](value.Function{
+	Name:       "math.op",
+	Positional: []value.Param{{Name: "text", Type: mathContentType}},
+	Named: value.NamedParams{
+		names.Limits: {Name: "limits", Type: types.SetOf(types.Bool), Default: value.Bool(false)},
+	},
+	F: opImpl,
+})
+
+func opImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	text, err := mathContent(args[0])
+	if err != nil {
+		return nil, value.ArgErrorPosf(0, "%s", err.Error())
+	}
+	return &value.MathOp{Text: text, Limits: bool(named.Get(names.Limits).(value.Bool))}, nil
 }
 
 // Underline is the `underline(x)` math element; it builds a

@@ -31,7 +31,7 @@ var combiningAccents = map[rune]rune{
 	'̆': '̆', '˘': '̆', // breve
 	'̇': '̇', '.': '̇', '⋅': '̇', '˙': '̇', // dot
 	'̈': '̈', '¨': '̈', // diaer, dot.double
-	'̉': '̉',                               // hook above
+	'̉': '̉',                                         // hook above
 	'̊': '̊', '∘': '̊', '○': '̊', '˚': '̊', '°': '̊', // circle
 	'̋': '̋', '˝': '̋', // acute.double
 	'̌': '̌', 'ˇ': '̌', // caron

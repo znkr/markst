@@ -26,6 +26,21 @@ func emphImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 	return &value.Emph{Body: content}, nil
 }
 
+// UnderlineMarkup is the `underline(x)` markup element; it builds a
+// [value.Underline]. The math module has [Underline] under the same name,
+// which is what `$underline(x)$` reaches.
+var UnderlineMarkup = value.NewElement[*value.Underline](value.Function{
+	Name: "underline",
+	Positional: []value.Param{
+		{Name: "body", Type: types.SetOf(types.Content)},
+	},
+	F: underlineMarkupImpl,
+})
+
+func underlineMarkupImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.Underline{Body: value.ToContent(args[0])}, nil
+}
+
 // Table is the table element; it builds a [value.Table] from its content
 // children.
 var Table = value.NewElement[*value.Table](value.Function{
@@ -41,11 +56,7 @@ func tableImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedAr
 	sink := args[0].(*value.Arguments)
 	children := make([]value.Content, len(sink.Positional))
 	for i, v := range sink.Positional {
-		c, err := value.ToContent(v)
-		if err != nil {
-			return nil, value.ArgErrorPosf(i, "%s", err.Error())
-		}
-		children[i] = c
+		children[i] = value.ToContent(v)
 	}
 	return &value.Table{Children: children}, nil
 }
@@ -166,6 +177,19 @@ func linebreakImpl(_ *value.FunctionCallContext, _ []value.Value, _ value.NamedA
 	return &value.Linebreak{}, nil
 }
 
+// H is horizontal spacing: `h(1em)`. Only lengths are modeled; Typst also
+// takes a fraction (`h(1fr)`), which needs a layout that knows the line width
+// to divide up.
+var H = value.NewElement[*value.HSpace](value.Function{
+	Name:       "h",
+	Positional: []value.Param{{Name: "amount", Type: types.SetOf(types.Length)}},
+	F:          hImpl,
+})
+
+func hImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	return &value.HSpace{Amount: args[0].(value.Length)}, nil
+}
+
 // Parbreak forces a paragraph break; it builds a [value.Parbreak].
 var Parbreak = value.NewElement[*value.Parbreak](value.Function{
 	Name: "parbreak",
@@ -259,11 +283,7 @@ func listImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 			children[i] = li
 			continue
 		}
-		c, err := value.ToContent(v)
-		if err != nil {
-			return nil, value.ArgErrorPosf(i, "%s", err.Error())
-		}
-		children[i] = &value.ListItem{Body: c}
+		children[i] = &value.ListItem{Body: value.ToContent(v)}
 	}
 	return &value.List{Children: children}, nil
 }
@@ -302,11 +322,7 @@ func enumImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 			children[i] = ei
 			continue
 		}
-		c, err := value.ToContent(v)
-		if err != nil {
-			return nil, value.ArgErrorPosf(i, "%s", err.Error())
-		}
-		children[i] = &value.EnumItem{Number: i + 1, Body: c}
+		children[i] = &value.EnumItem{Number: i + 1, Body: value.ToContent(v)}
 	}
 	return &value.Enum{Children: children}, nil
 }

@@ -276,6 +276,11 @@ func (n *Emph) Equal(other Value) bool {
 	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
 }
 
+func (n *Underline) Equal(other Value) bool {
+	o, ok := other.(*Underline)
+	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
+}
+
 func (n *Par) Equal(other Value) bool {
 	o, ok := other.(*Par)
 	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
@@ -289,6 +294,11 @@ func (n *Linebreak) Equal(other Value) bool {
 func (n *Parbreak) Equal(other Value) bool {
 	_, ok := other.(*Parbreak)
 	return ok
+}
+
+func (n *HSpace) Equal(other Value) bool {
+	o, ok := other.(*HSpace)
+	return ok && n.Amount == o.Amount
 }
 
 func (n *SmartQuote) Equal(other Value) bool {
@@ -370,6 +380,11 @@ func (n *MathText) Equal(other Value) bool {
 	return ok && n.Text == o.Text &&
 		optEqual(n.Bold, o.Bold) && optEqual(n.Italic, o.Italic) && optEqual(n.Variant, o.Variant) &&
 		labelEqual(n.Label, o.Label)
+}
+
+func (n *MathOp) Equal(other Value) bool {
+	o, ok := other.(*MathOp)
+	return ok && n.Limits == o.Limits && n.Text.Equal(o.Text) && labelEqual(n.Label, o.Label)
 }
 
 func (n *MathAttach) Equal(other Value) bool {

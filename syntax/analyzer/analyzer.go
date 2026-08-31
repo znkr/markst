@@ -86,6 +86,7 @@ import (
 
 	"znkr.io/writst/builtin"
 	"znkr.io/writst/expr"
+	"znkr.io/writst/internal/names"
 	"znkr.io/writst/name"
 	"znkr.io/writst/syntax"
 	"znkr.io/writst/value"
@@ -339,7 +340,7 @@ func (a *analyzer) emitError(span syntax.Span, msg string, hints ...string) expr
 // code runs — and emits a poison [expr.Error] whose value propagates through
 // enclosing computations without being reported again.
 func (a *analyzer) emitSyntaxError(e *syntax.Error) expr.Ref {
-	a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: e.Hints()})
+	a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: value.Hints(e.Hints()...)})
 	return a.b.SyntaxError(e.Span(), e.Error(), e.Hints()...)
 }
 
@@ -349,7 +350,7 @@ func (a *analyzer) emitSyntaxError(e *syntax.Error) expr.Ref {
 // diagnostics on the source, not on a code path, and must still surface.
 func (a *analyzer) adoptParseErrors(n syntax.Node) {
 	if e, ok := n.(*syntax.Error); ok {
-		a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: e.Hints()})
+		a.parseErrors = append(a.parseErrors, &value.Error{Span: e.Span(), Msg: e.Error(), Hints: value.Hints(e.Hints()...)})
 		return
 	}
 	if inner, ok := n.(*syntax.Inner); ok {
@@ -399,6 +400,34 @@ type selfBinding struct{}
 func (varBinding) aBinding()   {}
 func (valueBinding) aBinding() {}
 func (selfBinding) aBinding()  {}
+
+// lookupMath resolves a name the way a math identifier sees it: the bindings
+// written around the equation, then the math module. The universe is not in
+// that chain — math has its own vocabulary, and a name that only the universe
+// has is a mistake in math rather than a call to something else.
+func (a *analyzer) lookupMath(source name.Name) (binding, bool) {
+	var fallback value.ModuleDef
+	for s := a.scope; s.parent != nil; s = s.parent {
+		if m, ok := s.bindings[source]; ok {
+			return m, true
+		}
+		if s.mathScope != nil {
+			fallback = s.mathScope
+		}
+	}
+	if fallback != nil {
+		if v := fallback.Get(source); v != nil {
+			return valueBinding{val: v}, true
+		}
+		// `std` is the way into the universe from math, so math can see it.
+		if source == names.Std {
+			if v := builtin.Universe[names.Std]; v != nil {
+				return valueBinding{val: v}, true
+			}
+		}
+	}
+	return nil, false
+}
 
 func (a *analyzer) openScope() *scope {
 	a.scope = &scope{parent: a.scope}

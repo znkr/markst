@@ -6,24 +6,30 @@ import (
 	"github.com/woodsbury/decimal128"
 )
 
-func ToContent(v Value) (Content, error) {
+// ToContent shows v as content the way writing `#v` in markup does. Every value
+// has such a form: one that has no element of its own shows as the source that
+// would produce it. A [None] shows as nothing at all, which is a nil Content
+// rather than an empty one.
+//
+// Use [CastContent] where only real content will do.
+func ToContent(v Value) Content {
 	switch v := v.(type) {
 	case Content:
-		return v, nil
+		return v
 	case Str:
-		return &Text{Text: string(v)}, nil
+		return &Text{Text: string(v)}
 	case *Symbol:
-		return &Text{Text: v.String()}, nil
+		return &Text{Text: v.String()}
 	case None:
-		return nil, nil
+		return nil
 	case Int:
-		return &Raw{Text: fmt.Sprintf("%d", v)}, nil
+		return &Raw{Text: fmt.Sprintf("%d", v)}
 	case Float:
-		return &Raw{Text: floatText(v)}, nil
+		return &Raw{Text: floatText(v)}
 	case Length:
-		return &Raw{Text: v.String()}, nil
+		return &Raw{Text: v.String()}
 	case Relative:
-		return &Raw{Text: v.String()}, nil
+		return &Raw{Text: v.String()}
 	case Decimal:
 		d := decimal128.Decimal(v)
 		var s string
@@ -36,20 +42,15 @@ func ToContent(v Value) (Content, error) {
 		} else {
 			s = d.String()
 		}
-		return &Raw{Text: s}, nil
+		return &Raw{Text: s}
 	case Datetime:
-		return &Raw{Text: v.String()}, nil
+		return &Raw{Text: v.String()}
 	case Duration:
-		return &Raw{Text: v.String()}, nil
-	case *Array:
-		return &Raw{Text: FormatValue(v)}, nil
-	case *Dict:
-		return &Raw{Text: FormatValue(v)}, nil
-	case *Function:
-		return &Raw{Text: v.Name}, nil
-	default:
-		return nil, fmt.Errorf("content expression evaluated to non-content value: %T", v)
+		return &Raw{Text: v.String()}
 	}
+	// Anything else shows as the source that would produce it, the way Typst's
+	// `Value::display` falls back to a raw of the value's repr.
+	return &Raw{Text: Repr(v)}
 }
 
 // ToMathContent is [ToContent] in math context: symbols, strings and numbers
@@ -58,16 +59,16 @@ func ToContent(v Value) (Content, error) {
 // an argument to a math element renders the same way — `$sym.alpha + 1$`,
 // `$alpha + 1$` and `#math.frac(alpha, 1)` all agree. Every other value is
 // left to ToContent.
-func ToMathContent(v Value) (Content, error) {
+func ToMathContent(v Value) Content {
 	switch v := v.(type) {
 	case *Symbol:
-		return &MathText{Text: v.String()}, nil
+		return &MathText{Text: v.String()}
 	case Str:
-		return &MathText{Text: string(v)}, nil
+		return &MathText{Text: string(v)}
 	case Int:
-		return &MathText{Text: fmt.Sprintf("%d", v)}, nil
+		return &MathText{Text: fmt.Sprintf("%d", v)}
 	case Float:
-		return &MathText{Text: floatText(v)}, nil
+		return &MathText{Text: floatText(v)}
 	}
 	return ToContent(v)
 }
@@ -79,4 +80,16 @@ func floatText(v Float) string {
 		return s
 	}
 	return "nan"
+}
+
+// CastMathContent is [ToMathContent] where only real content will do — an
+// element parameter typed `content`, as opposed to a place that shows whatever
+// it is handed. Strings and symbols still convert: they are text. Everything
+// else is an error rather than a rendering of the value's source.
+func CastMathContent(v Value) (Content, error) {
+	switch v.(type) {
+	case Content, Str, *Symbol, None:
+		return ToMathContent(v), nil
+	}
+	return nil, fmt.Errorf("expected content, found %s", v.Type())
 }

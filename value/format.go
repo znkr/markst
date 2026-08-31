@@ -298,6 +298,10 @@ func (n *Emph) Format(f *formatter.Formatter) {
 	f.FuncCall("emph", nil, contentBlock{n.Body})
 }
 
+func (n *Underline) Format(f *formatter.Formatter) {
+	f.FuncCall("underline", nil, contentBlock{n.Body})
+}
+
 func (n *Par) Format(f *formatter.Formatter) {
 	f.FuncCall("par", nil, contentBlock{n.Body})
 }
@@ -348,6 +352,18 @@ func (n *Linebreak) Format(f *formatter.Formatter) {
 func (n *Parbreak) Format(f *formatter.Formatter) {
 	f.FuncCall("parbreak", nil)
 }
+
+func (n *HSpace) Format(f *formatter.Formatter) {
+	// rawArg, not the length itself: a bare Length formats with the "#" that
+	// carries it into markup, and this one is already inside a call.
+	f.FuncCall("h", []formatter.Arg{formatter.PositionalArg(rawArg(n.Amount.String()))})
+}
+
+// rawArg is an argument that formats as itself: no "#" prefix, and none of the
+// quoting a plain string argument gets.
+type rawArg string
+
+func (r rawArg) String() string { return string(r) }
 
 func (n *SmartQuote) Format(f *formatter.Formatter) {
 	// In markup the quote is written the way it was typed; escapeMarkupText
@@ -445,6 +461,14 @@ func (n *MathText) Format(f *formatter.Formatter) {
 		}
 	}
 	f.FuncCall("math.text", args)
+}
+
+func (n *MathOp) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	if n.Limits {
+		args = append(args, formatter.NamedArg("limits", true))
+	}
+	f.FuncCall("math.op", args, contentBlock{n.Text})
 }
 
 func (n *MathAttach) Format(f *formatter.Formatter) {

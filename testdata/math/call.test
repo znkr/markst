@@ -1,0 +1,483 @@
+// Test function calls in math.
+
+// Tests for two-dimensional arguments in matrices are in `mat.typ`.
+
+// Tests for method calls in math are in `../scripting/methods.typ` as
+// `math-field-call-*`.
+
+--- math-call-non-func ---
+// Using call syntax with a non-function in math renders the callee next to
+// parens by "unparsing" the arguments into content.
+$ phi(x) $
+$ phi(x, y, 1/2) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("φ")
+│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│   ]
+│   #math.equation(block: true)[
+│     #math.text("φ")
+│     #math.lr[
+│       #math.text("(")
+│     ][
+│       #math.text("x")
+│       #math.text(",")
+│       #math.text("y")
+│       #math.text(",")
+│       #math.frac[#math.text("1")][#math.text("2")]
+│     ][
+│       #math.text(")")
+│     ]
+│   ]
+│ ]
+
+--- math-call-non-func-empty-args ---
+// Trailing commas and empty args introduce blank content in math
+$ sin(,x,y,,,) $
+// with whitespace/trivia:
+$ sin( ,/**/x/**/, , /**/y, ,/**/, ) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.op[#math.text("sin")]
+│     #math.lr[
+│       #math.text("(")
+│     ][
+│       #math.text(",")
+│       #math.text("x")
+│       #math.text(",")
+│       #math.text("y")
+│       #math.text(",")
+│       #math.text(",")
+│       #math.text(",")
+│     ][
+│       #math.text(")")
+│     ]
+│   ]
+│   #math.equation(block: true)[
+│     #math.op[#math.text("sin")]
+│     #math.lr[
+│       #math.text("(")
+│     ][
+│       #math.text(",")
+│       #math.text("x")
+│       #math.text(",")
+│       #math.text(",")
+│       #math.text("y")
+│       #math.text(",")
+│       #math.text(",")
+│       #math.text(",")
+│     ][
+│       #math.text(")")
+│     ]
+│   ]
+│ ]
+
+--- math-call-non-func-named ---
+// Hint: 3-6 `phi` is not a function
+// Error: 10-18 named-argument syntax can only be used with functions
+// Hint: 10-18 to render the colon as text, escape it: `alpha\: y`
+$ phi(x, alpha: y) $
+
+--- math-call-non-func-spread ---
+// Hint: 3-6 `phi` is not a function
+// Error: 10-17 spread-argument syntax can only be used with functions
+// Hint: 10-17 to render the dots as text, add a space: `.. alpha`
+$ phi(x, ..alpha) $
+
+--- math-call-non-func-2d ---
+$ pi(a;b) quad gamma(;) quad eta(#"a";;, ; upright(b),) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("π")
+│     #math.lr[
+│       #math.text("(")
+│     ][
+│       #math.text("a")
+│       #math.text(";")
+│       #math.text("b")
+│     ][
+│       #math.text(")")
+│     ]
+│     #h(1em)
+│     #math.text("γ")
+│     #math.lr[#math.text("(")][#math.text(";")][#math.text(")")]
+│     #h(1em)
+│     #math.text("η")
+│     #math.lr[
+│       #math.text("(")
+│     ][
+│       #math.text("a")
+│       #math.text(";")
+│       #math.text(";")
+│       #math.text(",")
+│       #math.text(";")
+│       #math.text("b", italic: false)
+│       #math.text(",")
+│     ][
+│       #math.text(")")
+│     ]
+│   ]
+│ ]
+
+--- math-call-non-func-spacing (skip: regex selectors and math.class are not implemented yet) ---
+// Test that we keep the same spacing when unparsing.
+#show regex("[,;]"): math.class.with("fence")
+$ phi(| , | ; |) \
+  phi/**/(| , | ; |) $
+#test($     phi(| , | ; |) $,
+      $ phi/**/(| , | ; |) $)
+
+--- math-call-unclosed-func ---
+#let func(x) = x
+// Error: 6-7 unclosed delimiter
+$func(a$
+
+--- math-call-unclosed-non-func ---
+// Error: 5-6 unclosed delimiter
+$sin(x$
+
+--- math-call-missing-operator-sides (skip: writst reports the unknown callee as well as the parse error) ---
+// Error: 6-7 unclosed delimiter
+$func(1^2_, 1/; , , √ )$
+
+--- math-call-basic ---
+// Function arguments in math.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(a)$, "arguments([a])")
+#check($args(a,)$, "arguments([a])")
+#check($args(a,b)$, "arguments([a], [b])")
+#check($args(a,b,)$, "arguments([a], [b])")
+│ #document[]
+
+--- math-call-empty-args ---
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(,x,,y,,)$, "arguments([], [x], [], [y], [])")
+// with whitespace/trivia:
+#check($args( ,/**/x/**/, , /**/y, ,/**/, )$, "arguments([], [x], [], [y], [], [])")
+│ #document[]
+
+--- math-call-escape (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+// Escaped characters in calls.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(a\;b)$, "arguments(sequence([a], [;], [b]))")
+#check($args(a\,b;c)$, "arguments((sequence([a], [,], [b]),), ([c],))")
+#check($args(b\;c\,d;e)$, "arguments((sequence([b], [;], [c], [,], [d]),), ([e],))")
+#check($args(a\: b)$, "arguments(sequence([a], [:], [ ], [b]))")
+#check($args(a : b)$, "arguments(sequence([a], [ ], [:], [ ], [b]))")
+#check($args(\..a)$, "arguments(sequence([.], [.], [a]))")
+#check($args(.. a)$, "arguments(sequence([.], [.], [ ], [a]))")
+#check($args(a..b)$, "arguments(sequence([a], [.], [.], [b]))")
+│ #document[]
+
+--- math-call-pass-to-box (skip: the box element and colors are not implemented yet) ---
+// When passing to a function, we lose the italic styling if we wrap the content
+// in a non-math function, unless it's already nested in some math element (lr,
+// attach, etc.)
+//
+// This is not good, so this test should fail and be updated once it is fixed.
+#let id(body) = body
+#let bx(body) = box(body, stroke: blue+0.5pt, inset: (x:2pt, y:3pt))
+#let eq(body) = math.equation(body)
+$
+     x y   &&quad     x (y z)   &quad     x y^z  \
+  id(x y)  &&quad  id(x (y z))  &quad  id(x y^z) \
+  eq(x y)  &&quad  eq(x (y z))  &quad  eq(x y^z) \
+  bx(x y)  &&quad  bx(x (y z))  &quad  bx(x y^z) \
+$
+
+--- math-call-named-basic (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+// Named arguments in math.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(_a: a)$, "arguments(_a: [a])")
+#check($args(_a-b: a)$, "arguments(_a-b: [a])")
+#check($args(a-b: a)$, "arguments(a-b: [a])")
+#check($args(a-b-c: a)$, "arguments(a-b-c: [a])")
+#check($args(a--c: a)$, "arguments(a--c: [a])")
+#check($args(a: a-b)$, "arguments(a: sequence([a], [−], [b]))")
+#check($args(a: a:b)$, "arguments(a: sequence([a], [:], [b]))")
+#check($args(a: a : b)$, "arguments(a: sequence([a], [ ], [:], [ ], [b]))")
+#check($args(a-b: a-b)$, "arguments(a-b: sequence([a], [−], [b]))")
+#check($args(a-b)$, "arguments(sequence([a], [−], [b]))")
+│ #document[]
+
+--- math-call-named-no-expr ---
+#let func(m: none) = m
+// Error: 10 expected expression
+$ func(m: ) $
+
+--- math-call-named-duplicate ---
+#let func(my: none) = my
+// Error: 15-17 duplicate argument: my
+$ func(my: a, my: b) $
+
+--- math-call-named-shorthand-clash-1 ---
+#let func(m: none) = m
+// Error: 18-21 unexpected argument
+$func(m: =) func(m:=)$
+
+--- math-call-named-shorthand-clash-2 ---
+#let func(m: none) = m
+// Error: 41-45 unexpected argument
+$func(m::) func(m: :=) func(m:: =) func(m::=)$
+
+--- math-call-named-single-underscore ---
+#let func(x) = x
+// Error: 8-9 expected identifier, found underscore
+$ func(_: a) $
+
+--- math-call-named-single-char-error ---
+#let func(m: none) = m
+// Error: 8-13 unexpected argument
+$ func(m : a) $
+
+--- math-call-spread-basic ---
+// Spread arguments in math.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(..#range(0, 4).chunks(2))$, "arguments((0, 1), (2, 3))")
+#check($#args(range(1, 5).chunks(2))$, "arguments(((1, 2), (3, 4)))")
+#check($#args(..range(1, 5).chunks(2))$, "arguments((1, 2), (3, 4))")
+#check($args(#(..range(2, 6).chunks(2)))$, "arguments(((2, 3), (4, 5)))")
+#let nums = range(0, 4).chunks(2)
+#check($args(..nums)$, "arguments((0, 1), (2, 3))")
+#check($args(..nums, ..nums)$, "arguments((0, 1), (2, 3), (0, 1), (2, 3))")
+#check($args(..nums, 4, 5)$, "arguments((0, 1), (2, 3), [4], [5])")
+#check($args(..nums, ..#range(4, 6))$, "arguments((0, 1), (2, 3), 4, 5)")
+#check($args(..nums, #range(4, 6))$, "arguments((0, 1), (2, 3), (4, 5))")
+│ #document[]
+
+--- math-call-spread-empty ---
+// Test that a spread operator followed by nothing generates two dots.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(..)$, "arguments(sequence([.], [.]))")
+#check($args(.., ..; .. , ..)$, "arguments(\n  (sequence([.], [.]), sequence([.], [.])),\n  (sequence([.], [.]), sequence([.], [.])),\n)")
+│ #document[]
+
+--- math-call-spread-content-error ---
+#let args(..body) = body
+// Error: 7-16 cannot spread content
+$args(..(a + b))$
+
+--- math-call-spread-multiple-exprs ---
+#let args(..body) = body
+// Error: 7-14 cannot spread content
+$args(..a + b)$
+
+--- math-call-spread-unexpected-dots (skip: writst reports follow-on errors after the unexpected dots) ---
+#let args(..body) = body
+// Error: 8-10 unexpected dots
+$args(#..range(1, 5).chunks(2))$
+
+--- math-call-spread-unexpected-binary (skip: writst also reports the malformed spread operand, not just the parse error) ---
+// Test spread operators followed by binary math operators with and without
+// right operands. These errors aren't great, but they can be silenced with a
+// space and no one would actually write this.
+$
+  // Error: 9-10 unexpected slash
+  // Error: 19-20 unexpected hat
+  // Error: 29-30 unexpected underscore
+  vec(../.) vec(..^.) vec(.._.)
+  // Error: 9-10 unexpected slash
+  // Error: 19-20 unexpected hat
+  // Error: 29-30 unexpected underscore
+  vec(../)  vec(..^)  vec(.._)
+$
+
+--- math-call-spread-shorthand-clash ---
+#let func(body) = body
+$func(...)$
+│ #document[
+│   #par[
+│     #math.equation(block: false)[#math.text("…")]
+│   ]
+│ ]
+
+--- math-call-named-spread-override ---
+// Test named argument overriding with the spread operator.
+#let check(it, s) = test(it.body.text, repr(s))
+#let func(a: 1, b: 1) = (a: a, b: b)
+#let dict = (a: 2, b: 2)
+#let args = arguments(a: 3, b: 3)
+#check($func()$, (a: 1, b: 1))
+#check($func(..dict, ..args)$, (a: 3, b: 3))
+#check($func(..args, ..dict)$, (a: 2, b: 2))
+#check($func(a: #4, ..dict, b: #4)$, (a: 2, b: 4))
+#check($func(a: #4, ..args, b: #4)$, (a: 3, b: 4))
+│ #document[]
+
+--- math-call-named-spread-duplicate ---
+// Test duplicate named args with the spread operator.
+// The error should only happen for manually added args.
+#let func(..) = none
+#let dict = (a: 1)
+// Error: 22-23 duplicate argument: a
+$func(a: #2, ..dict, a: #3)$
+
+--- math-call-2d-basic (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+// Two-dimensional arguments in math. More tests can be found in `mat.typ`.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(a;b)$, "arguments(([a],), ([b],))")
+#check($args(a,b;c)$, "arguments(([a], [b]), ([c],))")
+#check($args(a,b;c,d;e,f)$, "arguments(([a], [b]), ([c], [d]), ([e], [f]))")
+#check($args( a; b; )$, "arguments(([a],), ([b],))")
+#check($args(a;  ; c)$, "arguments(([a],), ([],), ([c],))")
+#check($args(a b,/**/; b)$, "arguments((sequence([a], [ ], [b]), []), ([b],))")
+#check($args(a/**/b, ; b)$, "arguments((sequence([a], [b]), []), ([b],))")
+#check($args( ;/**/a/**/b/**/; )$, "arguments(([],), (sequence([a], [b]),))")
+#check($args( ; , ; )$, "arguments(([],), ([], []))")
+#check($args(/**/; // funky whitespace/trivia
+    ,   /**/  ;/**/)$, "arguments(([],), ([], []))")
+│ #document[]
+
+--- math-call-2d-semicolon-embedded-code (skip: a `;` directly after an embedded code expression should end the expression, not open a row) ---
+// If a semicolon directly follows an embedded code expression, it terminates
+// the code expression instead of indicating 2d arguments.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(#false;)$, "arguments(false)")
+#check($args("a" #"b";)$, "arguments(sequence([a], [ ], [b]))")
+#check($args(#true ;)$, "arguments((true,))")
+#check($args(#true;;)$, "arguments((true,))")
+│ #document[]
+
+--- math-call-2d-named ---
+// Two-dimensional args with named args.
+#let args(..body) = (body.pos(), body.named())
+#let check(it, r) = test-repr(it.body.text, r)
+#check($args(a: b)$, "((), (a: [b]))")
+#check($args(a: b,)$, "((), (a: [b]))")
+#check($args(a: b;)$, "(((),), (a: [b]))")
+#check($args(1, 2; 3, 4)$, "((([1], [2]), ([3], [4])), (:))")
+
+// This set should all be the same.
+#check($args(a: b, 1, 2; 3, 4)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, a: b, 2; 3, 4)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, 2, a: b; 3, 4)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, 2; a: b, 3, 4)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, 2; 3, a: b, 4)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, 2; 3, 4, a: b)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+#check($args(1, 2; 3, 4; a: b)$, "((([1], [2]), ([3], [4])), (a: [b]))")
+
+#check($args(a: b, 1, 2, 3, c: d)$, "(([1], [2], [3]), (a: [b], c: [d]))")
+#check($args(1, 2, 3; a: b)$, "((([1], [2], [3]),), (a: [b]))")
+#check($args(a-b: a,, e:f;; d)$, "((([],), ([],), ([d],)), (a-b: [a], e: [f]))")
+#check($args(a: b, ..#range(0, 4))$, "((0, 1, 2, 3), (a: [b]))")
+│ #document[]
+
+--- math-call-2d-spread-pos ---
+// Two-dimensional args with positional spreading.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#let nums = range(0, 4).chunks(2)
+#check($args(..nums;)$, "arguments(((0, 1), (2, 3)))")
+#check($args(..nums; ,)$, "arguments(((0, 1), (2, 3)), ([],))")
+#check($args(..nums; ;)$, "arguments(((0, 1), (2, 3)), ([],))")
+#check($args(..nums; 1, 2; 3, 4)$, "arguments(((0, 1), (2, 3)), ([1], [2]), ([3], [4]))")
+#check($args(..nums, 1, 2; 3, 4)$, "arguments(((0, 1), (2, 3), [1], [2]), ([3], [4]))")
+#check($args(1, 2; ..nums)$, "arguments(([1], [2]), ((0, 1), (2, 3)))")
+#check($args(1, 2; 3, 4)$, "arguments(([1], [2]), ([3], [4]))")
+#check($args(1, 2; 3, 4; ..#range(5, 7))$, "arguments(([1], [2]), ([3], [4]), (5, 6))")
+#check($args(1, 2; 3, 4, ..#range(5, 7))$, "arguments(([1], [2]), ([3], [4], 5, 6))")
+#check($args(1, 2; 3, 4, ..#range(5, 7);)$, "arguments(([1], [2]), ([3], [4], 5, 6))")
+#check($args(1, 2; 3, 4, ..#range(5, 7),)$, "arguments(([1], [2]), ([3], [4], 5, 6))")
+│ #document[]
+
+--- math-call-2d-spread-named (skip: a dictionary spread inside a row list has to route its named part to the call and its positional part into the row; writst spreads it into the row only) ---
+// Two-dimensional args with named and positional spreading.
+#let args(..body) = body
+#let check(it, r) = test-repr(it.body.text, r)
+#let nums = range(0, 4).chunks(2)
+#let dict = (one: 1, two: 2)
+#let both = arguments(..nums, ..dict)
+#check($args(..nums;)$, "arguments(((0, 1), (2, 3)))")
+#check($args(..dict;)$, "arguments(one: 1, two: 2, ())") // Adds an empty array
+#check($args(1, ..dict;)$, "arguments(one: 1, two: 2, ([1],))")
+#check($args(1, ..dict, 2;)$, "arguments(one: 1, two: 2, ([1], [2]))")
+#check($args(1; ..dict, 2;)$, "arguments(one: 1, two: 2, ([1],), ([2],))")
+#check($args(1; ..dict; 2;)$, "arguments(one: 1, two: 2, ([1],), (), ([2],))")
+#check($args(..nums, ..dict;)$, "arguments(one: 1, two: 2, ((0, 1), (2, 3)))")
+#check($args(..both;)$, "arguments(one: 1, two: 2, ((0, 1), (2, 3)))")
+#check($args(..nums; ..dict)$, "arguments(one: 1, two: 2, ((0, 1), (2, 3)))")
+#check($args(..dict; ..nums)$, "arguments(one: 1, two: 2, (), ((0, 1), (2, 3)))")
+│ #document[]
+
+--- issue-3774-math-call-empty-2d-args ---
+$ mat(;,) $
+// Add some whitespace/trivia:
+$ mat(; ,) $
+$ mat(;/**/,) $
+$ mat(;
+,) $
+$ mat(;// line comment
+,) $
+$ mat(
+  1, , ;
+   ,1, ;
+   , ,1;
+) $
+│ #document[
+│   #math.equation(block: true)[#math.mat[][]]
+│   #math.equation(block: true)[#math.mat[][]]
+│   #math.equation(block: true)[#math.mat[][]]
+│   #math.equation(block: true)[#math.mat[][]]
+│   #math.equation(block: true)[#math.mat[][]]
+│   #math.equation(block: true)[
+│     #math.mat[#math.text("1")][#math.text("1")][#math.text("1")]
+│   ]
+│ ]
+
+--- math-call-value-error ---
+// TODO: We should produce this error for `mat` as well by changing from
+// `Value::display()` to `Value::cast::<Content>()`.
+$ mat(#1) $
+// Error: 8-9 expected content, found integer
+$ vec(#1) $
+
+--- math-call-value-non-func ---
+#test($sin(1)$, $sin(#1)$)
+│ #document[]
+
+--- issue-2885-math-var-only-in-global (skip: colors are not implemented, so `rgb` is not in the standard library either and the hints are the ones for a name nothing has) ---
+// Error: 7-10 unknown variable: rgb
+// Hint: 7-10 `rgb` is not available directly in math, but is in the standard library
+// Hint: 7-10 to access `rgb` in code mode you can add a hash: `#rgb`
+// Hint: 7-10 or access `rgb` in math mode by using the `std` module: `std.rgb`
+$text(rgb(0, 0, 0), "foo")$
+
+--- math-call-shadowed-builtin ---
+// We don't error if we try to call a shadowed standard library function.
+#let box = "box"
+$ box() $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.text("box")
+│     #math.lr[#math.text("(")][][#math.text(")")]
+│   ]
+│ ]
+
+--- math-call-error ---
+// Test the span of errors when calling a function.
+#let func(a, b, c) = {}
+// Error: 3-13 missing argument: c
+$ func(a, b) $
+
+--- math-call-2d-error ---
+// Test the span of errors for 2d arguments.
+// The current range isn't the best, but it's hard to improve.
+#let func() = {}
+// Error: 7-20 unexpected argument
+$ func(a, b; c, d;) $
+
+--- math-call-error-inside-func ---
+// Test whether errors inside function calls produce further errors.
+#let int = int
+$ int(
+  // Error: 3-8 missing argument: value
+  int()
+) $

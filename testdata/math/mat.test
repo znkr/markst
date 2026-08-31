@@ -155,8 +155,28 @@ $ mat(..#range(1, 5) ; 1, ..#range(2, 5))
   mat(..#range(1, 3), ..#range(3, 5) ; ..#range(1, 4), 4) $
 │ #document[
 │   #math.equation(block: true)[
-│     #math.mat[#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")][#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")]
-│     #math.mat[#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")][#math.text("1")][#math.text("2")][#math.text("3")][#math.text("4")]
+│     #math.mat[
+│       #math.text("1")
+│       #math.text("2")
+│       #math.text("3")
+│       #math.text("4")
+│     ][
+│       #math.text("1")
+│       #math.text("2")
+│       #math.text("3")
+│       #math.text("4")
+│     ]
+│     #math.mat[
+│       #math.text("1")
+│       #math.text("2")
+│       #math.text("3")
+│       #math.text("4")
+│     ][
+│       #math.text("1")
+│       #math.text("2")
+│       #math.text("3")
+│       #math.text("4")
+│     ]
 │   ]
 │ ]
 
@@ -169,13 +189,29 @@ $ mat(..nums) mat(..nums;) \
 │ #document[
 │   #math.equation(block: true)[
 │     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
-│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("2")
+│     ]
 │   ]
 │   #math.equation(block: true)[
 │     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
-│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("2")
+│     ]
 │     #linebreak()
-│     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
+│     #math.mat[
+│       #math.text("0")
+│       #math.text("1")
+│       #math.text("1")
+│       #math.text("2")
+│     ][
+│     ]
 │     #math.mat[#math.text("0")#math.text("1")][#math.text("1")#math.text("2")]
 │   ]
 │ ]
@@ -534,7 +570,7 @@ $ mat(#1, #(foo: "bar")) $
 │       #math.text("B")
 │       #math.text("A")
 │       #math.text("B")
-│       #math.text("⋯")
+│       #math.text("…")
 │     ]
 │   ]
 │   #math.equation(block: true)[
@@ -542,13 +578,13 @@ $ mat(#1, #(foo: "bar")) $
 │       #math.text("B")
 │       #math.text("A")
 │       #math.text("B")
-│       #math.text("⋯")
+│       #math.text("…")
 │     ]
 │   ]
 │   #math.equation(block: true)[
 │     #math.mat[
 │       #math.text("1")
-│       #raw("(\"foo\": \"bar\")\n")
+│       #raw("(foo: \"bar\")")
 │     ]
 │   ]
 │ ]

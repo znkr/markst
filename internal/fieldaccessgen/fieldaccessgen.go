@@ -192,6 +192,8 @@ func generate(filename string) ([]byte, error) {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
 					}
 					fmt.Fprintf(&buf, "\t\treturn *n.%s\n", f.Name)
+				case "Length":
+					fmt.Fprintf(&buf, "\t\treturn n.%s\n", f.Name)
 				case "name.Name":
 					fmt.Fprintf(&buf, "\t\treturn Str(n.%s.String())\n", f.Name)
 				default:
@@ -237,7 +239,7 @@ func generate(filename string) ([]byte, error) {
 					} else {
 						fmt.Fprintf(&buf, "\t\treturn true\n")
 					}
-				case "name.Name":
+				case "Length", "name.Name":
 					fmt.Fprintf(&buf, "\t\treturn true\n")
 				default:
 					panic(fmt.Sprintf("unknown type %s for field %s in %s", f.Type, f.Name, typeName))

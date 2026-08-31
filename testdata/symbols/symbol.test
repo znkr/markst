@@ -14,7 +14,7 @@
 #sym.arrow.r;this and this#sym.arrow.l;
 │ #document[
 │   #par[😀 👵 🐢]
-│   #par[→ ← ⟿ ⤤]
+│   #par[→ ← ⇝ ⤤]
 │   #par[→this and this←]
 │ ]
 
@@ -211,3 +211,11 @@ $ gt.tri $
 │ #document[
 │   #par[©︎ ©️#linebreak()♥︎ ♥️]
 │ ]
+
+--- symbol-fewest-modifiers-wins ---
+// A modifier can leave several variants standing: `subset.eq` matches ⊆ and
+// ⫑ (subset.closed.eq). The one needing no further modifier is the one meant.
+#sym.subset.eq
+#sym.dots.h
+#sym.arrow.r.bar
+│ #document[#par[⊆ … ↦]]

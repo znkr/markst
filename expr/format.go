@@ -209,6 +209,26 @@ func (f *formatter) formatInst(inst Instruction) {
 				sb.WriteString(" mut(place)")
 			}
 		}
+		if i.Fallback != nil {
+			sb.WriteString(" math(")
+			for j, it := range i.Fallback.Items {
+				if j > 0 {
+					sb.WriteString(" ")
+				}
+				if it.Ref == NoRef {
+					fmt.Fprintf(sb, "%q", it.Text)
+				} else {
+					sb.WriteString(f.ref(it.Ref))
+				}
+			}
+			sb.WriteString(")")
+			for _, b := range i.Fallback.BadArgs {
+				fmt.Fprintf(sb, " bad=%q", b.Msg)
+				for _, h := range b.Hints {
+					fmt.Fprintf(sb, " hint=%q", h.Msg)
+				}
+			}
+		}
 	case *DestructArray:
 		fmt.Fprintf(sb, "destruct_array %s, before=%d, after=%d", f.ref(i.Source), i.Before, i.After)
 		if i.HasSink {
@@ -479,6 +499,11 @@ func formatConst(v any) string {
 		return "<type " + v.Reflected.String() + ">"
 	case *value.Module:
 		return "<module " + v.Name + ">"
+	case value.Content:
+		// Content that has no dedicated spelling above (a math operator, a
+		// sequence, …) prints as its element name; the pointer %v would print
+		// is not stable across runs.
+		return "<" + v.Name() + ">"
 	case fmt.Stringer:
 		return v.String()
 	}

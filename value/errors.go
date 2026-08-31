@@ -31,12 +31,35 @@ type Error struct {
 	Origin syntax.Origin
 
 	Msg   string
-	Hints []string
+	Hints []Hint
 
 	// Trace is the chain of call sites that led here, outermost first, holding
 	// only the calls that crossed from one [syntax.Origin] into another. A
 	// failure entirely within one source has an empty Trace.
 	Trace []syntax.Frame
+}
+
+// Hint is a suggestion attached to a diagnostic. Span points at what the
+// suggestion is about, which is not always where the diagnostic itself points:
+// "`phi` is not a function" belongs on the callee, while the error it explains
+// belongs on the argument. It is [syntax.NoSpan] for a hint with nothing of its
+// own to point at, which is then about the diagnostic's own span.
+type Hint struct {
+	Span syntax.Span
+	Msg  string
+}
+
+// Hints wraps plain messages as hints pointing at the diagnostic they belong
+// to, which is what all but a few of them want.
+func Hints(msgs ...string) []Hint {
+	if len(msgs) == 0 {
+		return nil
+	}
+	hints := make([]Hint, len(msgs))
+	for i, m := range msgs {
+		hints[i] = Hint{Span: syntax.NoSpan, Msg: m}
+	}
+	return hints
 }
 
 func (e *Error) Type() types.Type { return types.Error }

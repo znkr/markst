@@ -74,11 +74,11 @@ $pi$
 │     v1 = equation v0
 │     return v1
 
---- unresolved-ident ---
+--- unknown-ident ---
 $foo$
 │ fn $top:
 │   b0:
-│     v0 = const math_text "foo"
+│     v0 = error msg="unknown variable: foo" hint="if you meant to display multiple letters as is, try adding spaces between each letter: `f o o`" hint="or if you meant to display this as text, try placing it in quotes: `\"foo\"`"
 │     v1 = equation v0
 │     return v1
 
@@ -152,3 +152,35 @@ $mat(a; #b)$
 │     v4 = call v0(v2, v3)
 │     v5 = equation v4
 │     return v5
+
+--- call-non-func ---
+$sin(x, y)$
+│ fn $top:
+│   b0:
+│     v0 = const <math.op>
+│     v1 = const math_text "x"
+│     v2 = const math_text "y"
+│     v3 = call v0(v1, v2) math(v1 "," v2)
+│     v4 = equation v3
+│     return v4
+
+--- call-non-func-named ---
+$sin(x, a: y)$
+│ fn $top:
+│   b0:
+│     v0 = const <math.op>
+│     v1 = const math_text "x"
+│     v2 = const math_text "y"
+│     v3 = call v0(v1, a: v2) math(v1 ",") bad="named-argument syntax can only be used with functions" hint="`sin` is not a function" hint="to render the colon as text, escape it: `a\\: y`"
+│     v4 = equation v3
+│     return v4
+
+--- call-dynamic-callee ---
+#let foo = 1
+$foo(x)$
+│ fn $top:
+│   b0:
+│     v0 = const math_text "x"
+│     v1 = call 1(v0) math(v0)
+│     v2 = equation v1
+│     return v2

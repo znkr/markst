@@ -454,6 +454,21 @@ func (b *Builder) Call(span syntax.Span, callee Callee, args []CallArg, blocks [
 	})
 }
 
+// MathCall emits a call written in math mode. fallback, when non-nil, holds the
+// juxtaposition form to render if the callee turns out not to be a function
+// (see [MathFallback]).
+func (b *Builder) MathCall(span syntax.Span, callee Callee, args []CallArg, mut *MutCheck, fallback *MathFallback) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &Call{
+			instr:    instr{result: ref},
+			Callee:   callee,
+			Args:     args,
+			Mut:      mut,
+			Fallback: fallback,
+		}
+	})
+}
+
 // CallSet emits a function-call lvalue assignment. The instruction is
 // side-effect-only: it has no SSA result. Errors during the call flow
 // through the session, not through a value Ref.

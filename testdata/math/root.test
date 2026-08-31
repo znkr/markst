@@ -32,11 +32,11 @@ $ sqrt(a) quad
 │ #document[
 │   #math.equation(block: true)[
 │     #math.root[#math.text("a")]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[#math.text("f")]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[#math.text("q")]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.attach(t: [#math.text("2")])[#math.text("a")]
 │     ]
@@ -44,15 +44,15 @@ $ sqrt(a) quad
 │     #math.root[
 │       #math.attach(b: [#math.text("0")])[#math.text("n")]
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.attach(t: [])[#math.text("b")]
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.attach(t: [#math.text("2")])[#math.text("b")]
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.attach(
 │         t: [#math.text("2")],
@@ -181,7 +181,7 @@ $ root(2, x) quad
 │ #document[
 │   #math.equation(block: true)[
 │     #math.root[#math.text("2")][#math.text("x")]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.frac[
 │         #math.text("3")
@@ -191,13 +191,13 @@ $ root(2, x) quad
 │     ][
 │       #math.text("x")
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.frac[#math.text("1")][#math.text("11")]
 │     ][
 │       #math.text("x")
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[
 │       #math.frac[
 │         #math.frac[#math.text("1")][#math.text("2")]
@@ -231,9 +231,9 @@ $ (√2+3) = (sqrt(2)+3) $
 │       #math.text("+")
 │       #math.text("y")
 │     ]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[#math.text("x")]
-│     #math.text("quad")
+│     #h(1em)
 │     #math.root[#math.text("x")]
 │   ]
 │   #math.equation(block: true)[

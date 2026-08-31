@@ -61,6 +61,12 @@ type Emph struct {
 	Label *Label
 }
 
+// Underline is underlined markup: underline[x].
+type Underline struct {
+	Body  Content `writst:"required"`
+	Label *Label
+}
+
 type Par struct {
 	Body  Content `writst:"required"`
 	Label *Label
@@ -80,6 +86,14 @@ type Raw struct {
 type Linebreak struct{}
 
 type Parbreak struct{}
+
+// HSpace is horizontal spacing, produced by `h(amount)` and by the math
+// spacing constants (`thin`, `med`, `thick`, `quad`, `wide`). Like the other
+// break elements it carries no label, which also lets those constants be
+// shared values.
+type HSpace struct {
+	Amount Length `writst:"required"`
+}
 
 // SmartQuote is a quotation mark written as ' or " in markup. Which glyph it
 // stands for depends on the surrounding content, so it is emitted unresolved:
@@ -212,6 +226,16 @@ type MathText struct {
 	Label   *Label
 }
 
+// MathOp is a text operator in math: `op("id")`, or one of the predefined
+// operators (`sin`, `ln`, `lim`, …). Limits reports whether an attachment on
+// the operator belongs above and below it in a block equation rather than
+// beside it.
+type MathOp struct {
+	Text   Content `writst:"required"`
+	Limits bool    `writst:"required"`
+	Label  *Label
+}
+
 // MathAttach is a base with optional sub-/superscripts: a_1^2. Top and Bottom
 // are optional.
 type MathAttach struct {
@@ -318,9 +342,11 @@ func (*Text) aValue()       {}
 func (*Raw) aValue()        {}
 func (*Strong) aValue()     {}
 func (*Emph) aValue()       {}
+func (*Underline) aValue()  {}
 func (*Par) aValue()        {}
 func (*Linebreak) aValue()  {}
 func (*Parbreak) aValue()   {}
+func (*HSpace) aValue()     {}
 func (*SmartQuote) aValue() {}
 func (*Link) aValue()       {}
 func (*Ref) aValue()        {}
@@ -339,6 +365,7 @@ func (*Document) aValue()   {}
 
 func (*Equation) aValue()       {}
 func (*MathText) aValue()       {}
+func (*MathOp) aValue()         {}
 func (*MathAttach) aValue()     {}
 func (*MathFrac) aValue()       {}
 func (*MathRoot) aValue()       {}
@@ -358,9 +385,11 @@ func (*Text) aContent()       {}
 func (*Raw) aContent()        {}
 func (*Strong) aContent()     {}
 func (*Emph) aContent()       {}
+func (*Underline) aContent()  {}
 func (*Par) aContent()        {}
 func (*Linebreak) aContent()  {}
 func (*Parbreak) aContent()   {}
+func (*HSpace) aContent()     {}
 func (*SmartQuote) aContent() {}
 func (*Link) aContent()       {}
 func (*Ref) aContent()        {}
@@ -379,6 +408,7 @@ func (*Document) aContent()   {}
 
 func (*Equation) aContent()       {}
 func (*MathText) aContent()       {}
+func (*MathOp) aContent()         {}
 func (*MathAttach) aContent()     {}
 func (*MathFrac) aContent()       {}
 func (*MathRoot) aContent()       {}
@@ -399,11 +429,13 @@ func (Sequence) Name() string    { return "sequence" }
 func (*Heading) Name() string    { return "heading" }
 func (*Strong) Name() string     { return "strong" }
 func (*Emph) Name() string       { return "emph" }
+func (*Underline) Name() string  { return "underline" }
 func (*Par) Name() string        { return "par" }
 func (*Text) Name() string       { return "text" }
 func (*Raw) Name() string        { return "raw" }
 func (*Linebreak) Name() string  { return "linebreak" }
 func (*Parbreak) Name() string   { return "parbreak" }
+func (*HSpace) Name() string     { return "h" }
 func (*SmartQuote) Name() string { return "smartquote" }
 func (*Link) Name() string       { return "link" }
 func (*Ref) Name() string        { return "ref" }
@@ -422,6 +454,7 @@ func (*Document) Name() string   { return "document" }
 
 func (*Equation) Name() string       { return "equation" }
 func (*MathText) Name() string       { return "math.text" }
+func (*MathOp) Name() string         { return "math.op" }
 func (*MathAttach) Name() string     { return "math.attach" }
 func (*MathFrac) Name() string       { return "math.frac" }
 func (*MathRoot) Name() string       { return "math.root" }
@@ -445,11 +478,13 @@ func (Sequence) IsBlock() bool    { return false }
 func (*Heading) IsBlock() bool    { return true }
 func (*Strong) IsBlock() bool     { return false }
 func (*Emph) IsBlock() bool       { return false }
+func (*Underline) IsBlock() bool  { return false }
 func (*Par) IsBlock() bool        { return true }
 func (*Text) IsBlock() bool       { return false }
 func (n *Raw) IsBlock() bool      { return n.Block }
 func (*Linebreak) IsBlock() bool  { return false }
 func (*Parbreak) IsBlock() bool   { return false }
+func (*HSpace) IsBlock() bool     { return false }
 func (*SmartQuote) IsBlock() bool { return false }
 func (*Link) IsBlock() bool       { return false }
 func (*Ref) IsBlock() bool        { return false }
@@ -468,6 +503,7 @@ func (*Document) IsBlock() bool   { return true }
 
 func (n *Equation) IsBlock() bool     { return n.Block }
 func (*MathText) IsBlock() bool       { return false }
+func (*MathOp) IsBlock() bool         { return false }
 func (*MathAttach) IsBlock() bool     { return false }
 func (*MathFrac) IsBlock() bool       { return false }
 func (*MathRoot) IsBlock() bool       { return false }
@@ -487,9 +523,11 @@ func (*Text) Type() types.Type       { return types.Content }
 func (*Raw) Type() types.Type        { return types.Content }
 func (*Strong) Type() types.Type     { return types.Content }
 func (*Emph) Type() types.Type       { return types.Content }
+func (*Underline) Type() types.Type  { return types.Content }
 func (*Par) Type() types.Type        { return types.Content }
 func (*Linebreak) Type() types.Type  { return types.Content }
 func (*Parbreak) Type() types.Type   { return types.Content }
+func (*HSpace) Type() types.Type     { return types.Content }
 func (*SmartQuote) Type() types.Type { return types.Content }
 func (*Link) Type() types.Type       { return types.Content }
 func (*Ref) Type() types.Type        { return types.Content }
@@ -508,6 +546,7 @@ func (*Document) Type() types.Type   { return types.Content }
 
 func (*Equation) Type() types.Type       { return types.Content }
 func (*MathText) Type() types.Type       { return types.Content }
+func (*MathOp) Type() types.Type         { return types.Content }
 func (*MathAttach) Type() types.Type     { return types.Content }
 func (*MathFrac) Type() types.Type       { return types.Content }
 func (*MathRoot) Type() types.Type       { return types.Content }

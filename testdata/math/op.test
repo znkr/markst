@@ -1,0 +1,118 @@
+// Test text operators.
+
+--- math-op-predefined ---
+// Test predefined.
+$ max_(1<=n<=m) n $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(
+│       b: [
+│         #math.text("1")
+│         #math.text("≤")
+│         #math.text("n")
+│         #math.text("≤")
+│         #math.text("m")
+│       ],
+│     )[
+│       #math.op(limits: true)[#math.text("max")]
+│     ]
+│     #math.text("n")
+│   ]
+│ ]
+
+--- math-op-call ---
+// With or without parens.
+$  &sin x + log_2 x \
+ = &sin(x) + log_2(x) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.align-point()
+│     #math.op[#math.text("sin")]
+│     #math.text("x")
+│     #math.text("+")
+│     #math.attach(b: [#math.text("2")])[#math.op[#math.text("log")]]
+│     #math.text("x")
+│     #linebreak()
+│     #math.text("=")
+│     #math.align-point()
+│     #math.op[#math.text("sin")]
+│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #math.text("+")
+│     #math.attach(b: [#math.text("2")])[#math.op[#math.text("log")]]
+│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│   ]
+│ ]
+
+--- math-op-scripts-vs-limits (skip: the page element and text font properties are not implemented yet) ---
+// Test scripts vs limits.
+#set page(width: auto)
+#set text(font: "New Computer Modern")
+Discuss $lim_(n->oo) 1/n$ now.
+$ lim_(n->infinity) 1/n = 0 $
+
+--- math-op-custom ---
+// Test custom operator.
+$ op("myop", limits: #false)_(x:=1) x \
+  op("myop", limits: #true)_(x:=1) x $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(
+│       b: [
+│         #math.text("x")
+│         #math.text("≔")
+│         #math.text("1")
+│       ],
+│     )[#math.op[#math.text("myop")]]
+│     #math.text("x")
+│     #linebreak()
+│     #math.attach(
+│       b: [
+│         #math.text("x")
+│         #math.text("≔")
+│         #math.text("1")
+│       ],
+│     )[
+│       #math.op(limits: true)[#math.text("myop")]
+│     ]
+│     #math.text("x")
+│   ]
+│ ]
+
+--- math-op-styled ---
+// Test styled operator.
+$ bold(op("bold", limits: #true))_x y $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.attach(b: [#math.text("x")])[
+│       #math.op(limits: true)[#math.text("bold", bold: true)]
+│     ]
+│     #math.text("y")
+│   ]
+│ ]
+
+--- math-non-math-content ---
+// With non-text content
+$ op(#underline[ul]) a $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.op[#underline[ul]]
+│     #math.text("a")
+│   ]
+│ ]
+
+--- math-op-font (skip: text font properties are not implemented yet) ---
+// Test with different font.
+#let colim = math.op(
+  text(font: "IBM Plex Sans", weight: "regular", size: 0.8em)[colim],
+  limits: true,
+)
+$ colim_(x -> 0) inline(colim_(x -> 0)) $
+
+--- math-op-set-font (skip: text font and weight properties are not implemented yet) ---
+// Test setting font.
+#show math.equation: set text(weight: "regular")
+#let lig = math.op("fi")
+#let test = $sech(x) mod_(x -> oo) lig_1(X)$
+#test
+#show math.op: set text(font: "New Computer Modern")
+#test
