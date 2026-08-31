@@ -158,6 +158,31 @@ type Image struct {
 	Label *Label
 }
 
+// HTMLElem is an HTML element written straight into a document with
+// `html.elem(...)`, for the markup a document needs that writst has no element
+// of its own for. Tag names it, Attrs holds its attributes in the order they
+// were written, and Body is ordinary writst content: what goes inside an
+// element is realized like anything else, so paragraphs form, emphasis and
+// links work, and a label attaches.
+//
+// Block says whether the element occupies a line of its own. It defaults to
+// what the tag implies (see [HtmlTagBlock]) and a document can override it.
+// What the body is allowed to be does not follow Block but the tag alone (see
+// [HtmlTagFlow]): `p` starts a line yet holds phrasing content, so realizing
+// its body as flow content would nest a paragraph inside a paragraph.
+//
+// Body is nil for HTML's void elements ([HtmlTagVoid]), which have none.
+//
+// Escaping attribute values and text, and writing the tags themselves, is the
+// presenter's job — writst carries the element, it does not serialize it.
+type HTMLElem struct {
+	Tag   string `writst:"required"`
+	Attrs *Dict
+	Body  Content
+	Block bool `writst:"required"`
+	Label *Label
+}
+
 // Metadata attaches a value to the document without producing any output. It
 // survives realization as an invisible leaf, so it keeps its place in the
 // document; a [Label] is what identifies it, and znkr.io/writst.Query finds it
@@ -308,6 +333,7 @@ func (*TermItem) aValue()   {}
 func (*Table) aValue()      {}
 func (*Footnote) aValue()   {}
 func (*Image) aValue()      {}
+func (*HTMLElem) aValue()   {}
 func (*Metadata) aValue()   {}
 func (*Document) aValue()   {}
 
@@ -347,6 +373,7 @@ func (*TermItem) aContent()   {}
 func (*Table) aContent()      {}
 func (*Footnote) aContent()   {}
 func (*Image) aContent()      {}
+func (*HTMLElem) aContent()   {}
 func (*Metadata) aContent()   {}
 func (*Document) aContent()   {}
 
@@ -389,6 +416,7 @@ func (*TermItem) Name() string   { return "terms.item" }
 func (*Table) Name() string      { return "table" }
 func (*Footnote) Name() string   { return "footnote" }
 func (*Image) Name() string      { return "image" }
+func (*HTMLElem) Name() string   { return "html.elem" }
 func (*Metadata) Name() string   { return "metadata" }
 func (*Document) Name() string   { return "document" }
 
@@ -434,6 +462,7 @@ func (*TermItem) IsBlock() bool   { return true }
 func (*Table) IsBlock() bool      { return true }
 func (*Footnote) IsBlock() bool   { return false }
 func (*Image) IsBlock() bool      { return false }
+func (n *HTMLElem) IsBlock() bool { return n.Block }
 func (*Metadata) IsBlock() bool   { return false }
 func (*Document) IsBlock() bool   { return true }
 
@@ -473,6 +502,7 @@ func (*TermItem) Type() types.Type   { return types.Content }
 func (*Table) Type() types.Type      { return types.Content }
 func (*Footnote) Type() types.Type   { return types.Content }
 func (*Image) Type() types.Type      { return types.Content }
+func (*HTMLElem) Type() types.Type   { return types.Content }
 func (*Metadata) Type() types.Type   { return types.Content }
 func (*Document) Type() types.Type   { return types.Content }
 

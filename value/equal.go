@@ -22,6 +22,16 @@ func labelEqual(a, b *Label) bool {
 	return a.Name == b.Name
 }
 
+// attrsEqual compares two optional attribute dicts. It exists rather than
+// [optEqual] because a nil *Dict is a non-nil Value holding a nil pointer, and
+// [Dict.Equal] takes its receiver by value.
+func attrsEqual(a, b *Dict) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(b)
+}
+
 func contentEqual(a, b Content) bool {
 	if a == nil && b == nil {
 		return true
@@ -467,6 +477,12 @@ func (n *Footnote) Equal(other Value) bool {
 func (n *Image) Equal(other Value) bool {
 	o, ok := other.(*Image)
 	return ok && n.Path == o.Path && n.Alt == o.Alt && labelEqual(n.Label, o.Label)
+}
+
+func (n *HTMLElem) Equal(other Value) bool {
+	o, ok := other.(*HTMLElem)
+	return ok && n.Tag == o.Tag && n.Block == o.Block && attrsEqual(n.Attrs, o.Attrs) &&
+		contentEqual(n.Body, o.Body) && labelEqual(n.Label, o.Label)
 }
 
 func (n *Metadata) Equal(other Value) bool {

@@ -562,6 +562,19 @@ func (n *Image) Format(f *formatter.Formatter) {
 	f.FuncCall("image", args)
 }
 
+func (n *HTMLElem) Format(f *formatter.Formatter) {
+	args := []formatter.Arg{formatter.PositionalArg(n.Tag)}
+	if n.Attrs != nil && n.Attrs.Elems.Len() > 0 {
+		args = append(args, formatter.NamedArg("attrs", codeValue{n.Attrs}))
+	}
+	args = append(args, formatter.NamedArg("block", n.Block))
+	if n.Body == nil {
+		f.FuncCall("html.elem", args)
+		return
+	}
+	f.FuncCall("html.elem", args, contentBlock{n.Body})
+}
+
 // Format renders metadata with its label, which no other element does: a label
 // elsewhere is styling and reference bookkeeping, but a metadata value is
 // *identified* by its label — without it there is no telling one entry from

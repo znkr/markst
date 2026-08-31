@@ -102,6 +102,8 @@ func (s *session) realize(c value.Content) value.Content {
 		return &value.EnumItem{Number: c.Number, Body: s.realize(c.Body), Label: c.Label}
 	case *value.TermItem:
 		return &value.TermItem{Term: s.realize(c.Term), Description: s.realize(c.Description), Label: c.Label}
+	case *value.HTMLElem:
+		return &value.HTMLElem{Tag: c.Tag, Attrs: c.Attrs, Body: s.realizeHtmlBody(c), Block: c.Block, Label: c.Label}
 	case *value.Equation:
 		// A block equation's body ends where the block ends; an inline one sits
 		// in the middle of a line, so its edges still separate words.
@@ -178,6 +180,27 @@ func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 		}
 		return r
 	}
+}
+
+// realizeHtmlBody realizes an HTML element's body in the context its tag calls
+// for. A tag whose content model is flow content holds paragraphs, so its body
+// is realized the way the document body is; everything else holds a single
+// line's worth of content, and realizing it as flow would nest a paragraph
+// inside markup that cannot have one — `p` being the case that gives the rule
+// away. The tag is what decides this, not `block:`, which cannot turn a
+// phrasing body into a flow one; see [value.HtmlTagFlow]. It can rule one out,
+// though: an element forced inline sits inside a paragraph, and a paragraph
+// nested in that one would be markup no browser accepts.
+func (s *session) realizeHtmlBody(c *value.HTMLElem) value.Content {
+	if c.Body == nil {
+		return nil
+	}
+	if c.Block && value.HtmlTagFlow(c.Tag) {
+		return s.realizeBody(topChildren(c.Body), nil)
+	}
+	// The element's own edges are where its body ends, so edge whitespace has
+	// nothing left to separate — realizeInlineBlock, as for a heading.
+	return s.realizeInlineBlock(c.Body)
 }
 
 // groupContent groups a flat run of realized siblings into paragraphs and item
@@ -637,6 +660,11 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Link{Dest: c.Dest, Body: f(c.Body), Label: c.Label}
 	case *value.Equation:
 		return &value.Equation{Block: c.Block, Body: f(c.Body), Label: c.Label}
+	case *value.HTMLElem:
+		if c.Body == nil {
+			return c
+		}
+		return &value.HTMLElem{Tag: c.Tag, Attrs: c.Attrs, Body: f(c.Body), Block: c.Block, Label: c.Label}
 	case *value.Document:
 		// Copied wholesale rather than field by field: the root carries
 		// document properties that have nothing to do with the rewrite, and a

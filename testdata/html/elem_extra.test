@@ -1,0 +1,247 @@
+// Test the html.elem element.
+
+--- html-elem-block-from-tag ---
+// A div is block-level, so it stands beside the paragraphs around it rather
+// than inside one, and its own body forms paragraphs.
+Before.
+
+#html.elem("div")[Inside.]
+
+After.
+│ #document[
+│   #par[Before.]
+│   #html.elem("div", block: true)[#par[Inside.]]
+│   #par[After.]
+│ ]
+
+--- html-elem-inline-from-tag ---
+// A span is inline: it shares the paragraph with the text around it.
+Before #html.elem("span")[inside] after.
+│ #document[
+│   #par[
+│     Before 
+│     #html.elem("span", block: false)[inside]
+│      after.
+│   ]
+│ ]
+
+--- html-elem-unknown-tag-is-inline ---
+// An unknown tag is treated the way a browser treats one: inline, with a
+// phrasing body.
+Before #html.elem("my-callout")[inside] after.
+│ #document[
+│   #par[
+│     Before 
+│     #html.elem(
+│       "my-callout",
+│       block: false,
+│     )[inside]
+│      after.
+│   ]
+│ ]
+
+--- html-elem-phrasing-body-not-wrapped ---
+// `p` is block-level, but its content model is phrasing: realizing its body as
+// flow content would put a paragraph inside a paragraph.
+#html.elem("p")[Hello]
+│ #document[#html.elem("p", block: true)[Hello]]
+
+--- html-elem-flow-body-groups-paragraphs ---
+// A flow container holds paragraphs, so a blank line inside one makes two.
+#html.elem("div")[
+  First.
+
+  Second.
+]
+│ #document[
+│   #html.elem("div", block: true)[#par[First.]#par[Second.]]
+│ ]
+
+--- html-elem-block-override ---
+#html.elem("span", block: true)[Inside]
+│ #document[
+│   #html.elem("span", block: true)[Inside]
+│ ]
+
+--- html-elem-block-override-off ---
+#html.elem("div", block: false)[Inside]
+│ #document[
+│   #par[
+│     #html.elem("div", block: false)[Inside]
+│   ]
+│ ]
+
+--- html-elem-attrs-keep-their-order ---
+#html.elem("div", attrs: (class: "admonition note", id: "x", "data-kind": "note"))[Inside]
+│ #document[
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "admonition note", "id": "x", "data-kind": "note"),
+│     block: true,
+│   )[#par[Inside]]
+│ ]
+
+--- html-elem-empty-attrs-are-no-attrs ---
+#test(html.elem("br", attrs: (:)), html.elem("br"))
+│ #document[]
+
+--- html-elem-void ---
+Before #html.elem("br") after.
+│ #document[
+│   #par[
+│     Before 
+│     #html.elem("br", block: false)
+│      after.
+│   ]
+│ ]
+
+--- html-elem-void-block ---
+#html.elem("hr")
+│ #document[#html.elem("hr", block: true)]
+
+--- html-elem-nested ---
+// The shape an admonition is built out of.
+#html.elem("div", attrs: (class: "admonition note"), {
+  html.elem("p", attrs: (class: "admonition-title"), [Beware])
+  [The body, with *emphasis* and a #link("https://example.com")[link].]
+})
+│ #document[
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "admonition note"),
+│     block: true,
+│   )[
+│     #html.elem(
+│       "p",
+│       attrs: ("class": "admonition-title"),
+│       block: true,
+│     )[Beware]
+│     #par[
+│       The body, with 
+│       #strong[emphasis]
+│        and a 
+│       #link(dest: "https://example.com")[link]
+│       .
+│     ]
+│   ]
+│ ]
+
+--- html-elem-body-is-realized-content ---
+// Markup inside an element is content like any other: strong, emphasis and
+// smart quotes all still work.
+#html.elem("div")[It's *bold* and #emph[emphatic].]
+│ #document[
+│   #html.elem("div", block: true)[
+│     #par[
+│       It
+│       '
+│       s 
+│       #strong[bold]
+│        and 
+│       #emph[emphatic]
+│       .
+│     ]
+│   ]
+│ ]
+
+--- html-elem-let-function ---
+// What a library defines: an admonition written in writst.
+#let admonition(kind, title, body) = html.elem(
+  "div",
+  attrs: (class: "admonition " + kind),
+  {
+    // `[#title]` rather than `title`: it takes a plain string as readily as
+    // content, the way a caller writing `title: "Beware"` expects.
+    html.elem("p", attrs: (class: "admonition-title"), [#title])
+    body
+  },
+)
+#let note(body, title: "Note") = admonition("note", title, body)
+
+#note[Plain.]
+
+#note(title: "Beware")[Titled.]
+│ #document[
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "admonition note"),
+│     block: true,
+│   )[
+│     #html.elem(
+│       "p",
+│       attrs: ("class": "admonition-title"),
+│       block: true,
+│     )[Note]
+│     #par[Plain.]
+│   ]
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "admonition note"),
+│     block: true,
+│   )[
+│     #html.elem(
+│       "p",
+│       attrs: ("class": "admonition-title"),
+│       block: true,
+│     )[Beware]
+│     #par[Titled.]
+│   ]
+│ ]
+
+--- html-elem-label ---
+// A label attaches to an HTML element as it does to any other, so a show rule
+// selecting it finds it. The dump does not print labels, hence the show rule
+// rather than an eyeball of the output.
+#show <intro>: emph
+#html.elem("div")[Inside] <intro>
+│ #document[
+│   #par[
+│     #emph[
+│       #html.elem("div", block: true)[#par[Inside]]
+│     ]
+│   ]
+│ ]
+
+--- html-elem-fields ---
+#let e = html.elem("div", attrs: (class: "x"), block: true)[Inside]
+#test(e.tag, "div")
+#test(e.block, true)
+#test(e.attrs, (class: "x"))
+#test(e.body, [Inside])
+│ #document[]
+
+--- html-elem-field-defaults ---
+#test(html.elem("span")[x].block, false)
+#test(html.elem("div")[x].block, true)
+│ #document[]
+
+--- html-elem-show-rule ---
+#show html.elem: it => emph(it.body)
+#html.elem("span")[Inside]
+│ #document[#par[#emph[Inside]]]
+
+--- html-elem-equality ---
+#test(html.elem("div")[x], html.elem("div")[x])
+#test(html.elem("div")[x] == html.elem("span")[x], false)
+#test(html.elem("div", attrs: (a: "1"))[x] == html.elem("div", attrs: (a: "2"))[x], false)
+│ #document[]
+
+--- html-elem-invalid-tag ---
+// Error: 12-19 not a valid HTML tag name: "di v>"
+#html.elem("di v>")[x]
+
+--- html-elem-empty-tag ---
+// Error: 12-14 not a valid HTML tag name: ""
+#html.elem("")[x]
+
+--- html-elem-invalid-attr-name ---
+// Error: 26-41 not a valid HTML attribute name: "cl ass"
+#html.elem("div", attrs: ("cl ass": "x"))[y]
+
+--- html-elem-attr-value-not-a-string ---
+// Error: 26-36 attribute class must be a string, found integer
+#html.elem("div", attrs: (class: 1))[y]
+
+--- html-elem-void-with-body ---
+// Error: 2-20 <br> is a void element and cannot have a body
+#html.elem("br")[x]

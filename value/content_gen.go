@@ -358,6 +358,85 @@ func (n *Footnote) walk(yield func(Content) bool) bool {
 	return true
 }
 
+func (n *HTMLElem) Field(name name.Name) Value {
+	switch name {
+	case names.Tag:
+		return Str(n.Tag)
+	case names.Attrs:
+		if n.Attrs == nil {
+			return nil
+		}
+		return n.Attrs
+	case names.Body:
+		if n.Body == nil {
+			return nil
+		}
+		return n.Body
+	case names.Block:
+		return Bool(n.Block)
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *HTMLElem) HasField(name name.Name) bool {
+	switch name {
+	case names.Tag:
+		return true
+	case names.Attrs:
+		return n.Attrs != nil
+	case names.Body:
+		return n.Body != nil
+	case names.Block:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *HTMLElem) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Tag.String()), n.Field(names.Tag))
+	if f := n.Field(names.Attrs); f != nil {
+		fields.Elems.Put(Str(names.Attrs.String()), f)
+	}
+	if f := n.Field(names.Body); f != nil {
+		fields.Elems.Put(Str(names.Body.String()), f)
+	}
+	fields.Elems.Put(Str(names.Block.String()), n.Field(names.Block))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *HTMLElem) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *HTMLElem) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *HTMLElem) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
+	}
+	return true
+}
+
 func (n *Heading) Field(name name.Name) Value {
 	switch name {
 	case names.Depth:

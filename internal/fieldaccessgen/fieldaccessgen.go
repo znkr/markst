@@ -171,6 +171,13 @@ func generate(filename string) ([]byte, error) {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
 					}
 					fmt.Fprintf(&buf, "\t\treturn n.%s\n", f.Name)
+				case "*Dict":
+					// A dict field is already a Value; an unset one is nil,
+					// and an empty one is a dict the document wrote itself.
+					if !f.Required {
+						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
+					}
+					fmt.Fprintf(&buf, "\t\treturn n.%s\n", f.Name)
 				case "Content", "Value":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\tif n.%s == nil { return nil }\n", f.Name)
@@ -224,7 +231,7 @@ func generate(filename string) ([]byte, error) {
 					} else {
 						fmt.Fprintf(&buf, "\t\treturn true\n")
 					}
-				case "*Label", "Content", "Value", "*Datetime":
+				case "*Label", "*Dict", "Content", "Value", "*Datetime":
 					if !f.Required {
 						fmt.Fprintf(&buf, "\t\treturn n.%s != nil\n", f.Name)
 					} else {
