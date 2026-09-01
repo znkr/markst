@@ -16,6 +16,14 @@ var FunctionWith = &value.Function{
 }
 
 func functionWithImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
-	fn := args[0].(*value.Function)
+	// An element is a function too, but pre-binding drops the element identity:
+	// the result is a plain function and cannot be used as a selector.
+	var fn *value.Function
+	switch f := args[0].(type) {
+	case *value.Function:
+		fn = f
+	case *value.Element:
+		fn = &f.Function
+	}
 	return fn.With(args[1].(*value.Arguments))
 }

@@ -1301,14 +1301,18 @@ func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fiel
 		return v
 	case *value.Element:
 		// `.where(label:)` builds a selector; other names resolve against the
-		// element's scope (e.g. `list.item`). Anything else is an invalid method.
+		// element's scope (e.g. `list.item`). An element is also a function, so
+		// function methods like `.with` fall through to the dispatch below.
+		// Anything else is an invalid method.
 		if fname == names.Where {
 			return whereMethod(t)
 		}
 		if f, ok := t.Scope[fname]; ok {
 			return f
 		}
-		return fr.errorf(span, "`%s` is not a valid method for element `%s`", fname.String(), t.Name)
+		if builtin.TypeFields[t.Type()][fname] == nil {
+			return fr.errorf(span, "`%s` is not a valid method for element `%s`", fname.String(), t.Name)
+		}
 	}
 	// A built-in method always wins over a same-named dictionary key or content
 	// field, and is dispatched by binding the receiver as the first argument.

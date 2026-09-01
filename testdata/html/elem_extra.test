@@ -245,3 +245,15 @@ Before #html.elem("br") after.
 --- html-elem-void-with-body ---
 // Error: 2-20 <br> is a void element and cannot have a body
 #html.elem("br")[x]
+
+--- html-elem-with-in-show-rule ---
+// `html.elem.with` is the usual way to wrap a whole document in an element.
+#show: html.elem.with("div", attrs: (class: "content"))
+Hello.
+│ #document[
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "content"),
+│     block: true,
+│   )[#par[Hello.]]
+│ ]

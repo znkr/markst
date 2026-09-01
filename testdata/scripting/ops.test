@@ -314,6 +314,20 @@ Apply arguments to an argument sink.
 │   #par[Apply arguments to an argument sink.]
 │ ]
 
+--- func-with-element ---
+// An element is a function, so `with` pre-binds its arguments too. The result
+// is a plain function: the element identity is dropped.
+#let content-div = html.elem.with("div", attrs: (class: "content"))
+#test(type(content-div), function)
+#content-div[Hi]
+│ #document[
+│   #html.elem(
+│     "div",
+│     attrs: ("class": "content"),
+│     block: true,
+│   )[#par[Hi]]
+│ ]
+
 --- ops-precedence-basic ---
 // Multiplication binds stronger than addition.
 #test(1+2*-3, -5)
