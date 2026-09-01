@@ -412,9 +412,14 @@ func (n *MathAlignPoint) Equal(other Value) bool {
 	return ok && labelEqual(n.Label, o.Label)
 }
 
-func (n *MathDelimited) Equal(other Value) bool {
-	o, ok := other.(*MathDelimited)
-	return ok && n.Open.Equal(o.Open) && n.Body.Equal(o.Body) && n.Close.Equal(o.Close) && labelEqual(n.Label, o.Label)
+func (n *MathLr) Equal(other Value) bool {
+	o, ok := other.(*MathLr)
+	return ok && n.Body.Equal(o.Body) && optEqual(n.Size, o.Size) && labelEqual(n.Label, o.Label)
+}
+
+func (n *MathMid) Equal(other Value) bool {
+	o, ok := other.(*MathMid)
+	return ok && n.Body.Equal(o.Body) && labelEqual(n.Label, o.Label)
 }
 
 func (n *MathUnderline) Equal(other Value) bool {

@@ -503,8 +503,16 @@ func (n *MathAlignPoint) Format(f *formatter.Formatter) {
 	f.FuncCall("math.align-point", nil)
 }
 
-func (n *MathDelimited) Format(f *formatter.Formatter) {
-	f.FuncCall("math.lr", nil, contentBlock{n.Open}, contentBlock{n.Body}, contentBlock{n.Close})
+func (n *MathLr) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	if n.Size != nil {
+		args = append(args, formatter.NamedArg("size", n.Size))
+	}
+	f.FuncCall("math.lr", args, contentBlock{n.Body})
+}
+
+func (n *MathMid) Format(f *formatter.Formatter) {
+	f.FuncCall("math.mid", nil, contentBlock{n.Body})
 }
 
 func (n *MathUnderline) Format(f *formatter.Formatter) {

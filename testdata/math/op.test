@@ -36,10 +36,18 @@ $  &sin x + log_2 x \
 │     #math.text("=")
 │     #math.align-point()
 │     #math.op[#math.text("sin")]
-│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #math.lr[
+│       #math.text("(")
+│       #math.text("x")
+│       #math.text(")")
+│     ]
 │     #math.text("+")
 │     #math.attach(b: [#math.text("2")])[#math.op[#math.text("log")]]
-│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #math.lr[
+│       #math.text("(")
+│       #math.text("x")
+│       #math.text(")")
+│     ]
 │   ]
 │ ]
 

@@ -713,10 +713,13 @@ func (s *Scanner) scanMath(start int, ch rune) syntax.Kind {
 	case ')':
 		return syntax.KindRightParen
 	case '[':
-		if s.r.ConsumeIf("|") {
-			return syntax.KindLeftBrace
-		}
-		return s.scanMathText(start, ch)
+		// `[|` is the double-bracket shorthand; a lone `[` opens on its own.
+		s.r.ConsumeIf("|")
+		return syntax.KindLeftBrace
+	case '{':
+		return syntax.KindLeftBrace
+	case ']', '}':
+		return syntax.KindRightBrace
 
 	default:
 		// Identifiers require an id-start followed by at least one id-continue;

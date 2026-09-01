@@ -1120,76 +1120,6 @@ func (n *MathCases) walk(yield func(Content) bool) bool {
 	return true
 }
 
-func (n *MathDelimited) Field(name name.Name) Value {
-	switch name {
-	case names.Open:
-		return n.Open
-	case names.Body:
-		return n.Body
-	case names.Close:
-		return n.Close
-	case names.Label:
-		if n.Label == nil {
-			return nil
-		}
-		return n.Label
-	default:
-		return nil
-	}
-}
-
-func (n *MathDelimited) HasField(name name.Name) bool {
-	switch name {
-	case names.Open:
-		return true
-	case names.Body:
-		return true
-	case names.Close:
-		return true
-	case names.Label:
-		return n.Label != nil
-	default:
-		return false
-	}
-}
-
-func (n *MathDelimited) Fields() *Dict {
-	fields := new(Dict)
-	fields.Elems.Put(Str(names.Open.String()), n.Field(names.Open))
-	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
-	fields.Elems.Put(Str(names.Close.String()), n.Field(names.Close))
-	if f := n.Field(names.Label); f != nil {
-		fields.Elems.Put(Str(names.Label.String()), f)
-	}
-	return fields
-}
-
-func (n *MathDelimited) SetLabel(label *Label) *Label {
-	old := n.Label
-	n.Label = label
-	return old
-}
-
-func (n *MathDelimited) GetLabel() *Label {
-	return n.Label
-}
-
-func (n *MathDelimited) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
-	}
-	if n.Open != nil && !n.Open.walk(yield) {
-		return false
-	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
-	if n.Close != nil && !n.Close.walk(yield) {
-		return false
-	}
-	return true
-}
-
 func (n *MathFrac) Field(name name.Name) Value {
 	switch name {
 	case names.Num:
@@ -1247,6 +1177,70 @@ func (n *MathFrac) walk(yield func(Content) bool) bool {
 		return false
 	}
 	if n.Denom != nil && !n.Denom.walk(yield) {
+		return false
+	}
+	return true
+}
+
+func (n *MathLr) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Size:
+		if n.Size == nil {
+			return nil
+		}
+		return n.Size
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathLr) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Size:
+		return n.Size != nil
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathLr) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Size); f != nil {
+		fields.Elems.Put(Str(names.Size.String()), f)
+	}
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathLr) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathLr) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *MathLr) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
 		return false
 	}
 	return true
@@ -1314,6 +1308,60 @@ func (n *MathMat) walk(yield func(Content) bool) bool {
 				return false
 			}
 		}
+	}
+	return true
+}
+
+func (n *MathMid) Field(name name.Name) Value {
+	switch name {
+	case names.Body:
+		return n.Body
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *MathMid) HasField(name name.Name) bool {
+	switch name {
+	case names.Body:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *MathMid) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Body.String()), n.Field(names.Body))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *MathMid) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *MathMid) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *MathMid) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	if n.Body != nil && !n.Body.walk(yield) {
+		return false
 	}
 	return true
 }

@@ -720,8 +720,10 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.MathRoot{Index: mapOpt(c.Index, f), Radicand: f(c.Radicand), Label: c.Label}
 	case *value.MathPrimes:
 		return &value.MathPrimes{Base: f(c.Base), Count: c.Count, Label: c.Label}
-	case *value.MathDelimited:
-		return &value.MathDelimited{Open: f(c.Open), Body: f(c.Body), Close: f(c.Close), Label: c.Label}
+	case *value.MathLr:
+		return &value.MathLr{Body: f(c.Body), Size: c.Size, Label: c.Label}
+	case *value.MathMid:
+		return &value.MathMid{Body: f(c.Body), Label: c.Label}
 	case *value.MathUnderline:
 		return &value.MathUnderline{Body: f(c.Body), Label: c.Label}
 	case *value.MathAccent:

@@ -137,7 +137,11 @@ $[|x|]$
 │ #document[
 │   #par[
 │     #math.equation(block: false)[
-│       #math.lr[#math.text("⟦")][#math.text("x")][#math.text("⟧")]
+│       #math.lr[
+│         #math.text("⟦")
+│         #math.text("x")
+│         #math.text("⟧")
+│       ]
 │     ]
 │   ]
 │ ]
@@ -460,3 +464,68 @@ $floor(x) abs(y)$
 #show math.root: [R]
 $root(3, x) sqrt(y)$
 │ #document[#par[#math.equation(block: false)[RR]]]
+
+--- math-mid-code-mode ---
+#math.mid($|$)
+│ #document[
+│   #par[
+│     #math.mid[
+│       #math.equation(block: false)[#math.text("|")]
+│     ]
+│   ]
+│ ]
+
+--- math-mid-is-an-element ---
+// mid is an #[elem] in Typst, so it is a show/set target.
+#show math.mid: [M]
+$ { x mid(|) y } $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.lr[
+│       #math.text("{")
+│       #math.text("x")
+│       M
+│       #math.text("y")
+│       #math.text("}")
+│     ]
+│   ]
+│ ]
+
+--- math-mid-body-field ---
+#test(math.mid($|$).body, $|$)
+│ #document[]
+
+--- math-show-lr-matches-floor ---
+// floor builds a math.lr, so a show rule on lr matches it as well as the
+// delimiters written in source.
+#show math.lr: [L]
+$floor(x) (y)$
+│ #document[#par[#math.equation(block: false)[LL]]]
+
+--- math-lr-body-holds-delimiters ---
+// Typst's LrElem keeps the delimiters inside the body; separating them is a
+// layout concern.
+#test(math.lr($|$).body, $|$)
+│ #document[]
+
+--- math-lr-joins-arguments ---
+// Several positional arguments are joined with a comma between them.
+$ lr(a, b) $
+│ #document[
+│   #math.equation(block: true)[
+│     #math.lr[
+│       #math.text("a")
+│       #math.text(",")
+│       #math.text("b")
+│     ]
+│   ]
+│ ]
+
+--- math-lr-size-field ---
+// size is kept only when supplied, as for math.accent.
+#test(math.lr($|$, size: 50%).size, 50%)
+│ #document[]
+
+--- math-lr-rejects-stray-named ---
+// Error: 9-21 unexpected argument: nope
+$ lr(x, nope: "nope") $

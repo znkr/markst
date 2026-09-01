@@ -18,6 +18,8 @@ var Math = &value.Module{
 		names.Cancel:    Cancel,
 		names.Equation:  Equation,
 		names.Frac:      Frac,
+		names.Lr:        Lr,
+		names.Mid:       Mid,
 		names.Op:        Op,
 		names.Root:      Root,
 		names.Sqrt:      Sqrt,
@@ -460,27 +462,81 @@ func sqrtImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 	return &value.MathRoot{Radicand: radicand}, nil
 }
 
+// Lr is the `lr(..)` math element; it builds a [value.MathLr]. Several
+// positional arguments are joined with a comma between them, so
+// `lr(A dif x, f(x)\))` wraps the whole `A dif x, f(x))`.
+var Lr = value.NewElement[*value.MathLr](value.Function{
+	Name:       "math.lr",
+	Positional: []value.Param{{Name: "body", Type: mathContentType}},
+	Sink:       new(0),
+	Named:      lrNamedParams(),
+	F:          lrImpl,
+})
+
+func lrImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
+	sink := args[0].(*value.Arguments)
+	if err := rejectSinkNamed(sink); err != nil {
+		return nil, err
+	}
+	parts, err := mathCells(sink.Positional, mathContent)
+	if err != nil {
+		return nil, err
+	}
+	// A single argument is the body as it stands: `lr(x).body` has to equal the
+	// `x` that went in, so there is no sequence to wrap it in.
+	if len(parts) == 1 {
+		return newLr(parts[0], named), nil
+	}
+	var body []value.Content
+	for i, p := range parts {
+		if i > 0 {
+			body = append(body, &value.MathText{Text: ","})
+		}
+		body = append(body, p)
+	}
+	return newLr(&value.Sequence{Children: body}, named), nil
+}
+
+// lrNamedParams are the properties shared by `math.lr` and the delimiter
+// functions built by [lrFunc].
+func lrNamedParams() value.NamedParams {
+	return value.NamedParams{
+		names.Size: {Name: "size", Type: types.SetOf(types.Ratio, types.Length, types.Relative)},
+	}
+}
+
+// newLr builds the node shared by `math.lr` and the delimiter functions.
+func newLr(body value.Content, named value.NamedArgsWithDefaults) *value.MathLr {
+	lr := &value.MathLr{Body: body}
+	if size, ok := named.Lookup(names.Size); ok {
+		lr.Size = size
+	}
+	return lr
+}
+
 // lrFunc builds a math function that wraps its single content argument in the
-// given open/close delimiters (e.g. floor → ⌊ ⌋).
+// given open/close delimiters (e.g. floor → ⌊ ⌋). The delimiters go into the
+// body, exactly as [Lr] would have received them.
 //
 // These are functions rather than elements for the same reason as [Sqrt]: they
-// all produce a [value.MathDelimited], i.e. a `math.lr`, and [value.Element]
+// all produce a [value.MathLr], i.e. a `math.lr`, and [value.Element]
 // matches on the content type alone — as elements, `#show math.floor:` would
 // also rewrite `$abs(x)$`, `$ceil(x)$` and `$norm(x)$`.
 func lrFunc(name, open, closing string) *value.Function {
 	return &value.Function{
 		Name:       name,
 		Positional: []value.Param{{Name: "body", Type: mathContentType}},
-		F: func(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+		Named:      lrNamedParams(),
+		F: func(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 			body, err := mathContent(args[0])
 			if err != nil {
 				return nil, value.ArgErrorPosf(0, "%s", err.Error())
 			}
-			return &value.MathDelimited{
-				Open:  &value.MathText{Text: open},
-				Body:  body,
-				Close: &value.MathText{Text: closing},
-			}, nil
+			return newLr(&value.Sequence{Children: []value.Content{
+				&value.MathText{Text: open},
+				body,
+				&value.MathText{Text: closing},
+			}}, named), nil
 		},
 	}
 }
@@ -537,6 +593,23 @@ func opImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedA
 		return nil, value.ArgErrorPosf(0, "%s", err.Error())
 	}
 	return &value.MathOp{Text: text, Limits: bool(named.Get(names.Limits).(value.Bool))}, nil
+}
+
+// Mid is the `mid(x)` math element; it builds a [value.MathMid]. In Typst it
+// marks a delimiter to be scaled by the enclosing `lr` group, which only shows
+// up in layout; here it is just the wrapper node.
+var Mid = value.NewElement[*value.MathMid](value.Function{
+	Name:       "math.mid",
+	Positional: []value.Param{{Name: "body", Type: mathContentType}},
+	F:          midImpl,
+})
+
+func midImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	body, err := mathContent(args[0])
+	if err != nil {
+		return nil, value.ArgErrorPosf(0, "%s", err.Error())
+	}
+	return &value.MathMid{Body: body}, nil
 }
 
 // Underline is the `underline(x)` math element; it builds a

@@ -283,12 +283,21 @@ type MathAlignPoint struct {
 	Label *Label
 }
 
-// MathDelimited is a delimited group in math: [x + y] or (a). Open and Close
-// hold the delimiter content.
-type MathDelimited struct {
-	Open  Content `markst:"required"`
+// MathLr is a delimited group in math: (a), lr(|x|), floor(x). Body holds the
+// delimiters along with what they wrap — telling them apart is a layout
+// concern, so there is nothing here to keep them in separate fields. Size holds
+// the user-supplied delimiter size (nil when unset), retained so field access
+// can retrieve it.
+type MathLr struct {
 	Body  Content `markst:"required"`
-	Close Content `markst:"required"`
+	Size  Value
+	Label *Label
+}
+
+// MathMid is a delimiter that scales with its enclosing lr group in math:
+// mid(|).
+type MathMid struct {
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
@@ -383,7 +392,8 @@ func (*MathFrac) aValue()       {}
 func (*MathRoot) aValue()       {}
 func (*MathPrimes) aValue()     {}
 func (*MathAlignPoint) aValue() {}
-func (*MathDelimited) aValue()  {}
+func (*MathLr) aValue()         {}
+func (*MathMid) aValue()        {}
 func (*MathUnderline) aValue()  {}
 func (*MathAccent) aValue()     {}
 func (*MathCancel) aValue()     {}
@@ -427,7 +437,8 @@ func (*MathFrac) aContent()       {}
 func (*MathRoot) aContent()       {}
 func (*MathPrimes) aContent()     {}
 func (*MathAlignPoint) aContent() {}
-func (*MathDelimited) aContent()  {}
+func (*MathLr) aContent()         {}
+func (*MathMid) aContent()        {}
 func (*MathUnderline) aContent()  {}
 func (*MathAccent) aContent()     {}
 func (*MathCancel) aContent()     {}
@@ -473,7 +484,8 @@ func (*MathFrac) Name() string       { return "math.frac" }
 func (*MathRoot) Name() string       { return "math.root" }
 func (*MathPrimes) Name() string     { return "math.primes" }
 func (*MathAlignPoint) Name() string { return "math.align-point" }
-func (*MathDelimited) Name() string  { return "math.lr" }
+func (*MathLr) Name() string         { return "math.lr" }
+func (*MathMid) Name() string        { return "math.mid" }
 func (*MathUnderline) Name() string  { return "math.underline" }
 func (*MathAccent) Name() string     { return "math.accent" }
 func (*MathCancel) Name() string     { return "cancel" }
@@ -523,7 +535,8 @@ func (*MathFrac) IsBlock() bool       { return false }
 func (*MathRoot) IsBlock() bool       { return false }
 func (*MathPrimes) IsBlock() bool     { return false }
 func (*MathAlignPoint) IsBlock() bool { return false }
-func (*MathDelimited) IsBlock() bool  { return false }
+func (*MathLr) IsBlock() bool         { return false }
+func (*MathMid) IsBlock() bool        { return false }
 func (*MathUnderline) IsBlock() bool  { return false }
 func (*MathAccent) IsBlock() bool     { return false }
 func (*MathCancel) IsBlock() bool     { return false }
@@ -567,7 +580,8 @@ func (*MathFrac) Type() types.Type       { return types.Content }
 func (*MathRoot) Type() types.Type       { return types.Content }
 func (*MathPrimes) Type() types.Type     { return types.Content }
 func (*MathAlignPoint) Type() types.Type { return types.Content }
-func (*MathDelimited) Type() types.Type  { return types.Content }
+func (*MathLr) Type() types.Type         { return types.Content }
+func (*MathMid) Type() types.Type        { return types.Content }
 func (*MathUnderline) Type() types.Type  { return types.Content }
 func (*MathAccent) Type() types.Type     { return types.Content }
 func (*MathCancel) Type() types.Type     { return types.Content }

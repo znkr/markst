@@ -103,15 +103,27 @@ $ v = sqrt(a +\ b) $
 │   #math.equation(block: true)[
 │     #math.root[
 │       #math.attach(t: [#math.text("2")])[
-│         #math.lr[#math.text("⟦")][#math.text("x")][#math.text("⟧")]
+│         #math.lr[
+│           #math.text("⟦")
+│           #math.text("x")
+│           #math.text("⟧")
+│         ]
 │       ]
 │       #math.text("+")
 │       #math.attach(t: [#math.text("2")])[
-│         #math.lr[#math.text("⟦")][#math.text("y")][#math.text("⟧")]
+│         #math.lr[
+│           #math.text("⟦")
+│           #math.text("y")
+│           #math.text("⟧")
+│         ]
 │       ]
 │     ]
 │     #math.text("<")
-│     #math.lr[#math.text("⟦")][#math.text("z")][#math.text("⟧")]
+│     #math.lr[
+│       #math.text("⟦")
+│       #math.text("z")
+│       #math.text("⟧")
+│     ]
 │   ]
 │   #math.equation(block: true)[
 │     #math.text("v")
@@ -239,21 +251,17 @@ $ (√2+3) = (sqrt(2)+3) $
 │   #math.equation(block: true)[
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.root[#math.text("2")]
 │       #math.text("+")
 │       #math.text("3")
-│     ][
 │       #math.text(")")
 │     ]
 │     #math.text("=")
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.root[#math.text("2")]
 │       #math.text("+")
 │       #math.text("3")
-│     ][
 │       #math.text(")")
 │     ]
 │   ]
@@ -278,12 +286,20 @@ $ √a/b ∛a_b ∜f' √n! \
 │     #math.attach(t: [#math.text("c")])[#math.text("b")]
 │     #math.root[#math.text("a")]
 │     #math.attach(t: [#math.text("c")])[
-│       #math.lr[#math.text("(")][#math.text("b")][#math.text(")")]
+│       #math.lr[
+│         #math.text("(")
+│         #math.text("b")
+│         #math.text(")")
+│       ]
 │     ]
 │     #math.root[
 │       #math.attach(t: [#math.text("c")])[
 │         #math.text("a")
-│         #math.lr[#math.text("(")][#math.text("b")][#math.text(")")]
+│         #math.lr[
+│           #math.text("(")
+│           #math.text("b")
+│           #math.text(")")
+│         ]
 │       ]
 │     ]
 │   ]

@@ -789,11 +789,13 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.MathPrimes:
 		fr.vals[r] = &value.MathPrimes{Base: mathContentOf(fr.get(i.Base)), Count: i.Count}
 	case *expr.MathDelimited:
-		fr.vals[r] = &value.MathDelimited{
-			Open:  mathContentOf(fr.get(i.Open)),
-			Body:  mathContentOf(fr.get(i.Body)),
-			Close: mathContentOf(fr.get(i.Close)),
-		}
+		// Typst evaluates `(a)` to lr(open + body + close): the delimiters are
+		// part of the body, not fields beside it.
+		fr.vals[r] = &value.MathLr{Body: &value.Sequence{Children: []value.Content{
+			mathContentOf(fr.get(i.Open)),
+			mathContentOf(fr.get(i.Body)),
+			mathContentOf(fr.get(i.Close)),
+		}}}
 	case *expr.SetRule:
 		fr.vals[r] = fr.evalSetRule(i)
 	case *expr.ShowRule:
@@ -1673,11 +1675,11 @@ func (fr *frame) evalMathFallback(c *expr.Call) value.Value {
 	if len(body) == 1 {
 		inner = body[0]
 	}
-	parens := &value.MathDelimited{
-		Open:  &value.MathText{Text: "("},
-		Body:  inner,
-		Close: &value.MathText{Text: ")"},
-	}
+	parens := &value.MathLr{Body: &value.Sequence{Children: []value.Content{
+		&value.MathText{Text: "("},
+		inner,
+		&value.MathText{Text: ")"},
+	}}}
 	return &value.Sequence{Children: []value.Content{callee, parens}}
 }
 

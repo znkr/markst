@@ -13,19 +13,21 @@ $ phi(x, y, 1/2) $
 │ #document[
 │   #math.equation(block: true)[
 │     #math.text("φ")
-│     #math.lr[#math.text("(")][#math.text("x")][#math.text(")")]
+│     #math.lr[
+│       #math.text("(")
+│       #math.text("x")
+│       #math.text(")")
+│     ]
 │   ]
 │   #math.equation(block: true)[
 │     #math.text("φ")
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.text("x")
 │       #math.text(",")
 │       #math.text("y")
 │       #math.text(",")
 │       #math.frac[#math.text("1")][#math.text("2")]
-│     ][
 │       #math.text(")")
 │     ]
 │   ]
@@ -41,7 +43,6 @@ $ sin( ,/**/x/**/, , /**/y, ,/**/, ) $
 │     #math.op[#math.text("sin")]
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.text(",")
 │       #math.text("x")
 │       #math.text(",")
@@ -49,7 +50,6 @@ $ sin( ,/**/x/**/, , /**/y, ,/**/, ) $
 │       #math.text(",")
 │       #math.text(",")
 │       #math.text(",")
-│     ][
 │       #math.text(")")
 │     ]
 │   ]
@@ -57,7 +57,6 @@ $ sin( ,/**/x/**/, , /**/y, ,/**/, ) $
 │     #math.op[#math.text("sin")]
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.text(",")
 │       #math.text("x")
 │       #math.text(",")
@@ -66,7 +65,6 @@ $ sin( ,/**/x/**/, , /**/y, ,/**/, ) $
 │       #math.text(",")
 │       #math.text(",")
 │       #math.text(",")
-│     ][
 │       #math.text(")")
 │     ]
 │   ]
@@ -91,21 +89,22 @@ $ pi(a;b) quad gamma(;) quad eta(#"a";;, ; upright(b),) $
 │     #math.text("π")
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.text("a")
 │       #math.text(";")
 │       #math.text("b")
-│     ][
 │       #math.text(")")
 │     ]
 │     #h(1em)
 │     #math.text("γ")
-│     #math.lr[#math.text("(")][#math.text(";")][#math.text(")")]
+│     #math.lr[
+│       #math.text("(")
+│       #math.text(";")
+│       #math.text(")")
+│     ]
 │     #h(1em)
 │     #math.text("η")
 │     #math.lr[
 │       #math.text("(")
-│     ][
 │       #math.text("a")
 │       #math.text(";")
 │       #math.text(";")
@@ -113,7 +112,6 @@ $ pi(a;b) quad gamma(;) quad eta(#"a";;, ; upright(b),) $
 │       #math.text(";")
 │       #math.text("b", italic: false)
 │       #math.text(",")
-│     ][
 │       #math.text(")")
 │     ]
 │   ]
@@ -457,7 +455,7 @@ $ box() $
 │ #document[
 │   #math.equation(block: true)[
 │     #math.text("box")
-│     #math.lr[#math.text("(")][][#math.text(")")]
+│     #math.lr[#math.text("(")#math.text(")")]
 │   ]
 │ ]
 
