@@ -3,11 +3,11 @@ package analyzer
 import (
 	"strings"
 
-	"znkr.io/writst/builtin"
-	"znkr.io/writst/expr"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/builtin"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // lowerEquation lowers a `$...$` equation. An equation is a "block" equation

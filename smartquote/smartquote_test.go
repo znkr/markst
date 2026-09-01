@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst/name"
-	"znkr.io/writst/smartquote"
-	"znkr.io/writst/value"
+	"znkr.io/markst/name"
+	"znkr.io/markst/smartquote"
+	"znkr.io/markst/value"
 )
 
 // present renders content the way a document presenter would: every element is

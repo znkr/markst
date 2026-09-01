@@ -1,12 +1,12 @@
-package writst
+package markst
 
 import (
 	"fmt"
 	"io"
 	"strings"
 
-	"znkr.io/writst/eval"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/eval"
+	"znkr.io/markst/syntax"
 )
 
 // Severity distinguishes a diagnostic that stopped a document from compiling

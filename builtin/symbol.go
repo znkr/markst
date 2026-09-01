@@ -7,11 +7,11 @@ import (
 	"strings"
 	"unicode"
 
-	"znkr.io/writst/internal/graphemes"
-	"znkr.io/writst/internal/symbols"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/graphemes"
+	"znkr.io/markst/internal/symbols"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 // Symbol is the symbol() constructor. It builds a custom symbol from one or

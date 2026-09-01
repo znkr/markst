@@ -3,7 +3,7 @@ package builtin
 import (
 	"fmt"
 
-	"znkr.io/writst/value"
+	"znkr.io/markst/value"
 )
 
 // applyCallback calls fn with args and separates the two ways a user callback

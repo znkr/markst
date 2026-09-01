@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"znkr.io/writst/value"
+	"znkr.io/markst/value"
 )
 
 // This file implements the format descriptions `datetime.display` takes, the

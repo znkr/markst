@@ -1,4 +1,4 @@
-// Package analyzer is the bridge between Writst's concrete syntax tree and
+// Package analyzer is the bridge between Markst's concrete syntax tree and
 // evaluation. It walks the tree produced by the parser and emits an
 // [expr.Module] — a top-level function plus every closure nested inside it,
 // each in SSA form — that the evaluator can run without ever looking at the
@@ -84,12 +84,12 @@ import (
 	"regexp"
 	"slices"
 
-	"znkr.io/writst/builtin"
-	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/builtin"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // Option configures the analyzer.
@@ -128,7 +128,7 @@ func WithoutApproximations() Option {
 }
 
 // WithName sets the display name diagnostics about this source are reported
-// under, e.g. "lib.wrt". It lands on [expr.Module.Origin] and travels with
+// under, e.g. "lib.mst". It lands on [expr.Module.Origin] and travels with
 // every span the module produces, so a failure inside a function defined here
 // still names this source when it fires during another module's evaluation.
 //

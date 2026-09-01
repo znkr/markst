@@ -1,7 +1,7 @@
-// Package syntax defines the core types shared across all stages of the Writst
+// Package syntax defines the core types shared across all stages of the Markst
 // compilation pipeline: scanning, parsing, and semantic analysis.
 //
-// It provides the fundamental building blocks for representing Writst source
+// It provides the fundamental building blocks for representing Markst source
 // code as a concrete syntax tree (CST).
 //
 //   - [Kind] classifies every token and node (~150 variants covering markup,
@@ -11,7 +11,7 @@
 //     syntax with an attached diagnostic message).
 //   - [Span] and [Position] locate nodes in source text by byte offset and
 //     line/column respectively. [Source] maps between the two.
-//   - [Mode] distinguishes the three lexical modes of Writst: Markup, Math, and
+//   - [Mode] distinguishes the three lexical modes of Markst: Markup, Math, and
 //     Code.
 //   - [Set] is a compact bitset over [Kind] values, used by the parser for
 //     efficient lookahead and synchronization.

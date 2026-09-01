@@ -3,7 +3,7 @@ package value
 import (
 	"testing"
 
-	"znkr.io/writst/types"
+	"znkr.io/markst/types"
 )
 
 func TestFunctionWith(t *testing.T) {

@@ -3,7 +3,7 @@ package expr
 import (
 	"strconv"
 
-	"znkr.io/writst/name"
+	"znkr.io/markst/name"
 )
 
 // Var names an SSA-mode variable in the [Builder]'s Braun construction.

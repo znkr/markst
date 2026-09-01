@@ -52,7 +52,7 @@ type Source interface {
 // [NoSpan] produces.
 type Origin struct {
 	// Name is the display name diagnostics about this source are reported
-	// under, e.g. "lib.wrt". Empty when the host supplied none.
+	// under, e.g. "lib.mst". Empty when the host supplied none.
 	Name string
 
 	// Source resolves offsets within this origin to line/column positions.

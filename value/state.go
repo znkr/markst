@@ -1,9 +1,9 @@
 package value
 
 import (
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/formatter"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 // State is a document state handle created by the state() function. It carries

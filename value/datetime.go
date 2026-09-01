@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"znkr.io/writst/types"
+	"znkr.io/markst/types"
 )
 
 // DatetimeKind distinguishes the three shapes a [Datetime] can take: a date
@@ -119,7 +119,7 @@ func (d Datetime) String() string {
 
 // Duration is a span of time, stored as a whole number of days plus a
 // sub-day remainder rather than as one flat nanosecond count. A day is
-// exactly 24 hours here — writst models no time zones, so there is no DST to
+// exactly 24 hours here — markst models no time zones, so there is no DST to
 // make one shorter — which keeps the split exact while lifting the ±292-year
 // ceiling a bare [time.Duration] would impose on a span.
 //

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"znkr.io/writst/internal/ordered"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/ordered"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 // joinResultType defines which type combinations can be joined with the +

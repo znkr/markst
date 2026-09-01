@@ -136,7 +136,7 @@ $func(a$
 // Error: 5-6 unclosed delimiter
 $sin(x$
 
---- math-call-missing-operator-sides (skip: writst reports the unknown callee as well as the parse error) ---
+--- math-call-missing-operator-sides (skip: markst reports the unknown callee as well as the parse error) ---
 // Error: 6-7 unclosed delimiter
 $func(1^2_, 1/; , , √ )$
 
@@ -158,7 +158,7 @@ $func(1^2_, 1/; , , √ )$
 #check($args( ,/**/x/**/, , /**/y, ,/**/, )$, "arguments([], [x], [], [y], [], [])")
 │ #document[]
 
---- math-call-escape (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+--- math-call-escape (skip: markst drops whitespace inside a math run, so a space between cell items is not content) ---
 // Escaped characters in calls.
 #let args(..body) = body
 #let check(it, r) = test-repr(it.body.text, r)
@@ -188,7 +188,7 @@ $
   bx(x y)  &&quad  bx(x (y z))  &quad  bx(x y^z) \
 $
 
---- math-call-named-basic (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+--- math-call-named-basic (skip: markst drops whitespace inside a math run, so a space between cell items is not content) ---
 // Named arguments in math.
 #let args(..body) = body
 #let check(it, r) = test-repr(it.body.text, r)
@@ -268,12 +268,12 @@ $args(..(a + b))$
 // Error: 7-14 cannot spread content
 $args(..a + b)$
 
---- math-call-spread-unexpected-dots (skip: writst reports follow-on errors after the unexpected dots) ---
+--- math-call-spread-unexpected-dots (skip: markst reports follow-on errors after the unexpected dots) ---
 #let args(..body) = body
 // Error: 8-10 unexpected dots
 $args(#..range(1, 5).chunks(2))$
 
---- math-call-spread-unexpected-binary (skip: writst also reports the malformed spread operand, not just the parse error) ---
+--- math-call-spread-unexpected-binary (skip: markst also reports the malformed spread operand, not just the parse error) ---
 // Test spread operators followed by binary math operators with and without
 // right operands. These errors aren't great, but they can be silenced with a
 // space and no one would actually write this.
@@ -318,7 +318,7 @@ $func(...)$
 // Error: 22-23 duplicate argument: a
 $func(a: #2, ..dict, a: #3)$
 
---- math-call-2d-basic (skip: writst drops whitespace inside a math run, so a space between cell items is not content) ---
+--- math-call-2d-basic (skip: markst drops whitespace inside a math run, so a space between cell items is not content) ---
 // Two-dimensional arguments in math. More tests can be found in `mat.typ`.
 #let args(..body) = body
 #let check(it, r) = test-repr(it.body.text, r)
@@ -388,7 +388,7 @@ $func(a: #2, ..dict, a: #3)$
 #check($args(1, 2; 3, 4, ..#range(5, 7),)$, "arguments(([1], [2]), ([3], [4], 5, 6))")
 │ #document[]
 
---- math-call-2d-spread-named (skip: a dictionary spread inside a row list has to route its named part to the call and its positional part into the row; writst spreads it into the row only) ---
+--- math-call-2d-spread-named (skip: a dictionary spread inside a row list has to route its named part to the call and its positional part into the row; markst spreads it into the row only) ---
 // Two-dimensional args with named and positional spreading.
 #let args(..body) = body
 #let check(it, r) = test-repr(it.body.text, r)

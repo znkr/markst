@@ -1,4 +1,4 @@
-package writst_test
+package markst_test
 
 import (
 	"errors"
@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"znkr.io/writst"
-	"znkr.io/writst/name"
-	"znkr.io/writst/value"
+	"znkr.io/markst"
+	"znkr.io/markst/name"
+	"znkr.io/markst/value"
 )
 
-// articleLib is the shape this feature exists for: a helper written in writst,
+// articleLib is the shape this feature exists for: a helper written in markst,
 // compiled once, and used by documents that never mention it.
 const articleLib = `#let article(title: none, published: none, summary: none) = {
     if type(published) == str {
@@ -30,9 +30,9 @@ const articleLib = `#let article(title: none, published: none, summary: none) = 
 
 // compileLibrary compiles src and fails the test if it did not compile,
 // returning the library and any warnings.
-func compileLibrary(t *testing.T, name string, src string) (*writst.Library, []writst.Diagnostic) {
+func compileLibrary(t *testing.T, name string, src string) (*markst.Library, []markst.Diagnostic) {
 	t.Helper()
-	lib, warns, err := writst.CompileLibrary(name, []byte(src))
+	lib, warns, err := markst.CompileLibrary(name, []byte(src))
 	if err != nil {
 		t.Fatalf("CompileLibrary(%q) = %v", name, err)
 	}
@@ -40,9 +40,9 @@ func compileLibrary(t *testing.T, name string, src string) (*writst.Library, []w
 }
 
 // compile compiles src and fails the test if it did not compile.
-func compile(t *testing.T, src string, opts ...writst.Option) *value.Document {
+func compile(t *testing.T, src string, opts ...markst.Option) *value.Document {
 	t.Helper()
-	doc, warns, err := writst.Compile([]byte(src), opts...)
+	doc, warns, err := markst.Compile([]byte(src), opts...)
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -53,12 +53,12 @@ func compile(t *testing.T, src string, opts ...writst.Option) *value.Document {
 }
 
 // diagnostics compiles src expecting failure and returns the error list.
-func diagnostics(t *testing.T, src string, opts ...writst.Option) writst.DiagnosticList {
+func diagnostics(t *testing.T, src string, opts ...markst.Option) markst.DiagnosticList {
 	t.Helper()
-	_, _, err := writst.Compile([]byte(src), opts...)
-	var diags writst.DiagnosticList
+	_, _, err := markst.Compile([]byte(src), opts...)
+	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
-		t.Fatalf("Compile() error is %T (%v), want writst.DiagnosticList", err, err)
+		t.Fatalf("Compile() error is %T (%v), want markst.DiagnosticList", err, err)
 	}
 	return diags
 }
@@ -67,15 +67,15 @@ func diagnostics(t *testing.T, src string, opts ...writst.Option) writst.Diagnos
 // function it never imported, and the metadata that function emits comes back
 // out through Query.
 func TestLibraryFunctionNeedsNoImport(t *testing.T) {
-	lib, warns := compileLibrary(t, "lib.wrt", articleLib)
+	lib, warns := compileLibrary(t, "lib.mst", articleLib)
 	if len(warns) > 0 {
 		t.Errorf("CompileLibrary() warnings = %v, want none", warns)
 	}
 	if _, ok := lib.Lookup(name.Make("article")); !ok {
 		t.Fatalf("Lookup(article) not found; library exports nothing usable")
 	}
-	if lib.Name() != "lib.wrt" {
-		t.Errorf("Name() = %q, want %q", lib.Name(), "lib.wrt")
+	if lib.Name() != "lib.mst" {
+		t.Errorf("Name() = %q, want %q", lib.Name(), "lib.mst")
 	}
 
 	doc := compile(t, `#article(title: "Routing", published: "2024-07-06")
@@ -83,9 +83,9 @@ func TestLibraryFunctionNeedsNoImport(t *testing.T) {
 = Background
 
 Text.
-`, writst.WithName("index.wrt"), writst.WithLibrary(lib))
+`, markst.WithName("index.mst"), markst.WithLibrary(lib))
 
-	meta, ok := writst.Query(doc, name.Make("doc-meta"))
+	meta, ok := markst.Query(doc, name.Make("doc-meta"))
 	if !ok {
 		t.Fatalf("Query(doc-meta) not found")
 	}
@@ -104,9 +104,9 @@ Text.
 // must land on the document being compiled — if the closure kept the session
 // it was built in, both fields would stay empty.
 func TestLibrarySetRuleAppliesToDocument(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", articleLib)
+	lib, _ := compileLibrary(t, "lib.mst", articleLib)
 	doc := compile(t, `#article(title: "Routing", published: "2024-07-06")`,
-		writst.WithLibrary(lib))
+		markst.WithLibrary(lib))
 
 	if doc.Title != "Routing" {
 		t.Errorf("doc.Title = %q, want %q — the library's set rule did not reach this document", doc.Title, "Routing")
@@ -123,13 +123,13 @@ func TestLibrarySetRuleAppliesToDocument(t *testing.T) {
 // library function touches: the label set. A label used once from the library
 // and once from the document is a reuse the *document's* session must catch.
 func TestLibraryLabelsBelongToDocument(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", articleLib)
-	_, warns, err := writst.Compile(
+	lib, _ := compileLibrary(t, "lib.mst", articleLib)
+	_, warns, err := markst.Compile(
 		[]byte(`#article(title: "Routing", published: "2024-07-06")
 
 #metadata("again") <doc-meta>
 `),
-		writst.WithName("index.wrt"), writst.WithLibrary(lib))
+		markst.WithName("index.mst"), markst.WithLibrary(lib))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -146,16 +146,16 @@ func TestLibraryLabelsBelongToDocument(t *testing.T) {
 // document that reached it — not resolved against the document's bytes, where
 // the offset means something else entirely.
 func TestLibraryErrorIsLocatedInTheLibrary(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", articleLib)
+	lib, _ := compileLibrary(t, "lib.mst", articleLib)
 	diags := diagnostics(t, `#article(title: "Routing", published: "2024-13-01")`,
-		writst.WithName("index.wrt"), writst.WithLibrary(lib))
+		markst.WithName("index.mst"), markst.WithLibrary(lib))
 
 	if len(diags) != 1 {
 		t.Fatalf("diagnostics = %v, want one", diags)
 	}
 	d := diags[0]
-	if d.Origin != "lib.wrt" {
-		t.Errorf("Origin = %q, want %q", d.Origin, "lib.wrt")
+	if d.Origin != "lib.mst" {
+		t.Errorf("Origin = %q, want %q", d.Origin, "lib.mst")
 	}
 	// Line 3 of articleLib is the datetime.parse_date call.
 	if d.Loc.Start.Line != 3 {
@@ -165,8 +165,8 @@ func TestLibraryErrorIsLocatedInTheLibrary(t *testing.T) {
 		t.Fatalf("Trace = %v, want the one call site that crossed into the library", d.Trace)
 	}
 	f := d.Trace[0]
-	if f.Origin != "index.wrt" || f.Loc.Start.Line != 1 || f.Callee != "article" {
-		t.Errorf("Trace[0] = %+v, want index.wrt line 1 in article", f)
+	if f.Origin != "index.mst" || f.Loc.Start.Line != 1 || f.Callee != "article" {
+		t.Errorf("Trace[0] = %+v, want index.mst line 1 in article", f)
 	}
 }
 
@@ -174,9 +174,9 @@ func TestLibraryErrorIsLocatedInTheLibrary(t *testing.T) {
 // the document's own name, and stays locatable when the host gave none.
 func TestDocumentErrorOrigin(t *testing.T) {
 	t.Run("named", func(t *testing.T) {
-		diags := diagnostics(t, "#nope\n", writst.WithName("index.wrt"))
-		if diags[0].Origin != "index.wrt" {
-			t.Errorf("Origin = %q, want %q", diags[0].Origin, "index.wrt")
+		diags := diagnostics(t, "#nope\n", markst.WithName("index.mst"))
+		if diags[0].Origin != "index.mst" {
+			t.Errorf("Origin = %q, want %q", diags[0].Origin, "index.mst")
 		}
 		if len(diags[0].Trace) != 0 {
 			t.Errorf("Trace = %v, want empty for a failure in the document itself", diags[0].Trace)
@@ -201,7 +201,7 @@ func TestDocumentErrorOrigin(t *testing.T) {
 // closure invoked by array.map runs in whatever runtime the builtin was
 // called in.
 func TestLibraryReadsCallersNow(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", `#let today() = datetime.today().display()
+	lib, _ := compileLibrary(t, "lib.mst", `#let today() = datetime.today().display()
 #let today-via-callback() = (0,).map(_ => datetime.today().display()).at(0)
 `)
 	now := time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -209,8 +209,8 @@ func TestLibraryReadsCallersNow(t *testing.T) {
 	for _, fn := range []string{"today", "today-via-callback"} {
 		t.Run(fn, func(t *testing.T) {
 			doc := compile(t, "#metadata("+fn+"()) <d>",
-				writst.WithLibrary(lib), writst.WithNow(now))
-			got, ok := writst.Query(doc, name.Make("d"))
+				markst.WithLibrary(lib), markst.WithNow(now))
+			got, ok := markst.Query(doc, name.Make("d"))
 			if !ok {
 				t.Fatalf("Query(d) not found")
 			}
@@ -225,41 +225,41 @@ func TestLibraryReadsCallersNow(t *testing.T) {
 // built-in, a later library shadows an earlier one, and the document's own
 // binding shadows them all.
 func TestLibraryPrecedence(t *testing.T) {
-	first, _ := compileLibrary(t, "first.wrt", `#let emph(x) = "first"
+	first, _ := compileLibrary(t, "first.mst", `#let emph(x) = "first"
 #let only-in-first() = "first"
 `)
-	second, _ := compileLibrary(t, "second.wrt", `#let emph(x) = "second"`)
+	second, _ := compileLibrary(t, "second.mst", `#let emph(x) = "second"`)
 
 	tests := []struct {
 		name string
 		src  string
-		opts []writst.Option
+		opts []markst.Option
 		want value.Str
 	}{
 		{
 			name: "library shadows builtin",
 			src:  `#metadata(emph("x")) <d>`,
-			opts: []writst.Option{writst.WithLibrary(first)},
+			opts: []markst.Option{markst.WithLibrary(first)},
 			want: "first",
 		},
 		{
 			name: "later library shadows earlier",
 			src:  `#metadata(emph("x")) <d>`,
-			opts: []writst.Option{writst.WithLibrary(first, second)},
+			opts: []markst.Option{markst.WithLibrary(first, second)},
 			want: "second",
 		},
 		{
 			name: "document shadows library",
 			src: `#let emph(x) = "document"
 #metadata(emph("x")) <d>`,
-			opts: []writst.Option{writst.WithLibrary(first)},
+			opts: []markst.Option{markst.WithLibrary(first)},
 			want: "document",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := compile(t, tt.src, tt.opts...)
-			got, _ := writst.Query(doc, name.Make("d"))
+			got, _ := markst.Query(doc, name.Make("d"))
 			if got != tt.want {
 				t.Errorf("= %v, want %v", got, tt.want)
 			}
@@ -270,18 +270,18 @@ func TestLibraryPrecedence(t *testing.T) {
 // TestLibraryComposition checks that a library may be built on another one,
 // which is the same mechanism applied one level down.
 func TestLibraryComposition(t *testing.T) {
-	base, _ := compileLibrary(t, "base.wrt", `#let greeting() = "hello"`)
-	derived, _, err := writst.CompileLibrary("derived.wrt",
+	base, _ := compileLibrary(t, "base.mst", `#let greeting() = "hello"`)
+	derived, _, err := markst.CompileLibrary("derived.mst",
 		[]byte(`#let greet(who) = greeting() + ", " + who`),
-		writst.WithLibrary(base))
+		markst.WithLibrary(base))
 	if err != nil {
 		t.Fatalf("CompileLibrary(derived) = %v", err)
 	}
 
 	// Only the derived library is passed to the document: base travels inside
 	// greet as an ordinary captured value, not as a name the document can see.
-	doc := compile(t, `#metadata(greet("world")) <d>`, writst.WithLibrary(derived))
-	got, _ := writst.Query(doc, name.Make("d"))
+	doc := compile(t, `#metadata(greet("world")) <d>`, markst.WithLibrary(derived))
+	got, _ := markst.Query(doc, name.Make("d"))
 	if want := value.Str("hello, world"); got != want {
 		t.Errorf("greet() = %v, want %v", got, want)
 	}
@@ -293,11 +293,11 @@ func TestLibraryComposition(t *testing.T) {
 // TestLibraryExportsFinalValue checks that what is exported is the binding as
 // of the end of the file, not as of its first definition.
 func TestLibraryExportsFinalValue(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", `#let x = "first"
+	lib, _ := compileLibrary(t, "lib.mst", `#let x = "first"
 #{ x = "second" }
 `)
-	doc := compile(t, `#metadata(x) <d>`, writst.WithLibrary(lib))
-	got, _ := writst.Query(doc, name.Make("d"))
+	doc := compile(t, `#metadata(x) <d>`, markst.WithLibrary(lib))
+	got, _ := markst.Query(doc, name.Make("d"))
 	if want := value.Str("second"); got != want {
 		t.Errorf("x = %v, want %v", got, want)
 	}
@@ -306,7 +306,7 @@ func TestLibraryExportsFinalValue(t *testing.T) {
 // TestLibraryScoping checks that a name bound inside a block is not exported:
 // only the top level is the library's interface.
 func TestLibraryScoping(t *testing.T) {
-	lib, _ := compileLibrary(t, "lib.wrt", `#{ let hidden = 1 }
+	lib, _ := compileLibrary(t, "lib.mst", `#{ let hidden = 1 }
 #let shown = 2
 `)
 	if _, ok := lib.Lookup(name.Make("hidden")); ok {
@@ -320,15 +320,15 @@ func TestLibraryScoping(t *testing.T) {
 // TestLibraryWithContentWarns checks that a library which tries to render
 // something is told its body goes nowhere.
 func TestLibraryWithContentWarns(t *testing.T) {
-	_, warns := compileLibrary(t, "lib.wrt", `#let f() = 1
+	_, warns := compileLibrary(t, "lib.mst", `#let f() = 1
 
 This text has nowhere to go.
 `)
 	if len(warns) != 1 {
 		t.Fatalf("warnings = %v, want one", warns)
 	}
-	if warns[0].Origin != "lib.wrt" {
-		t.Errorf("Origin = %q, want %q", warns[0].Origin, "lib.wrt")
+	if warns[0].Origin != "lib.mst" {
+		t.Errorf("Origin = %q, want %q", warns[0].Origin, "lib.mst")
 	}
 	if !strings.Contains(warns[0].Msg, "discarded") {
 		t.Errorf("warning = %q, want it to say the content is discarded", warns[0].Msg)
@@ -338,32 +338,32 @@ This text has nowhere to go.
 // TestLibraryCompileError checks that a library that does not compile is not
 // handed back as if it had.
 func TestLibraryCompileError(t *testing.T) {
-	lib, _, err := writst.CompileLibrary("lib.wrt", []byte("#let f() = nope\n#f()\n"))
-	var diags writst.DiagnosticList
+	lib, _, err := markst.CompileLibrary("lib.mst", []byte("#let f() = nope\n#f()\n"))
+	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
-		t.Fatalf("CompileLibrary() error is %T (%v), want writst.DiagnosticList", err, err)
+		t.Fatalf("CompileLibrary() error is %T (%v), want markst.DiagnosticList", err, err)
 	}
 	if lib != nil {
 		t.Errorf("CompileLibrary() = %v, want nil on failure", lib)
 	}
-	if diags[0].Origin != "lib.wrt" {
-		t.Errorf("Origin = %q, want %q", diags[0].Origin, "lib.wrt")
+	if diags[0].Origin != "lib.mst" {
+		t.Errorf("Origin = %q, want %q", diags[0].Origin, "lib.mst")
 	}
 }
 
 // TestImportAndIncludeAreDiagnostics guards the two constructs a host reaches
-// for first on hearing that writst has libraries. The parser understands both
+// for first on hearing that markst has libraries. The parser understands both
 // and nothing below it does; until that changes they must say so rather than
 // crash the compile.
 func TestImportAndIncludeAreDiagnostics(t *testing.T) {
 	for _, tt := range []struct{ src, want string }{
-		{`#import "lib.wrt": *`, "imports are not supported"},
-		{`#import "lib.wrt": article`, "imports are not supported"},
-		{`#import "lib.wrt"`, "imports are not supported"},
-		{`#include "lib.wrt"`, "includes are not supported"},
+		{`#import "lib.mst": *`, "imports are not supported"},
+		{`#import "lib.mst": article`, "imports are not supported"},
+		{`#import "lib.mst"`, "imports are not supported"},
+		{`#include "lib.mst"`, "includes are not supported"},
 	} {
 		t.Run(tt.src, func(t *testing.T) {
-			diags := diagnostics(t, tt.src, writst.WithName("index.wrt"))
+			diags := diagnostics(t, tt.src, markst.WithName("index.mst"))
 			if diags[0].Msg != tt.want {
 				t.Errorf("Msg = %q, want %q", diags[0].Msg, tt.want)
 			}
@@ -384,7 +384,7 @@ func TestLibraryWhitespaceDoesNotWarn(t *testing.T) {
 		"// a comment\n\n#let f() = 1\n\n\n",
 	} {
 		t.Run(src, func(t *testing.T) {
-			if _, warns := compileLibrary(t, "lib.wrt", src); len(warns) > 0 {
+			if _, warns := compileLibrary(t, "lib.mst", src); len(warns) > 0 {
 				t.Errorf("warnings = %v, want none", warns)
 			}
 		})

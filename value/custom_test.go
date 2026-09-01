@@ -3,8 +3,8 @@ package value
 import (
 	"testing"
 
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 func TestCustomFormat(t *testing.T) {

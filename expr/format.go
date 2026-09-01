@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"znkr.io/writst/value"
+	"znkr.io/markst/value"
 )
 
 // FormatModule returns a textual SSA dump of mod. The format is informally
@@ -16,7 +16,7 @@ import (
 // parameters (e.g. `jump b1(v0)`, `branch v, b1(v2), b2(v3, v4)`).
 //
 // This is the format consumed by analyzer golden tests under the new IR. It
-// is not pretty-printed writst source — see the migration plan for why.
+// is not pretty-printed markst source — see the migration plan for why.
 func FormatModule(mod *Module) string {
 	f := formatter{mod: mod}
 	f.formatFunction("$top", mod.Top)

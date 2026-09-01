@@ -15,7 +15,7 @@ import (
 	"unicode/utf8"
 
 	"znkr.io/diff/textdiff"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 // Error represents an error expectation or actual error, with its source

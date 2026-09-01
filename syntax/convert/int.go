@@ -1,4 +1,4 @@
-// Package convert provides conversion utilities for Writst literal values.
+// Package convert provides conversion utilities for Markst literal values.
 package convert
 
 import (
@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// ParseInt parses a Writst integer literal string, supporting decimal, binary
+// ParseInt parses a Markst integer literal string, supporting decimal, binary
 // (0b), octal (0o), and hexadecimal (0x) prefixes.
 func ParseInt(s string) (int, error) {
 	base := 10

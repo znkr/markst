@@ -6,10 +6,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // realizeDocument turns the recorded content tree into a realized
@@ -475,7 +475,7 @@ func isParbreak(c value.Content) bool { _, ok := c.(*value.Parbreak); return ok 
 
 // isVisible reports whether c is an element a reader can see. The introspection
 // elements are not: they ride the document to be found again — by
-// znkr.io/writst.Query, or by whatever comes to resolve state — and produce no
+// znkr.io/markst.Query, or by whatever comes to resolve state — and produce no
 // output where they sit.
 func isVisible(c value.Content) bool {
 	switch c.(type) {

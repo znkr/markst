@@ -1,4 +1,4 @@
-// Package scanner implements the lexer (tokenizer) for Writst source code.
+// Package scanner implements the lexer (tokenizer) for Markst source code.
 //
 // The scanner operates in one of three lexical modes ([syntax.ModeMarkup],
 // [syntax.ModeMath], [syntax.ModeCode]) and produces tokens as ([syntax.Kind],
@@ -24,11 +24,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/scanner/internal/reader"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/scanner/internal/reader"
 )
 
-// Scanner tokenizes Writst source code. It is created with [New] and produces
+// Scanner tokenizes Markst source code. It is created with [New] and produces
 // tokens one at a time via [Next]. The parser controls the lexical mode via
 // [SetMode], which changes how the same characters are interpreted.
 //

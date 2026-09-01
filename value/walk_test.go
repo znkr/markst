@@ -3,7 +3,7 @@ package value
 import (
 	"testing"
 
-	"znkr.io/writst/name"
+	"znkr.io/markst/name"
 )
 
 // doc builds a document n paragraphs deep in nesting and n wide, so a walk over

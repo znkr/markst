@@ -3,10 +3,10 @@ package value
 import (
 	"fmt"
 
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/formatter"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/types"
 )
 
 // Error is a runtime value representing a failed computation. Unlike

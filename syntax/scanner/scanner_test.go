@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 var nodeCmpOpts = cmp.Options{cmp.AllowUnexported(syntax.Leaf{}, syntax.Inner{}, syntax.Error{})}

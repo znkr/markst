@@ -1,11 +1,11 @@
-module znkr.io/writst
+module znkr.io/markst
 
 go 1.26.0
 
 tool (
 	golang.org/x/tools/cmd/stringer
-	znkr.io/writst/internal/fieldaccessgen
-	znkr.io/writst/internal/symbols/symbolsgen
+	znkr.io/markst/internal/fieldaccessgen
+	znkr.io/markst/internal/symbols/symbolsgen
 )
 
 require (

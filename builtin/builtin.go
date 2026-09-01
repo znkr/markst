@@ -1,9 +1,9 @@
 package builtin
 
 import (
-	"znkr.io/writst/internal/lorem"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/lorem"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var (

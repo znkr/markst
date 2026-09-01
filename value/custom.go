@@ -1,12 +1,12 @@
 package value
 
 import (
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/formatter"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
-// Custom is a content element the host defines. Writst does not know what it
+// Custom is a content element the host defines. Markst does not know what it
 // means: it carries [Custom.Value] through the pipeline untouched, and the
 // program presenting the document recognizes it again and renders it.
 //
@@ -30,7 +30,7 @@ type Custom struct {
 	// Block reports whether the element is block-level; see [Content.IsBlock].
 	Block bool
 
-	// Value is the host's payload. Writst never inspects it, never copies it,
+	// Value is the host's payload. Markst never inspects it, never copies it,
 	// and hands back the identical value it was given.
 	Value any
 
@@ -42,7 +42,7 @@ func (*Custom) aContent()        {}
 func (*Custom) Type() types.Type { return types.Content }
 
 // Equal reports whether other is this very element. The payload is opaque, so
-// what it means for two of them to be equal is not writst's to decide; identity
+// what it means for two of them to be equal is not markst's to decide; identity
 // is the one answer that is right without knowing.
 func (n *Custom) Equal(other Value) bool {
 	o, ok := other.(*Custom)

@@ -83,7 +83,7 @@ $ binom(n, k_1, k_2, k_3) $
 // Error: 3-13 missing argument: lower
 $ binom(x^2) $
 
---- math-dif (skip: the dif operator is not implemented; it needs weak spacing, which writst does not model) ---
+--- math-dif (skip: the dif operator is not implemented; it needs weak spacing, which markst does not model) ---
 // Test dif.
 $ (dif y)/(dif x), dif/x, x/dif, dif/dif \
   frac(dif y, dif x), frac(dif, x), frac(x, dif), frac(dif, dif) $

@@ -1,8 +1,8 @@
 package expr
 
 import (
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // resultSetter is implemented by every value-producing IR node (instructions

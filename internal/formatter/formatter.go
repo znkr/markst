@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 type Formattable interface {

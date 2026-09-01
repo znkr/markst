@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 func TestFormat(t *testing.T) {

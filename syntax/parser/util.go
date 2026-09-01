@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 // asErrorNode converts a node into an error node with the given diagnostic

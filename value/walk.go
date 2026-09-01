@@ -4,7 +4,7 @@ import "iter"
 
 // All iterates c and everything below it in document order: c first, then its
 // children depth-first, left to right. It is the walk introspection is built
-// on — see znkr.io/writst.Query — and it reaches every element of a realized
+// on — see znkr.io/markst.Query — and it reaches every element of a realized
 // document, invisible ones ([Metadata], [StateUpdate]) included.
 //
 // The traversal allocates nothing per element: each node's generated walk hands

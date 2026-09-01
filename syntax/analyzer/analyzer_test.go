@@ -8,12 +8,12 @@ import (
 
 	"znkr.io/diff/textdiff"
 
-	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax/analyzer"
-	"znkr.io/writst/syntax/parser"
-	"znkr.io/writst/value"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/internal/testfile"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax/analyzer"
+	"znkr.io/markst/syntax/parser"
+	"znkr.io/markst/value"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -103,9 +103,9 @@ func TestAnalyzeWithExports(t *testing.T) {
 // span the module ever produces is reported under it.
 func TestAnalyzeWithName(t *testing.T) {
 	root := parser.Parse([]byte("hello\n"))
-	mod := analyzer.Analyze(root, analyzer.WithName("lib.wrt"))
-	if mod.Origin.Name != "lib.wrt" {
-		t.Errorf("Origin.Name = %q, want %q", mod.Origin.Name, "lib.wrt")
+	mod := analyzer.Analyze(root, analyzer.WithName("lib.mst"))
+	if mod.Origin.Name != "lib.mst" {
+		t.Errorf("Origin.Name = %q, want %q", mod.Origin.Name, "lib.mst")
 	}
 	if mod.Origin.Source == nil {
 		t.Errorf("Origin.Source = nil; spans would not resolve")

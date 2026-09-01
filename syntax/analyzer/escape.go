@@ -3,9 +3,9 @@ package analyzer
 import (
 	"slices"
 
-	"znkr.io/writst/expr"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // This file holds the join-scope and escape machinery the analyzer uses to

@@ -1,10 +1,10 @@
 package analyzer
 
 import (
-	"znkr.io/writst/expr"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // This file holds the destructuring-pattern compiler shared by binding patterns

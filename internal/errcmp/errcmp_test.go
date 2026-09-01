@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/parser"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/parser"
 )
 
 // wantError defines an expected error in human-readable form.

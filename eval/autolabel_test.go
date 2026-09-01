@@ -3,7 +3,7 @@ package eval
 import (
 	"testing"
 
-	"znkr.io/writst/name"
+	"znkr.io/markst/name"
 )
 
 // TestSlug pins the label name derived from a heading's text. Every case whose

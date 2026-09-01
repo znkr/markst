@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"znkr.io/writst/syntax/analyzer"
-	"znkr.io/writst/syntax/parser"
+	"znkr.io/markst/syntax/analyzer"
+	"znkr.io/markst/syntax/parser"
 )
 
 // TestEmbeddedCodeContexts guards a structural hazard: parseEmbeddedCodeExpr

@@ -3,8 +3,8 @@ package syntax_test
 import (
 	"testing"
 
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/parser"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/parser"
 )
 
 // locSource is the document Locate is exercised against. Line 2 holds a

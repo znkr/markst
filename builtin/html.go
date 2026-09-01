@@ -3,12 +3,12 @@ package builtin
 import (
 	"strings"
 
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
-// Html is the `html` module: the way a document writes markup writst has no
+// Html is the `html` module: the way a document writes markup markst has no
 // element of its own for.
 var Html = &value.Module{
 	Name: "html",

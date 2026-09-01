@@ -1,10 +1,10 @@
-// Package names provides interned string handles for Writst identifiers used as
+// Package names provides interned string handles for Markst identifiers used as
 // function names, method names, and parameter names throughout the ir package.
 // Using [unique.Handle] avoids repeated string comparisons during evaluation
 // and field lookup.
 package names
 
-import "znkr.io/writst/name"
+import "znkr.io/markst/name"
 
 var (
 	Abs         = name.Make("abs")

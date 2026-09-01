@@ -2,8 +2,8 @@
 
 package value
 
-import "znkr.io/writst/internal/names"
-import "znkr.io/writst/name"
+import "znkr.io/markst/internal/names"
+import "znkr.io/markst/name"
 
 func (n *Document) Field(name name.Name) Value {
 	switch name {

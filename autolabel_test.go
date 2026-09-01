@@ -1,11 +1,11 @@
-package writst_test
+package markst_test
 
 import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst"
-	"znkr.io/writst/value"
+	"znkr.io/markst"
+	"znkr.io/markst/value"
 )
 
 // headingLabel is what a presenter reads off a heading to anchor it with.
@@ -19,7 +19,7 @@ type headingLabel struct {
 // is that there is always something to link to.
 func headingLabels(t *testing.T, src string) []headingLabel {
 	t.Helper()
-	doc, warnings, err := writst.Compile([]byte(src))
+	doc, warnings, err := markst.Compile([]byte(src))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAutoHeadingLabels(t *testing.T) {
 // and nothing else — a document that means to reference a section says so by
 // labelling it.
 func TestAutoHeadingLabelIsNotAReference(t *testing.T) {
-	_, _, err := writst.Compile([]byte("= Hello World\n\nSee @hello-world.\n"))
+	_, _, err := markst.Compile([]byte("= Hello World\n\nSee @hello-world.\n"))
 	if err == nil {
 		t.Fatalf("Compile() = nil error, want one about a missing label")
 	}

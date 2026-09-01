@@ -1,15 +1,15 @@
 package value
 
 import (
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 // Content is the interface for values that represent document content. It
 // extends [Value] with label support and field access (for show/set rules).
 // All Content values have [types.Content] as their type.
 //
-//go:generate go tool znkr.io/writst/internal/fieldaccessgen
+//go:generate go tool znkr.io/markst/internal/fieldaccessgen
 type Content interface {
 	Value
 
@@ -41,46 +41,46 @@ type Content interface {
 // Sequence is a flat list of content elements, produced by concatenating
 // content with the + operator or from markup blocks.
 type Sequence struct {
-	Children []Content `writst:"required"`
+	Children []Content `markst:"required"`
 	Label    *Label
 }
 
 type Heading struct {
-	Depth int     `writst:"required"`
-	Body  Content `writst:"required"`
+	Depth int     `markst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Strong struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Emph struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 // Underline is underlined markup: underline[x].
 type Underline struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Par struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Text struct {
-	Text  string `writst:"required"`
+	Text  string `markst:"required"`
 	Label *Label
 }
 
 type Raw struct {
-	Block bool `writst:"required"`
+	Block bool `markst:"required"`
 	Lang  string
-	Text  string `writst:"required"`
+	Text  string `markst:"required"`
 }
 
 type Linebreak struct{}
@@ -92,62 +92,62 @@ type Parbreak struct{}
 // break elements it carries no label, which also lets those constants be
 // shared values.
 type HSpace struct {
-	Amount Length `writst:"required"`
+	Amount Length `markst:"required"`
 }
 
 // SmartQuote is a quotation mark written as ' or " in markup. Which glyph it
 // stands for depends on the surrounding content, so it is emitted unresolved:
-// present it with a [znkr.io/writst/smartquote.Quoter], which walks the content
+// present it with a [znkr.io/markst/smartquote.Quoter], which walks the content
 // in document order and resolves the opening, closing, apostrophe, and prime
 // forms. To get a literal quote instead, escape it in the source: \" or \'.
 type SmartQuote struct {
 	// Double reports whether this is a double quote (") rather than a single
 	// one (').
-	Double bool `writst:"required"`
+	Double bool `markst:"required"`
 	Label  *Label
 }
 
 type Link struct {
-	Dest  string  `writst:"required"`
-	Body  Content `writst:"required"`
+	Dest  string  `markst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Ref struct {
-	Target     name.Name `writst:"required"`
+	Target     name.Name `markst:"required"`
 	Supplement Content
 	Label      *Label
 }
 
 type List struct {
-	Children []*ListItem `writst:"required"`
+	Children []*ListItem `markst:"required"`
 	Label    *Label
 }
 
 type ListItem struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
 type Enum struct {
-	Children []*EnumItem `writst:"required"`
+	Children []*EnumItem `markst:"required"`
 	Label    *Label
 }
 
 type EnumItem struct {
 	Number int
-	Body   Content `writst:"required"`
+	Body   Content `markst:"required"`
 	Label  *Label
 }
 
 type Terms struct {
-	Children []*TermItem `writst:"required"`
+	Children []*TermItem `markst:"required"`
 	Label    *Label
 }
 
 type TermItem struct {
-	Term        Content `writst:"required"`
-	Description Content `writst:"required"`
+	Term        Content `markst:"required"`
+	Description Content `markst:"required"`
 	Label       *Label
 }
 
@@ -155,20 +155,20 @@ type TermItem struct {
 // make up a row; a [TableHeader] child contributes header rows instead of body
 // rows.
 type Table struct {
-	Columns  int       `writst:"required"`
-	Children []Content `writst:"required"`
+	Columns  int       `markst:"required"`
+	Children []Content `markst:"required"`
 	Label    *Label
 }
 
 // TableHeader is a run of header rows inside a [Table]. Its cells are laid out
 // in the table's columns and start on a new row.
 type TableHeader struct {
-	Children []Content `writst:"required"`
+	Children []Content `markst:"required"`
 	Label    *Label
 }
 
 type Footnote struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
@@ -178,15 +178,15 @@ type Footnote struct {
 // when none was given. An image is inline: it shares the paragraph with the
 // text around it.
 type Image struct {
-	Path  string `writst:"required"`
+	Path  string `markst:"required"`
 	Alt   string
 	Label *Label
 }
 
 // HTMLElem is an HTML element written straight into a document with
-// `html.elem(...)`, for the markup a document needs that writst has no element
+// `html.elem(...)`, for the markup a document needs that markst has no element
 // of its own for. Tag names it, Attrs holds its attributes in the order they
-// were written, and Body is ordinary writst content: what goes inside an
+// were written, and Body is ordinary markst content: what goes inside an
 // element is realized like anything else, so paragraphs form, emphasis and
 // links work, and a label attaches.
 //
@@ -199,29 +199,29 @@ type Image struct {
 // Body is nil for HTML's void elements ([HtmlTagVoid]), which have none.
 //
 // Escaping attribute values and text, and writing the tags themselves, is the
-// presenter's job — writst carries the element, it does not serialize it.
+// presenter's job — markst carries the element, it does not serialize it.
 type HTMLElem struct {
-	Tag   string `writst:"required"`
+	Tag   string `markst:"required"`
 	Attrs *Dict
 	Body  Content
-	Block bool `writst:"required"`
+	Block bool `markst:"required"`
 	Label *Label
 }
 
 // Metadata attaches a value to the document without producing any output. It
 // survives realization as an invisible leaf, so it keeps its place in the
-// document; a [Label] is what identifies it, and znkr.io/writst.Query finds it
+// document; a [Label] is what identifies it, and znkr.io/markst.Query finds it
 // by that label.
 type Metadata struct {
-	Value Value `writst:"required"`
+	Value Value `markst:"required"`
 	Label *Label
 }
 
 // Equation is a mathematical equation, produced by `$...$`. Block reports
 // whether it is displayed on its own line (block) or inline.
 type Equation struct {
-	Block bool    `writst:"required"`
-	Body  Content `writst:"required"`
+	Block bool    `markst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
@@ -230,7 +230,7 @@ type Equation struct {
 // function (`bold(x)`, `sans(x)`, …); each is nil when the style was never set,
 // so a nearer style function always wins over an outer one.
 type MathText struct {
-	Text    string `writst:"required"`
+	Text    string `markst:"required"`
 	Bold    Value
 	Italic  Value
 	Variant Value
@@ -242,15 +242,15 @@ type MathText struct {
 // the operator belongs above and below it in a block equation rather than
 // beside it.
 type MathOp struct {
-	Text   Content `writst:"required"`
-	Limits bool    `writst:"required"`
+	Text   Content `markst:"required"`
+	Limits bool    `markst:"required"`
 	Label  *Label
 }
 
 // MathAttach is a base with optional sub-/superscripts: a_1^2. Top and Bottom
 // are optional.
 type MathAttach struct {
-	Base   Content `writst:"required"`
+	Base   Content `markst:"required"`
 	Top    Content
 	Bottom Content
 	Label  *Label
@@ -258,8 +258,8 @@ type MathAttach struct {
 
 // MathFrac is a fraction: x/2.
 type MathFrac struct {
-	Num   Content `writst:"required"`
-	Denom Content `writst:"required"`
+	Num   Content `markst:"required"`
+	Denom Content `markst:"required"`
 	Label *Label
 }
 
@@ -267,14 +267,14 @@ type MathFrac struct {
 // root).
 type MathRoot struct {
 	Index    Content
-	Radicand Content `writst:"required"`
+	Radicand Content `markst:"required"`
 	Label    *Label
 }
 
 // MathPrimes is a run of prime marks attached to a base (a with three primes).
 type MathPrimes struct {
-	Base  Content `writst:"required"`
-	Count int     `writst:"required"`
+	Base  Content `markst:"required"`
+	Count int     `markst:"required"`
 	Label *Label
 }
 
@@ -286,15 +286,15 @@ type MathAlignPoint struct {
 // MathDelimited is a delimited group in math: [x + y] or (a). Open and Close
 // hold the delimiter content.
 type MathDelimited struct {
-	Open  Content `writst:"required"`
-	Body  Content `writst:"required"`
-	Close Content `writst:"required"`
+	Open  Content `markst:"required"`
+	Body  Content `markst:"required"`
+	Close Content `markst:"required"`
 	Label *Label
 }
 
 // MathUnderline is an underlined expression in math: underline(x).
 type MathUnderline struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Label *Label
 }
 
@@ -304,10 +304,10 @@ type MathUnderline struct {
 // the same node. Size holds the user-supplied size override (nil when unset),
 // retained so field access can retrieve it.
 type MathAccent struct {
-	Base    Content `writst:"required"`
-	Accent  string  `writst:"required"`
+	Base    Content `markst:"required"`
+	Accent  string  `markst:"required"`
 	Size    Value
-	Dotless bool `writst:"required"`
+	Dotless bool `markst:"required"`
 	Label   *Label
 }
 
@@ -315,27 +315,27 @@ type MathAccent struct {
 // cancel(x, angle: ...). Angle holds the value passed for the `angle` field (a
 // user-supplied angle or function), retained so field access can retrieve it.
 type MathCancel struct {
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 	Angle Value
 	Label *Label
 }
 
 // MathVec is a column vector in math: vec(a, b, c).
 type MathVec struct {
-	Children []Content `writst:"required"`
+	Children []Content `markst:"required"`
 	Label    *Label
 }
 
 // MathCases is a cases construct in math: cases(a, b).
 type MathCases struct {
-	Children []Content `writst:"required"`
+	Children []Content `markst:"required"`
 	Label    *Label
 }
 
 // MathMat is a matrix in math: mat(a, b; c, d). Rows holds the rows, each a
 // slice of cells.
 type MathMat struct {
-	Rows  [][]Content `writst:"required"`
+	Rows  [][]Content `markst:"required"`
 	Label *Label
 }
 
@@ -344,7 +344,7 @@ type MathMat struct {
 type Document struct {
 	Title string
 	Date  *Datetime
-	Body  Content `writst:"required"`
+	Body  Content `markst:"required"`
 }
 
 func (*Sequence) aValue()    {}

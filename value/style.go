@@ -1,10 +1,10 @@
 package value
 
 import (
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/formatter"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 // This file implements the value-layer machinery for `#set` and `#show` rules.

@@ -1,8 +1,8 @@
 package value
 
-import "znkr.io/writst/types"
+import "znkr.io/markst/types"
 
-// Type is a reflected Writst type value, used when the type itself is passed
+// Type is a reflected Markst type value, used when the type itself is passed
 // as a value.
 type Type struct {
 	Reflected   types.Type

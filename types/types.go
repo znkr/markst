@@ -1,7 +1,7 @@
-// Package types defines the Writst type system as an enumeration of value
+// Package types defines the Markst type system as an enumeration of value
 // types.
 //
-// Each [Type] constant corresponds to a Writst value type (e.g. Int for
+// Each [Type] constant corresponds to a Markst value type (e.g. Int for
 // integers, Str for strings, Content for document content). [Set] provides a
 // compact bitset representation for expressing which types a function parameter
 // accepts.
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// Type identifies a Writst value type. The [String] method returns the
+// Type identifies a Markst value type. The [String] method returns the
 // human-readable name used in error messages (e.g. "integer", "string").
 type Type int
 

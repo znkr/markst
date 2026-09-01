@@ -1,6 +1,6 @@
 package syntax
 
-// Mode represents the current lexical mode of the scanner. Writst source code
+// Mode represents the current lexical mode of the scanner. Markst source code
 // is lexed differently depending on whether the scanner is in markup, math,
 // or code context. The parser switches modes by calling [scanner.Scanner.SetMode]
 // as it enters and exits different syntactic constructs.

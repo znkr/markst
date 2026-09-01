@@ -5,12 +5,12 @@ import (
 	"slices"
 	"time"
 
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/types"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/types"
 )
 
-// Function represents a Writst function value, encompassing both user-defined
+// Function represents a Markst function value, encompassing both user-defined
 // closures and built-in functions. It describes the parameter signature and
 // holds the implementation.
 type Function struct {

@@ -1,8 +1,8 @@
 package value
 
 import (
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 type Module struct {

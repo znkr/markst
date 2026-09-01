@@ -7,14 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"znkr.io/writst/builtin"
-	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/internal/symbols"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/convert"
-	"znkr.io/writst/value"
+	"znkr.io/markst/builtin"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/internal/symbols"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/convert"
+	"znkr.io/markst/value"
 )
 
 // lowerMarkup lowers a markup node into a single SSA Ref. Labels are
@@ -271,9 +271,9 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 		// The parser understands the full import grammar, but nothing below it
 		// does. Report it rather than falling through to the panic below: this
 		// is reachable from ordinary source, and the shape a host reaches for
-		// first when told that writst has libraries.
+		// first when told that markst has libraries.
 		return a.emitError(n.Span(), "imports are not supported",
-			"a library's bindings are supplied by the host and need no import; see writst.CompileLibrary")
+			"a library's bindings are supplied by the host and need no import; see markst.CompileLibrary")
 	case syntax.KindError:
 		return a.emitSyntaxError(n.(*syntax.Error))
 	// Math

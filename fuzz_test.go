@@ -1,13 +1,13 @@
-package writst_test
+package markst_test
 
 import (
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/syntax/analyzer"
-	"znkr.io/writst/syntax/parser"
+	"znkr.io/markst/internal/testfile"
+	"znkr.io/markst/syntax/analyzer"
+	"znkr.io/markst/syntax/parser"
 )
 
 // seedGlobs are the golden test files the fuzz corpus is seeded from. They

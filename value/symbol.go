@@ -3,9 +3,9 @@ package value
 import (
 	"slices"
 
-	"znkr.io/writst/internal/symbols"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/symbols"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 type Symbol struct {

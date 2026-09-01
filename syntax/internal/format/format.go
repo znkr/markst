@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 // Format returns a human-readable tree dump of the syntax node. Leaf nodes

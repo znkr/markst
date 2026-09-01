@@ -3,9 +3,9 @@ package value
 import (
 	"slices"
 
-	"znkr.io/writst/internal/ordered"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/ordered"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 // Arguments holds positional and named arguments for a function call.

@@ -1,5 +1,5 @@
-// Package smartquote resolves the quotation marks a writst document leaves
-// unresolved. A [znkr.io/writst/value.SmartQuote] element records only whether
+// Package smartquote resolves the quotation marks a markst document leaves
+// unresolved. A [znkr.io/markst/value.SmartQuote] element records only whether
 // the author typed ' or "; which glyph it stands for depends on the content
 // around it, and that is decided here, at presentation time.
 package smartquote
@@ -8,11 +8,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"znkr.io/writst/value"
+	"znkr.io/markst/value"
 )
 
 // The quotation glyphs a [Quoter] substitutes. They are the English set;
-// writst does not model a text language, so there is nothing to switch on.
+// markst does not model a text language, so there is nothing to switch on.
 const (
 	SingleOpen  = "‘" // ‘
 	SingleClose = "’" // ’
@@ -24,7 +24,7 @@ const (
 	doublePrime = "″" // ″
 )
 
-// Quoter resolves [znkr.io/writst/value.SmartQuote] elements into quotation
+// Quoter resolves [znkr.io/markst/value.SmartQuote] elements into quotation
 // glyphs with zero lookahead. Drive it while walking realized content in
 // document order, handing it every element reached — including the ones it has
 // nothing to say about — and emitting what [Quoter.Advance] gives back:

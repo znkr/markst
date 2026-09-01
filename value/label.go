@@ -1,12 +1,12 @@
 package value
 
 import (
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
 )
 
 // Label is a named marker that can be attached to content elements for
-// cross-referencing (e.g. <intro> in Writst markup).
+// cross-referencing (e.g. <intro> in Markst markup).
 type Label struct {
 	Name name.Name
 

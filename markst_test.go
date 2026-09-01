@@ -1,4 +1,4 @@
-package writst_test
+package markst_test
 
 import (
 	"flag"
@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"znkr.io/diff/textdiff"
-	"znkr.io/writst/builtin"
-	"znkr.io/writst/eval"
-	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/errcmp"
-	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/analyzer"
-	"znkr.io/writst/syntax/parser"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/builtin"
+	"znkr.io/markst/eval"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/internal/errcmp"
+	"znkr.io/markst/internal/testfile"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/analyzer"
+	"znkr.io/markst/syntax/parser"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -30,7 +30,7 @@ var update = flag.Bool("update", false, "update golden files")
 // sides of the day boundary for the offsets the datetime tests apply.
 var testNow = time.Date(1970, 1, 1, 12, 0, 0, 0, time.UTC)
 
-func TestWritst(t *testing.T) {
+func TestMarkst(t *testing.T) {
 	files, err := filepath.Glob("testdata/**/*.test")
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestApproximationsPreserveOutput(t *testing.T) {
 	}
 
 	// The corpus binds `test` to an assertion helper and two names to error
-	// placeholders. Here the assertions are somebody else's job — TestWritst
+	// placeholders. Here the assertions are somebody else's job — TestMarkst
 	// makes them — but the names still have to resolve the same way, or the two
 	// runs would differ for a reason that has nothing to do with lowering.
 	bindings := map[name.Name]value.Value{

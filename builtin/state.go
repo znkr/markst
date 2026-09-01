@@ -1,8 +1,8 @@
 package builtin
 
 import (
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 // State constructs a state handle. state(key, init: none) identifies a piece of

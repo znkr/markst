@@ -3,7 +3,7 @@ package scanner
 import (
 	"testing"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 func TestSource_Position(t *testing.T) {

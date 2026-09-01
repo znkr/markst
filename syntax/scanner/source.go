@@ -4,7 +4,7 @@ import (
 	"slices"
 	"unicode/utf8"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 // source implements [syntax.Source] using the newline offsets collected during

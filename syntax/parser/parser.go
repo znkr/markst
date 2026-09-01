@@ -1,4 +1,4 @@
-// Package parser implements a recursive descent parser for Writst source code.
+// Package parser implements a recursive descent parser for Markst source code.
 //
 // The entry point is [Parse], which takes a source string and returns a
 // [syntax.RootNode] — the root of an untyped concrete syntax tree (CST).
@@ -29,13 +29,13 @@ import (
 	"slices"
 	"unicode"
 
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/syntax/scanner"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/syntax/scanner"
 )
 
 var stopParse = syntax.SetOf(syntax.KindEnd)
 
-// Parse parses src as a Writst document and returns the root of the concrete
+// Parse parses src as a Markst document and returns the root of the concrete
 // syntax tree. The returned [syntax.RootNode] always has kind
 // [syntax.KindMarkup] and carries a [syntax.Source] for offset-to-position
 // mapping.

@@ -1,9 +1,9 @@
 package expr
 
 import (
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // Instruction is a single SSA operation. Instructions live inside

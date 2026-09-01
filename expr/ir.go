@@ -1,9 +1,9 @@
 package expr
 
 import (
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // This file contains the SSA-form intermediate representation produced by
@@ -34,7 +34,7 @@ import (
 // The construction algorithm is Braun, Buchwald & Hack (2013), "Simple and
 // Efficient Construction of Static Single Assignment Form".
 
-// Module is a fully analyzed writst program: the document body plus every
+// Module is a fully analyzed markst program: the document body plus every
 // closure hoisted out into a top-level [Function].
 type Module struct {
 	Top       *Function     // the document body

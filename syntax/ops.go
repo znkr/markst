@@ -2,7 +2,7 @@ package syntax
 
 import "fmt"
 
-// UnaryOp represents a unary operator in Writst's expression syntax.
+// UnaryOp represents a unary operator in Markst's expression syntax.
 //
 // Each operator has a [Precedence] level used by the parser to resolve
 // ambiguity in expressions like -x + y.
@@ -64,7 +64,7 @@ const (
 	AssocRight              // Right-to-left associativity.
 )
 
-// BinaryOp represents a binary operator in Writst's expression syntax. Each
+// BinaryOp represents a binary operator in Markst's expression syntax. Each
 // operator has a [Precedence] level and [Assoc] (associativity) that the parser
 // uses to build the correct expression tree.
 type BinaryOp int

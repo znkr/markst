@@ -1,16 +1,16 @@
-package writst_test
+package markst_test
 
 import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
-// payload is what a host puts inside a [value.Custom]: a Go value writst knows
+// payload is what a host puts inside a [value.Custom]: a Go value markst knows
 // nothing about and hands straight back to whatever presents the document.
 type payload struct{ path string }
 
@@ -80,7 +80,7 @@ func TestCustomBlockStaysOutOfParagraphs(t *testing.T) {
 #block-elem("diff.go")
 
 After.
-`, writst.WithBindings(customBindings()))
+`, markst.WithBindings(customBindings()))
 
 	custom := findCustom(t, doc)
 	if inParagraph(doc, custom) {
@@ -98,7 +98,7 @@ After.
 // shares its paragraph with the text around it.
 func TestCustomInlineJoinsTheParagraph(t *testing.T) {
 	doc := compile(t, `Before #inline-elem("diff.go") after.
-`, writst.WithBindings(customBindings()))
+`, markst.WithBindings(customBindings()))
 
 	custom := findCustom(t, doc)
 	if !inParagraph(doc, custom) {
@@ -110,7 +110,7 @@ func TestCustomInlineJoinsTheParagraph(t *testing.T) {
 // content, so a document can point at one and Query can find it.
 func TestCustomLabel(t *testing.T) {
 	doc := compile(t, `#block-elem("diff.go") <impl>
-`, writst.WithBindings(customBindings()))
+`, markst.WithBindings(customBindings()))
 
 	custom := findCustom(t, doc)
 	if l := custom.GetLabel(); l == nil || l.Name != name.Make("impl") {
@@ -123,7 +123,7 @@ func TestCustomLabel(t *testing.T) {
 // caused it, in the document, the way any other error does.
 func TestCustomBindingErrorIsDiagnosed(t *testing.T) {
 	diags := diagnostics(t, `#block-elem("notes.txt")
-`, writst.WithName("index.wrt"), writst.WithBindings(customBindings()))
+`, markst.WithName("index.mst"), markst.WithBindings(customBindings()))
 
 	if len(diags) != 1 {
 		t.Fatalf("Compile() diagnostics = %v, want exactly one", diags)
@@ -132,8 +132,8 @@ func TestCustomBindingErrorIsDiagnosed(t *testing.T) {
 	if !strings.Contains(d.Msg, "not a Go file") {
 		t.Errorf("diagnostic = %q, want it to mention the binding's error", d.Msg)
 	}
-	if d.Origin != "index.wrt" {
-		t.Errorf("diagnostic origin = %q, want %q", d.Origin, "index.wrt")
+	if d.Origin != "index.mst" {
+		t.Errorf("diagnostic origin = %q, want %q", d.Origin, "index.mst")
 	}
 	if d.Loc.Start.Line != 1 {
 		t.Errorf("diagnostic line = %d, want 1 — it should point at the argument", d.Loc.Start.Line)

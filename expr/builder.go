@@ -4,9 +4,9 @@ import (
 	"math"
 	"slices"
 
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/value"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/value"
 )
 
 // ModuleBuilder accumulates the per-module state shared by every [Builder]

@@ -7,15 +7,15 @@ import (
 	"slices"
 	"time"
 
-	"znkr.io/writst/builtin"
-	"znkr.io/writst/expr"
-	"znkr.io/writst/internal/graphemes"
-	"znkr.io/writst/internal/joiner"
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/builtin"
+	"znkr.io/markst/expr"
+	"znkr.io/markst/internal/graphemes"
+	"znkr.io/markst/internal/joiner"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 // Option configures an [Eval] run.
@@ -135,7 +135,7 @@ type session struct {
 	// metadataLabels is the subset of labels attached to a [value.Metadata].
 	// A label may legitimately be shared by several elements — `#show <x>:`
 	// styles every one of them — but two metadata under one label leave
-	// znkr.io/writst.Query no way to tell them apart, so that case is warned
+	// znkr.io/markst.Query no way to tell them apart, so that case is warned
 	// about; see [frame.attachLabel].
 	metadataLabels map[name.Name]struct{}
 
@@ -1917,7 +1917,7 @@ func buildFunctionValue(mod *expr.Module, fn *expr.Function, caps []value.Value)
 			// callback, which forward the context they were given. A missing
 			// one means a host called the value directly, with no evaluation
 			// for its diagnostics to land on.
-			return nil, fmt.Errorf("cannot call a writst function outside an evaluation")
+			return nil, fmt.Errorf("cannot call a markst function outside an evaluation")
 		}
 		return runFunction(s, functionCall{mod: mod, fn: fn, args: paramArgs, captures: caps, self: out}), nil
 	}

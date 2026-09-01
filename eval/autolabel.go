@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode"
 
-	"znkr.io/writst/name"
-	"znkr.io/writst/value"
+	"znkr.io/markst/name"
+	"znkr.io/markst/value"
 )
 
 // assignHeadingLabels labels every heading the source left unlabelled, deriving

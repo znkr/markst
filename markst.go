@@ -1,14 +1,14 @@
-package writst
+package markst
 
 import (
 	"strings"
 	"time"
 
-	"znkr.io/writst/eval"
-	"znkr.io/writst/name"
-	"znkr.io/writst/syntax/analyzer"
-	"znkr.io/writst/syntax/parser"
-	"znkr.io/writst/value"
+	"znkr.io/markst/eval"
+	"znkr.io/markst/name"
+	"znkr.io/markst/syntax/analyzer"
+	"znkr.io/markst/syntax/parser"
+	"znkr.io/markst/value"
 )
 
 // Option configures [Compile] and [CompileLibrary].
@@ -49,7 +49,7 @@ func WithLibrary(libs ...*Library) Option {
 }
 
 // WithBindings does for host-defined Go values what [WithLibrary] does for
-// writst-defined ones: each name resolves as if it were a member of the
+// markst-defined ones: each name resolves as if it were a member of the
 // built-in universe. Values must be non-nil; pass a [value.Error] for
 // "declared, but using it must fail".
 func WithBindings(bindings map[name.Name]value.Value) Option {
@@ -97,10 +97,10 @@ func (c *config) evalOpts() []eval.Option {
 	return []eval.Option{eval.WithNow(c.now)}
 }
 
-// Compile turns writst source into a realized document, running the whole
+// Compile turns markst source into a realized document, running the whole
 // pipeline over it: parse, analyze, evaluate, realize. Turning the result into
 // output — HTML, or anything else — is the presenter's job; see
-// [znkr.io/writst/smartquote] for the one part of that a presenter cannot do
+// [znkr.io/markst/smartquote] for the one part of that a presenter cannot do
 // on its own.
 //
 // Every heading in the returned document carries a [value.Label], so there is
@@ -136,8 +136,8 @@ func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) 
 	return doc, warns, nil
 }
 
-// Library is a compiled writst file held for the bindings it defines rather
-// than the document it produces — the way a set of helpers written in writst
+// Library is a compiled markst file held for the bindings it defines rather
+// than the document it produces — the way a set of helpers written in markst
 // is shared between documents.
 //
 // Compile it once and hand it to as many [Compile] calls as you like via

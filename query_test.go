@@ -1,12 +1,12 @@
-package writst_test
+package markst_test
 
 import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst"
-	"znkr.io/writst/name"
-	"znkr.io/writst/value"
+	"znkr.io/markst"
+	"znkr.io/markst/name"
+	"znkr.io/markst/value"
 )
 
 // frontMatter is the shape this API exists for: a document that hands data to
@@ -22,7 +22,7 @@ Body text with #metadata(42) <inline> in the middle of it.
 `
 
 func TestQuery(t *testing.T) {
-	doc, warnings, err := writst.Compile([]byte(frontMatter))
+	doc, warnings, err := markst.Compile([]byte(frontMatter))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestQuery(t *testing.T) {
 		{"inline", value.Int(42)},
 	}
 	for _, tt := range tests {
-		got, ok := writst.Query(doc, name.Make(tt.label))
+		got, ok := markst.Query(doc, name.Make(tt.label))
 		if !ok {
 			t.Errorf("Query(<%s>) not found", tt.label)
 			continue
@@ -56,12 +56,12 @@ func TestQuery(t *testing.T) {
 	// A label nothing carries, and an unlabelled entry — which is in the
 	// document but has no name to ask for it by.
 	for _, label := range []string{"missing", "nobody asked"} {
-		if got, ok := writst.Query(doc, name.Make(label)); ok {
+		if got, ok := markst.Query(doc, name.Make(label)); ok {
 			t.Errorf("Query(<%s>) = %v, want not found", label, value.FormatValue(got))
 		}
 	}
 
-	if got, ok := writst.Query(nil, name.Make("summary")); ok {
+	if got, ok := markst.Query(nil, name.Make("summary")); ok {
 		t.Errorf("Query(nil, …) = %v, want not found", value.FormatValue(got))
 	}
 }
@@ -69,7 +69,7 @@ func TestQuery(t *testing.T) {
 // TestQueryDocumentOrder pins the answer Query gives when a label is reused:
 // the first in document order, and a warning saying so.
 func TestQueryDocumentOrder(t *testing.T) {
-	doc, warnings, err := writst.Compile([]byte("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n"))
+	doc, warnings, err := markst.Compile([]byte("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestQueryDocumentOrder(t *testing.T) {
 	if msg := warnings[0].Error(); !strings.Contains(msg, "used more than once") {
 		t.Errorf("Compile() warning = %q, want one about a reused label", msg)
 	}
-	got, ok := writst.Query(doc, name.Make("dup"))
+	got, ok := markst.Query(doc, name.Make("dup"))
 	if !ok || !value.Equal(got, value.Int(1)) {
 		t.Errorf("Query(<dup>) = %v, %v; want 1, true", got, ok)
 	}
@@ -89,7 +89,7 @@ func TestQueryDocumentOrder(t *testing.T) {
 // document that failed and one that merely has something to say: a warning
 // must not come back as err, or callers would reject documents that are fine.
 func TestCompileWarningIsNotFailure(t *testing.T) {
-	doc, warnings, err := writst.Compile([]byte("= Hello <a> <b>\n"))
+	doc, warnings, err := markst.Compile([]byte("= Hello <a> <b>\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v, want no error", err)
 	}
@@ -103,7 +103,7 @@ func TestCompileWarningIsNotFailure(t *testing.T) {
 
 // TestCompileError checks the other half of that split.
 func TestCompileError(t *testing.T) {
-	_, _, err := writst.Compile([]byte("#metadata()\n"))
+	_, _, err := markst.Compile([]byte("#metadata()\n"))
 	if err == nil {
 		t.Fatal("Compile() = nil, want an error for the missing argument")
 	}

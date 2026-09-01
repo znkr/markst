@@ -16,7 +16,7 @@ func IsIdentContinue(ch rune) bool {
 }
 
 // IsIdent reports whether s is spelled like an identifier, so that it can be
-// written bare where writst expects a name — a dictionary key, a named
+// written bare where markst expects a name — a dictionary key, a named
 // argument. Keywords are not excluded: `let` is an identifier by this measure.
 func IsIdent(s string) bool {
 	for i, ch := range s {

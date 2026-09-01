@@ -6,8 +6,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var (

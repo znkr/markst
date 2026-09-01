@@ -7,9 +7,9 @@ import (
 
 	"znkr.io/diff/textdiff"
 
-	"znkr.io/writst/internal/testfile"
-	"znkr.io/writst/syntax/internal/format"
-	"znkr.io/writst/syntax/parser"
+	"znkr.io/markst/internal/testfile"
+	"znkr.io/markst/syntax/internal/format"
+	"znkr.io/markst/syntax/parser"
 )
 
 var update = flag.Bool("update", false, "update golden files")

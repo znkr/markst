@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/types"
+	"znkr.io/markst/types"
 )
 
-// None is the unit value, written as `none` in Writst.
+// None is the unit value, written as `none` in Markst.
 type None struct{}
 
-// Auto is the automatic value, written as `auto` in Writst.
+// Auto is the automatic value, written as `auto` in Markst.
 type Auto struct{}
 
 // Bool is a boolean value.

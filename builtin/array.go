@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"slices"
 
-	"znkr.io/writst/internal/joiner"
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/joiner"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var (

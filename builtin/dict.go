@@ -1,10 +1,10 @@
 package builtin
 
 import (
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
-	value0 "znkr.io/writst/value"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
+	value0 "znkr.io/markst/value"
 )
 
 var (

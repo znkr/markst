@@ -1,8 +1,8 @@
 package value
 
 import (
-	"znkr.io/writst/internal/ordered"
-	"znkr.io/writst/types"
+	"znkr.io/markst/internal/ordered"
+	"znkr.io/markst/types"
 )
 
 // Array is an ordered sequence of values.

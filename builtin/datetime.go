@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var (

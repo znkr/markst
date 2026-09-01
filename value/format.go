@@ -5,8 +5,8 @@ import (
 	"unicode"
 
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/internal/formatter"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/internal/formatter"
+	"znkr.io/markst/syntax"
 )
 
 // FormatContent returns a human-readable string representation of document

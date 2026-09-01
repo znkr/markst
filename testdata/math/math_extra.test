@@ -107,7 +107,7 @@ $pi$
 --- unknown-ident-only-in-universe ---
 // A name math does not have but the universe does was reached for in the wrong
 // mode, and the hints say how to get at it. This is upstream's
-// `issue-2885-math-var-only-in-global` with a name writst implements.
+// `issue-2885-math-var-only-in-global` with a name markst implements.
 // Error: 2-6 unknown variable: emph
 // Hint: 2-6 `emph` is not available directly in math, but is in the standard library
 // Hint: 2-6 to access `emph` in code mode you can add a hash: `#emph`

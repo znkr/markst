@@ -145,7 +145,7 @@ Before #html.elem("br") after.
 │ ]
 
 --- html-elem-let-function ---
-// What a library defines: an admonition written in writst.
+// What a library defines: an admonition written in markst.
 #let admonition(kind, title, body) = html.elem(
   "div",
   attrs: (class: "admonition " + kind),

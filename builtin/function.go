@@ -1,8 +1,8 @@
 package builtin
 
 import (
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 var FunctionWith = &value.Function{

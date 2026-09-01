@@ -4,11 +4,11 @@ package symbols
 import (
 	"slices"
 
-	"znkr.io/writst/name"
+	"znkr.io/markst/name"
 )
 
-//go:generate go tool znkr.io/writst/internal/symbols/symbolsgen Symbols data/sym.txt
-//go:generate go tool znkr.io/writst/internal/symbols/symbolsgen Emoji data/emoji.txt
+//go:generate go tool znkr.io/markst/internal/symbols/symbolsgen Symbols data/sym.txt
+//go:generate go tool znkr.io/markst/internal/symbols/symbolsgen Emoji data/emoji.txt
 
 type Module struct {
 	bindings map[name.Name]Binding

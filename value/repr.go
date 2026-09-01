@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
-// Repr renders v the way the `repr` function does: writst source that would
+// Repr renders v the way the `repr` function does: markst source that would
 // produce the same value, as far as one exists. It is not the golden-file dump
 // format — see [FormatValue] for that.
 func Repr(v Value) string {

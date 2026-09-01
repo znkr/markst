@@ -156,7 +156,7 @@
 }
 #f()
 
---- closure-capture-mut-false-positive (skip: handled correctly by writst) ---
+--- closure-capture-mut-false-positive (skip: handled correctly by markst) ---
 // Test the closure capture error on a non-mutating field call.
 #let sx = symbol("p", ("push", sym.tilde))
 #let f() = {

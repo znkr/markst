@@ -1,10 +1,10 @@
 package builtin
 
 import (
-	"znkr.io/writst/internal/names"
-	"znkr.io/writst/name"
-	"znkr.io/writst/types"
-	"znkr.io/writst/value"
+	"znkr.io/markst/internal/names"
+	"znkr.io/markst/name"
+	"znkr.io/markst/types"
+	"znkr.io/markst/value"
 )
 
 // The content elements. Each is a [value.Element]: it reports itself as a
@@ -271,7 +271,7 @@ func imageImpl(_ *value.FunctionCallContext, args []value.Value, named value.Nam
 
 // Metadata is the metadata element; it builds a [value.Metadata]. It produces
 // no output: its value rides along in the document, to be found again by the
-// label attached to it (see znkr.io/writst.Query).
+// label attached to it (see znkr.io/markst.Query).
 var Metadata = value.NewElement[*value.Metadata](value.Function{
 	Name: "metadata",
 	Positional: []value.Param{

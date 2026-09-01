@@ -1,4 +1,4 @@
-package writst_test
+package markst_test
 
 import (
 	"errors"
@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"znkr.io/writst"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst"
+	"znkr.io/markst/syntax"
 )
 
 // threeErrors is a document with one unknown variable per construct, spread
@@ -18,13 +18,13 @@ const threeErrors = "#foo\n\n#bar(1)\n\n#let x = baz\n"
 // caller holding only Compile's return values can say where each problem is,
 // without going back to the source bytes.
 func TestCompileDiagnosticsResolvePositions(t *testing.T) {
-	_, _, err := writst.Compile([]byte(threeErrors))
+	_, _, err := markst.Compile([]byte(threeErrors))
 	if err == nil {
 		t.Fatal("Compile() = nil error, want three errors")
 	}
-	var diags writst.DiagnosticList
+	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
-		t.Fatalf("Compile() error is %T, want writst.DiagnosticList", err)
+		t.Fatalf("Compile() error is %T, want markst.DiagnosticList", err)
 	}
 
 	want := []struct {
@@ -51,8 +51,8 @@ func TestCompileDiagnosticsResolvePositions(t *testing.T) {
 		if got.Msg != w.msg {
 			t.Errorf("diags[%d].Msg = %q, want %q", i, got.Msg, w.msg)
 		}
-		if got.Severity != writst.Error {
-			t.Errorf("diags[%d].Severity = %v, want %v", i, got.Severity, writst.Error)
+		if got.Severity != markst.Error {
+			t.Errorf("diags[%d].Severity = %v, want %v", i, got.Severity, markst.Error)
 		}
 		// The offsets must still agree with the positions they resolved from.
 		if text := threeErrors[got.Loc.Span.Start:got.Loc.Span.End]; text != w.text {
@@ -65,7 +65,7 @@ func TestCompileDiagnosticsResolvePositions(t *testing.T) {
 // this: an Error method that returned only the first message, so the default
 // %v of a compile failure silently discarded the rest.
 func TestDiagnosticListReportsEveryDiagnostic(t *testing.T) {
-	_, _, err := writst.Compile([]byte(threeErrors))
+	_, _, err := markst.Compile([]byte(threeErrors))
 	if err == nil {
 		t.Fatal("Compile() = nil error, want three errors")
 	}
@@ -83,7 +83,7 @@ func TestDiagnosticListReportsEveryDiagnostic(t *testing.T) {
 // TestDiagnosticListEmpty covers the other half of the same defect: the old
 // Error method indexed [0] unguarded.
 func TestDiagnosticListEmpty(t *testing.T) {
-	var empty writst.DiagnosticList
+	var empty markst.DiagnosticList
 	got := empty.Error() // must not panic
 	if got == "" {
 		t.Error("empty DiagnosticList.Error() = \"\", want a message")
@@ -108,8 +108,8 @@ func TestDiagnosticAtEndOfInput(t *testing.T) {
 		{"multiline_no_trailing_newline", "a\n\n#let x =", 3, 11},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := writst.Compile([]byte(tt.src))
-			var diags writst.DiagnosticList
+			_, _, err := markst.Compile([]byte(tt.src))
+			var diags markst.DiagnosticList
 			if !errors.As(err, &diags) || len(diags) == 0 {
 				t.Fatalf("Compile(%q) = %v, want at least one error", tt.src, err)
 			}
@@ -134,8 +134,8 @@ func TestDiagnosticAtEndOfInput(t *testing.T) {
 // realization, which works on content that has lost every link back to the
 // syntax it came from and so has nothing to point at.
 func TestDiagnosticWithoutLocation(t *testing.T) {
-	_, _, err := writst.Compile([]byte("#show heading: (a, b) => a\n= T\n"))
-	var diags writst.DiagnosticList
+	_, _, err := markst.Compile([]byte("#show heading: (a, b) => a\n= T\n"))
+	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) || len(diags) != 1 {
 		t.Fatalf("Compile() = %v, want one error", err)
 	}
@@ -151,7 +151,7 @@ func TestDiagnosticWithoutLocation(t *testing.T) {
 // TestCompileWarningsCarryPositionsAndHints checks that warnings get the same
 // treatment as errors, hints included.
 func TestCompileWarningsCarryPositionsAndHints(t *testing.T) {
-	_, warnings, err := writst.Compile([]byte("a\n#metadata(1) <l>\n#metadata(2) <l>"))
+	_, warnings, err := markst.Compile([]byte("a\n#metadata(1) <l>\n#metadata(2) <l>"))
 	if err != nil {
 		t.Fatalf("Compile() = %v, want no error", err)
 	}
@@ -159,8 +159,8 @@ func TestCompileWarningsCarryPositionsAndHints(t *testing.T) {
 		t.Fatalf("got %d warnings, want 1: %v", len(warnings), warnings)
 	}
 	w := warnings[0]
-	if w.Severity != writst.Warning {
-		t.Errorf("Severity = %v, want %v", w.Severity, writst.Warning)
+	if w.Severity != markst.Warning {
+		t.Errorf("Severity = %v, want %v", w.Severity, markst.Warning)
 	}
 	if want := (syntax.Position{Line: 3, Column: 2}); w.Loc.Start != want {
 		t.Errorf("Loc.Start = %v, want %v", w.Loc.Start, want)
@@ -173,10 +173,10 @@ func TestCompileWarningsCarryPositionsAndHints(t *testing.T) {
 func TestFormatDiagnostics(t *testing.T) {
 	// origin is per-diagnostic, so the same list is built twice: once as a
 	// compile that knew what the file was called, once as one that did not.
-	diags := func(origin string) []writst.Diagnostic {
-		return []writst.Diagnostic{
+	diags := func(origin string) []markst.Diagnostic {
+		return []markst.Diagnostic{
 			{
-				Severity: writst.Error,
+				Severity: markst.Error,
 				Origin:   origin,
 				Loc: syntax.Location{
 					Span:  syntax.Span{Start: 20, End: 23},
@@ -186,7 +186,7 @@ func TestFormatDiagnostics(t *testing.T) {
 				Msg: "unknown variable: foo",
 			},
 			{
-				Severity: writst.Error,
+				Severity: markst.Error,
 				Origin:   origin,
 				Loc: syntax.Location{
 					Span:  syntax.Span{Start: 40, End: 44},
@@ -194,10 +194,10 @@ func TestFormatDiagnostics(t *testing.T) {
 					End:   syntax.Position{Line: 7, Column: 5},
 				},
 				Msg:   "missing argument: body",
-				Hints: []writst.Hint{{Msg: "dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"}},
+				Hints: []markst.Hint{{Msg: "dates must be written as\ndatetime(year: 2024, month: 2, day: 29)"}},
 			},
 			{
-				Severity: writst.Warning,
+				Severity: markst.Warning,
 				Origin:   origin,
 				Loc: syntax.Location{
 					Span:  syntax.Span{Start: 50, End: 51},
@@ -207,7 +207,7 @@ func TestFormatDiagnostics(t *testing.T) {
 				Msg: "content labelled multiple times",
 			},
 			{
-				Severity: writst.Error,
+				Severity: markst.Error,
 				Origin:   origin,
 				Msg:      "cannot convert integer to content",
 			},
@@ -246,7 +246,7 @@ cannot convert integer to content
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			if err := writst.FormatDiagnostics(&sb, diags(tt.docName)); err != nil {
+			if err := markst.FormatDiagnostics(&sb, diags(tt.docName)); err != nil {
 				t.Fatalf("FormatDiagnostics() = %v", err)
 			}
 			if got := sb.String(); got != tt.want {
@@ -260,8 +260,8 @@ cannot convert integer to content
 // into another source prints the crossings that led to it, nearest the failure
 // last.
 func TestFormatDiagnosticsTrace(t *testing.T) {
-	diags := []writst.Diagnostic{{
-		Severity: writst.Error,
+	diags := []markst.Diagnostic{{
+		Severity: markst.Error,
 		Origin:   "lib.wr",
 		Loc: syntax.Location{
 			Span:  syntax.Span{Start: 20, End: 23},
@@ -269,7 +269,7 @@ func TestFormatDiagnosticsTrace(t *testing.T) {
 			End:   syntax.Position{Line: 5, Column: 12},
 		},
 		Msg: "invalid date: 2024-13-01",
-		Trace: []writst.Frame{{
+		Trace: []markst.Frame{{
 			Origin: "doc.wr",
 			Loc: syntax.Location{
 				Span:  syntax.Span{Start: 1, End: 8},
@@ -281,7 +281,7 @@ func TestFormatDiagnosticsTrace(t *testing.T) {
 	}}
 
 	var sb strings.Builder
-	if err := writst.FormatDiagnostics(&sb, diags); err != nil {
+	if err := markst.FormatDiagnostics(&sb, diags); err != nil {
 		t.Fatalf("FormatDiagnostics() = %v", err)
 	}
 	want := `lib.wr:5:9: invalid date: 2024-13-01
@@ -296,13 +296,13 @@ func TestFormatDiagnosticsTrace(t *testing.T) {
 // compile a document, hold only Compile's return values, and render them.
 // Nothing here touches the source bytes.
 func TestFormatDiagnosticsEndToEnd(t *testing.T) {
-	_, _, err := writst.Compile([]byte(threeErrors), writst.WithName("doc.wr"))
-	var diags writst.DiagnosticList
+	_, _, err := markst.Compile([]byte(threeErrors), markst.WithName("doc.wr"))
+	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
-		t.Fatalf("Compile() error is %T, want writst.DiagnosticList", err)
+		t.Fatalf("Compile() error is %T, want markst.DiagnosticList", err)
 	}
 	var sb strings.Builder
-	if err := writst.FormatDiagnostics(&sb, diags); err != nil {
+	if err := markst.FormatDiagnostics(&sb, diags); err != nil {
 		t.Fatalf("FormatDiagnostics() = %v", err)
 	}
 	want := `doc.wr:1:2: unknown variable: foo

@@ -2,7 +2,7 @@ package value
 
 import (
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/syntax"
+	"znkr.io/markst/syntax"
 )
 
 // Equal compares two values using the same promotion rules as the == operator

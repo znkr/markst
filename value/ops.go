@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/woodsbury/decimal128"
-	"znkr.io/writst/syntax"
-	"znkr.io/writst/types"
+	"znkr.io/markst/syntax"
+	"znkr.io/markst/types"
 )
 
 var ErrValueTooLarge = errors.New("value is too large")

@@ -18,7 +18,7 @@ type htmlTag struct {
 	void  bool
 }
 
-// htmlTags is what writst knows about HTML: the elements whose defaults differ
+// htmlTags is what markst knows about HTML: the elements whose defaults differ
 // from an unknown element's. Everything absent from it — a custom element such
 // as `my-callout`, or a tag added to HTML after this table was written — is
 // treated the way a browser treats an element it does not recognize: inline,

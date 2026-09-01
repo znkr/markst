@@ -2,7 +2,7 @@
 
 package symbols
 
-import "znkr.io/writst/name"
+import "znkr.io/markst/name"
 
 var (
 	n_Symbols_AA            = name.Make("AA")
