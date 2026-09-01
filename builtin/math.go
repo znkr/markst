@@ -382,7 +382,7 @@ func equationImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 	// realization pass folds into the math leaves it covers. Constructing an
 	// equation with one would silently drop it, so it is an error instead.
 	for _, field := range mathStyleFields {
-		if named.IsSet(field) {
+		if _, ok := named.Args.Get(field); ok {
 			return nil, value.ArgErrorNamedPairf(field, "%s is only settable with a set rule", field)
 		}
 	}
@@ -513,8 +513,8 @@ func cancelImpl(_ *value.FunctionCallContext, args []value.Value, named value.Na
 		return nil, value.ArgErrorPosf(0, "%s", err.Error())
 	}
 	c := &value.MathCancel{Body: body}
-	if named.IsSet(names.Angle) {
-		c.Angle = named.Get(names.Angle)
+	if angle, ok := named.Lookup(names.Angle); ok {
+		c.Angle = angle
 	}
 	return c, nil
 }

@@ -61,7 +61,7 @@ var (
 )
 
 func intImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
-	if args[0].Type() != types.Str && named.IsSet(names.Base) {
+	if _, ok := named.Args.Get(names.Base); ok && args[0].Type() != types.Str {
 		return nil, value.ArgErrorNamedf(names.Base, "base is only supported for strings")
 	}
 	switch v := args[0].(type) {

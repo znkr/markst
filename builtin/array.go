@@ -356,10 +356,10 @@ func arrayAtImpl(call *value.FunctionCallContext, args []value.Value, named valu
 		index += value.Int(len(arr.Elems))
 	}
 	if index < 0 || index >= value.Int(len(arr.Elems)) {
-		def := named.Get(names.Default)
+		def, hasDef := named.Lookup(names.Default)
 		var suffix string
 		if call.Setter == nil {
-			if def != (value.None{}) {
+			if hasDef {
 				return def, nil
 			}
 			suffix = " and no default value was specified"
@@ -399,7 +399,7 @@ func arrayPositionImpl(call *value.FunctionCallContext, args []value.Value, name
 func arrayFirstImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	if len(arr.Elems) == 0 {
-		if v := named.Get(names.Default); v != (value.None{}) {
+		if v, ok := named.Lookup(names.Default); ok {
 			return v, nil
 		}
 		return nil, value.ArgErrorPosf(0, "array is empty")
@@ -415,7 +415,7 @@ func arrayFirstImpl(call *value.FunctionCallContext, args []value.Value, named v
 func arrayLastImpl(call *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	if len(arr.Elems) == 0 {
-		if v := named.Get(names.Default); v != (value.None{}) {
+		if v, ok := named.Lookup(names.Default); ok {
 			return v, nil
 		}
 		return nil, value.ArgErrorPosf(0, "array is empty")
@@ -461,7 +461,7 @@ func arrayRemoveImpl(_ *value.FunctionCallContext, args []value.Value, named val
 		index += value.Int(len(arr.Elems))
 	}
 	if index < 0 || index >= value.Int(len(arr.Elems)) {
-		if v := named.Get(names.Default); v != (value.None{}) {
+		if v, ok := named.Lookup(names.Default); ok {
 			return v, nil
 		}
 		return nil, value.ArgErrorPosf(1, "index out of range: %d", index)
@@ -485,7 +485,7 @@ func arrayPopImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 func arrayJoinImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	if len(arr.Elems) == 0 {
-		if v := named.Get(names.Default); v != (value.None{}) {
+		if v, ok := named.Lookup(names.Default); ok {
 			return v, nil
 		}
 		return value.None{}, nil
@@ -542,7 +542,7 @@ func arraySliceImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 	var end value.Int
 	switch v := args[2].(type) {
 	case value.Int:
-		if named.IsSet(names.Count) {
+		if _, ok := named.Lookup(names.Count); ok {
 			return nil, fmt.Errorf("`end` and `count` are mutually exclusive")
 		}
 		end = v
@@ -553,7 +553,7 @@ func arraySliceImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 			return nil, fmt.Errorf("array index out of bounds (index: %d, len: %d)", v, length)
 		}
 	case value.None:
-		if count := named.Get(names.Count); count != (value.None{}) {
+		if count, ok := named.Lookup(names.Count); ok {
 			count := count.(value.Int)
 			if count < 0 {
 				return nil, value.ArgErrorNamedf(names.Count, "count must be non-negative")
@@ -576,10 +576,11 @@ func arraySliceImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 func arrayProductImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	if len(arr.Elems) == 0 {
-		if !named.IsSet(names.Default) {
+		def, ok := named.Lookup(names.Default)
+		if !ok {
 			return nil, value.ArgErrorPosf(0, "cannot calculate product of empty array with no default")
 		}
-		return named.Get(names.Default), nil
+		return def, nil
 	}
 	product := arr.Elems[0]
 	for _, v := range arr.Elems[1:] {
@@ -595,10 +596,11 @@ func arrayProductImpl(_ *value.FunctionCallContext, args []value.Value, named va
 func arraySumImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	arr := args[0].(*value.Array)
 	if len(arr.Elems) == 0 {
-		if !named.IsSet(names.Default) {
+		def, ok := named.Lookup(names.Default)
+		if !ok {
 			return nil, value.ArgErrorPosf(0, "cannot calculate sum of empty array with no default")
 		}
-		return named.Get(names.Default), nil
+		return def, nil
 	}
 	sum := arr.Elems[0]
 	for _, v := range arr.Elems[1:] {
@@ -760,7 +762,9 @@ func arraySortedImpl(call *value.FunctionCallContext, args []value.Value, named 
 	arr := args[0].(*value.Array)
 	sortedElems := slices.Clone(arr.Elems)
 
-	if !named.IsSet(names.Key) && !named.IsSet(names.By) {
+	_, hasKey := named.Lookup(names.Key)
+	_, hasBy := named.Lookup(names.By)
+	if !hasKey && !hasBy {
 		var err error
 		slices.SortStableFunc(sortedElems, func(a, b value.Value) int {
 			cmp, err0 := value.Compare(a, b)

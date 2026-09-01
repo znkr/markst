@@ -86,32 +86,33 @@ type Param struct {
 }
 
 // NamedArgsWithDefaults pairs call-site named arguments with the function's
-// default values, providing [Get] and [IsSet] for convenient access.
+// default values, providing [Get] and [Lookup] for convenient access.
 type NamedArgsWithDefaults struct {
 	Args     NamedArgs
 	Defaults NamedParams
 }
 
-// IsSet reports whether the named argument was explicitly provided at the call site.
-func (n *NamedArgsWithDefaults) IsSet(name name.Name) bool {
-	_, ok := n.Args.Get(name)
-	return ok
-}
-
 // Get returns the value of a named argument, falling back to its default
 // value if not explicitly provided, or [None] if there is no default.
-func (n *NamedArgsWithDefaults) Get(name name.Name) Value {
-	v, ok := n.Args.Get(name)
-	if !ok {
-		def, ok := n.Defaults[name]
-		if ok {
-			v = def.Default
-		}
-		if v == nil {
-			v = None{}
-		}
-	}
+func (n NamedArgsWithDefaults) Get(name name.Name) Value {
+	v, _ := n.Lookup(name)
 	return v
+}
+
+// Lookup returns the value of a named argument: the call-site argument if one
+// was given, otherwise the parameter's declared default. ok is false when
+// neither exists, and the value is then [None].
+//
+// ok is not "written at the call site" — a parameter left at a declared
+// default reports true. Read Args directly to ask that.
+func (n NamedArgsWithDefaults) Lookup(name name.Name) (Value, bool) {
+	if v, ok := n.Args.Get(name); ok {
+		return v, true
+	}
+	if def, ok := n.Defaults[name]; ok && def.Default != nil {
+		return def.Default, true
+	}
+	return None{}, false
 }
 
 // With returns a copy of the function with args pre-bound (partial application).

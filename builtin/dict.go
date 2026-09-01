@@ -75,8 +75,8 @@ func dictRemoveImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 	key := args[1].(value.Str)
 	rem, ok := dict.Elems.Delete(key)
 	if !ok {
-		if named.IsSet(names.Default) {
-			return named.Get(names.Default), nil
+		if def, hasDef := named.Lookup(names.Default); hasDef {
+			return def, nil
 		}
 		return nil, value.ArgErrorPosf(1, "dictionary does not contain key %q and no default value was specified", key)
 	}
@@ -88,8 +88,8 @@ func dictAtImpl(fc *value.FunctionCallContext, args []value.Value, named value.N
 	key := args[1].(value.Str)
 	val, ok := dict.Elems.Get(key)
 	if !ok {
-		if named.IsSet(names.Default) {
-			return named.Get(names.Default), nil
+		if def, hasDef := named.Lookup(names.Default); hasDef {
+			return def, nil
 		}
 		return nil, value.ArgErrorPosf(1, "dictionary does not contain key %q and no default value was specified", key)
 	}

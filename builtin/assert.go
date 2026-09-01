@@ -17,7 +17,7 @@ var Assert = &value.Function{
 		{Name: "condition", Type: types.SetOf(types.Bool)},
 	},
 	Named: value.NamedParams{
-		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str), Default: value.None{}},
+		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str)},
 	},
 	F: assertImpl,
 	Scope: map[name.Name]value.Value{
@@ -33,7 +33,7 @@ var AssertEq = &value.Function{
 		{Name: "right", Type: types.Any},
 	},
 	Named: value.NamedParams{
-		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str), Default: value.None{}},
+		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str)},
 	},
 	F: assertEqImpl,
 }
@@ -45,7 +45,7 @@ var AssertNe = &value.Function{
 		{Name: "right", Type: types.Any},
 	},
 	Named: value.NamedParams{
-		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str), Default: value.None{}},
+		names.Message: value.Param{Name: "message", Type: types.SetOf(types.Str)},
 	},
 	F: assertNeImpl,
 }
@@ -82,10 +82,11 @@ func assertNeImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 
 // assertMessage returns the explicit `message` argument, if one was provided.
 func assertMessage(named value.NamedArgsWithDefaults) (string, bool) {
-	if !named.IsSet(names.Message) {
+	msg, ok := named.Lookup(names.Message)
+	if !ok {
 		return "", false
 	}
-	return string(named.Get(names.Message).(value.Str)), true
+	return string(msg.(value.Str)), true
 }
 
 // repr renders a value the way the `repr` built-in does, for diagnostics.

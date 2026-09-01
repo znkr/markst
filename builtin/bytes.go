@@ -60,7 +60,7 @@ func bytesSliceImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 	var end value.Int
 	switch v := args[2].(type) {
 	case value.Int:
-		if named.IsSet(names.Count) {
+		if _, ok := named.Lookup(names.Count); ok {
 			return nil, value.ArgErrorNamedf(names.Count, "count is only supported when end is not specified")
 		}
 		end = v
@@ -68,7 +68,7 @@ func bytesSliceImpl(_ *value.FunctionCallContext, args []value.Value, named valu
 			end += value.Int(len(bytes))
 		}
 	case value.None:
-		if count := named.Get(names.Count); count != (value.None{}) {
+		if count, ok := named.Lookup(names.Count); ok {
 			count := count.(value.Int)
 			if count < 0 {
 				return nil, value.ArgErrorNamedf(names.Count, "count must be non-negative")

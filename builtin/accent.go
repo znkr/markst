@@ -143,8 +143,8 @@ func newAccent(base value.Value, accent rune, named value.NamedArgsWithDefaults)
 		Accent:  string(accent),
 		Dotless: bool(named.Get(names.Dotless).(value.Bool)),
 	}
-	if named.IsSet(names.Size) {
-		a.Size = named.Get(names.Size)
+	if size, ok := named.Lookup(names.Size); ok {
+		a.Size = size
 	}
 	return a, nil
 }
