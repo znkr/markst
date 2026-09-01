@@ -42,23 +42,57 @@ func underlineMarkupImpl(_ *value.FunctionCallContext, args []value.Value, _ val
 }
 
 // Table is the table element; it builds a [value.Table] from its content
-// children.
+// children, which are the table's cells in row-major order.
 var Table = value.NewElement[*value.Table](value.Function{
 	Name: "table",
 	Positional: []value.Param{
 		{Name: "children", Type: types.SetOf(types.Content)},
 	},
 	Sink: new(0),
-	F:    tableImpl,
+	Named: value.NamedParams{
+		names.Columns: {Name: "columns", Type: types.SetOf(types.Int), Default: value.Int(1)},
+	},
+	Scope: map[name.Name]value.Value{names.Header: TableHeader},
+	F:     tableImpl,
 })
 
-func tableImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+func tableImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	sink := args[0].(*value.Arguments)
-	children := make([]value.Content, len(sink.Positional))
-	for i, v := range sink.Positional {
-		children[i] = value.ToContent(v)
+	if err := rejectSinkNamed(sink); err != nil {
+		return nil, err
 	}
-	return &value.Table{Children: children}, nil
+	columns := int(named.Get(names.Columns).(value.Int))
+	if columns < 1 {
+		return nil, value.ArgErrorNamedf(names.Columns, "columns must be at least 1, found %d", columns)
+	}
+	return &value.Table{Columns: columns, Children: tableCells(sink)}, nil
+}
+
+// TableHeader is a table's header rows (`table.header`); it builds a
+// [value.TableHeader].
+var TableHeader = value.NewElement[*value.TableHeader](value.Function{
+	Name: "table.header",
+	Positional: []value.Param{
+		{Name: "children", Type: types.SetOf(types.Content)},
+	},
+	Sink: new(0),
+	F:    tableHeaderImpl,
+})
+
+func tableHeaderImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	sink := args[0].(*value.Arguments)
+	if err := rejectSinkNamed(sink); err != nil {
+		return nil, err
+	}
+	return &value.TableHeader{Children: tableCells(sink)}, nil
+}
+
+func tableCells(sink *value.Arguments) []value.Content {
+	cells := make([]value.Content, len(sink.Positional))
+	for i, v := range sink.Positional {
+		cells[i] = value.ToContent(v)
+	}
+	return cells
 }
 
 var Footnote = value.NewElement[*value.Footnote](value.Function{

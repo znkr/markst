@@ -146,7 +146,7 @@
     for _ in range(3) [B]
   )
 }
-│ #document[#table(A, #par[BBB])]
+│ #document[#table(columns: 1, A, #par[BBB])]
 
 --- loop-break-join-in-first-arg-strings ---
 // Test that the second argument is evaluated during break flow.

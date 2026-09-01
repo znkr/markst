@@ -151,7 +151,18 @@ type TermItem struct {
 	Label       *Label
 }
 
+// Table is a grid of cells given in row-major order. Columns is how many cells
+// make up a row; a [TableHeader] child contributes header rows instead of body
+// rows.
 type Table struct {
+	Columns  int       `writst:"required"`
+	Children []Content `writst:"required"`
+	Label    *Label
+}
+
+// TableHeader is a run of header rows inside a [Table]. Its cells are laid out
+// in the table's columns and start on a new row.
+type TableHeader struct {
 	Children []Content `writst:"required"`
 	Label    *Label
 }
@@ -336,32 +347,33 @@ type Document struct {
 	Body  Content `writst:"required"`
 }
 
-func (*Sequence) aValue()   {}
-func (*Heading) aValue()    {}
-func (*Text) aValue()       {}
-func (*Raw) aValue()        {}
-func (*Strong) aValue()     {}
-func (*Emph) aValue()       {}
-func (*Underline) aValue()  {}
-func (*Par) aValue()        {}
-func (*Linebreak) aValue()  {}
-func (*Parbreak) aValue()   {}
-func (*HSpace) aValue()     {}
-func (*SmartQuote) aValue() {}
-func (*Link) aValue()       {}
-func (*Ref) aValue()        {}
-func (*List) aValue()       {}
-func (*ListItem) aValue()   {}
-func (*Enum) aValue()       {}
-func (*EnumItem) aValue()   {}
-func (*Terms) aValue()      {}
-func (*TermItem) aValue()   {}
-func (*Table) aValue()      {}
-func (*Footnote) aValue()   {}
-func (*Image) aValue()      {}
-func (*HTMLElem) aValue()   {}
-func (*Metadata) aValue()   {}
-func (*Document) aValue()   {}
+func (*Sequence) aValue()    {}
+func (*Heading) aValue()     {}
+func (*Text) aValue()        {}
+func (*Raw) aValue()         {}
+func (*Strong) aValue()      {}
+func (*Emph) aValue()        {}
+func (*Underline) aValue()   {}
+func (*Par) aValue()         {}
+func (*Linebreak) aValue()   {}
+func (*Parbreak) aValue()    {}
+func (*HSpace) aValue()      {}
+func (*SmartQuote) aValue()  {}
+func (*Link) aValue()        {}
+func (*Ref) aValue()         {}
+func (*List) aValue()        {}
+func (*ListItem) aValue()    {}
+func (*Enum) aValue()        {}
+func (*EnumItem) aValue()    {}
+func (*Terms) aValue()       {}
+func (*TermItem) aValue()    {}
+func (*Table) aValue()       {}
+func (*TableHeader) aValue() {}
+func (*Footnote) aValue()    {}
+func (*Image) aValue()       {}
+func (*HTMLElem) aValue()    {}
+func (*Metadata) aValue()    {}
+func (*Document) aValue()    {}
 
 func (*Equation) aValue()       {}
 func (*MathText) aValue()       {}
@@ -379,32 +391,33 @@ func (*MathVec) aValue()        {}
 func (*MathCases) aValue()      {}
 func (*MathMat) aValue()        {}
 
-func (Sequence) aContent()    {}
-func (*Heading) aContent()    {}
-func (*Text) aContent()       {}
-func (*Raw) aContent()        {}
-func (*Strong) aContent()     {}
-func (*Emph) aContent()       {}
-func (*Underline) aContent()  {}
-func (*Par) aContent()        {}
-func (*Linebreak) aContent()  {}
-func (*Parbreak) aContent()   {}
-func (*HSpace) aContent()     {}
-func (*SmartQuote) aContent() {}
-func (*Link) aContent()       {}
-func (*Ref) aContent()        {}
-func (*List) aContent()       {}
-func (*ListItem) aContent()   {}
-func (*Enum) aContent()       {}
-func (*EnumItem) aContent()   {}
-func (*Terms) aContent()      {}
-func (*TermItem) aContent()   {}
-func (*Table) aContent()      {}
-func (*Footnote) aContent()   {}
-func (*Image) aContent()      {}
-func (*HTMLElem) aContent()   {}
-func (*Metadata) aContent()   {}
-func (*Document) aContent()   {}
+func (Sequence) aContent()     {}
+func (*Heading) aContent()     {}
+func (*Text) aContent()        {}
+func (*Raw) aContent()         {}
+func (*Strong) aContent()      {}
+func (*Emph) aContent()        {}
+func (*Underline) aContent()   {}
+func (*Par) aContent()         {}
+func (*Linebreak) aContent()   {}
+func (*Parbreak) aContent()    {}
+func (*HSpace) aContent()      {}
+func (*SmartQuote) aContent()  {}
+func (*Link) aContent()        {}
+func (*Ref) aContent()         {}
+func (*List) aContent()        {}
+func (*ListItem) aContent()    {}
+func (*Enum) aContent()        {}
+func (*EnumItem) aContent()    {}
+func (*Terms) aContent()       {}
+func (*TermItem) aContent()    {}
+func (*Table) aContent()       {}
+func (*TableHeader) aContent() {}
+func (*Footnote) aContent()    {}
+func (*Image) aContent()       {}
+func (*HTMLElem) aContent()    {}
+func (*Metadata) aContent()    {}
+func (*Document) aContent()    {}
 
 func (*Equation) aContent()       {}
 func (*MathText) aContent()       {}
@@ -423,34 +436,34 @@ func (*MathCases) aContent()      {}
 func (*MathMat) aContent()        {}
 
 // Name returns the element name, matching the constructor function used to
-// build it. Table has no dedicated diagnostic name and reports the generic
-// "content".
-func (Sequence) Name() string    { return "sequence" }
-func (*Heading) Name() string    { return "heading" }
-func (*Strong) Name() string     { return "strong" }
-func (*Emph) Name() string       { return "emph" }
-func (*Underline) Name() string  { return "underline" }
-func (*Par) Name() string        { return "par" }
-func (*Text) Name() string       { return "text" }
-func (*Raw) Name() string        { return "raw" }
-func (*Linebreak) Name() string  { return "linebreak" }
-func (*Parbreak) Name() string   { return "parbreak" }
-func (*HSpace) Name() string     { return "h" }
-func (*SmartQuote) Name() string { return "smartquote" }
-func (*Link) Name() string       { return "link" }
-func (*Ref) Name() string        { return "ref" }
-func (*List) Name() string       { return "list" }
-func (*ListItem) Name() string   { return "list.item" }
-func (*Enum) Name() string       { return "enum" }
-func (*EnumItem) Name() string   { return "enum.item" }
-func (*Terms) Name() string      { return "terms" }
-func (*TermItem) Name() string   { return "terms.item" }
-func (*Table) Name() string      { return "table" }
-func (*Footnote) Name() string   { return "footnote" }
-func (*Image) Name() string      { return "image" }
-func (*HTMLElem) Name() string   { return "html.elem" }
-func (*Metadata) Name() string   { return "metadata" }
-func (*Document) Name() string   { return "document" }
+// build it.
+func (Sequence) Name() string     { return "sequence" }
+func (*Heading) Name() string     { return "heading" }
+func (*Strong) Name() string      { return "strong" }
+func (*Emph) Name() string        { return "emph" }
+func (*Underline) Name() string   { return "underline" }
+func (*Par) Name() string         { return "par" }
+func (*Text) Name() string        { return "text" }
+func (*Raw) Name() string         { return "raw" }
+func (*Linebreak) Name() string   { return "linebreak" }
+func (*Parbreak) Name() string    { return "parbreak" }
+func (*HSpace) Name() string      { return "h" }
+func (*SmartQuote) Name() string  { return "smartquote" }
+func (*Link) Name() string        { return "link" }
+func (*Ref) Name() string         { return "ref" }
+func (*List) Name() string        { return "list" }
+func (*ListItem) Name() string    { return "list.item" }
+func (*Enum) Name() string        { return "enum" }
+func (*EnumItem) Name() string    { return "enum.item" }
+func (*Terms) Name() string       { return "terms" }
+func (*TermItem) Name() string    { return "terms.item" }
+func (*Table) Name() string       { return "table" }
+func (*TableHeader) Name() string { return "table.header" }
+func (*Footnote) Name() string    { return "footnote" }
+func (*Image) Name() string       { return "image" }
+func (*HTMLElem) Name() string    { return "html.elem" }
+func (*Metadata) Name() string    { return "metadata" }
+func (*Document) Name() string    { return "document" }
 
 func (*Equation) Name() string       { return "equation" }
 func (*MathText) Name() string       { return "math.text" }
@@ -474,32 +487,33 @@ func (*MathMat) Name() string        { return "math.mat" }
 // step. A sequence is a flat splice rather than a box around its children, so
 // the question is asked of each child once it is flattened. Raw and Equation
 // answer from their Block field, set by the form they were written in.
-func (Sequence) IsBlock() bool    { return false }
-func (*Heading) IsBlock() bool    { return true }
-func (*Strong) IsBlock() bool     { return false }
-func (*Emph) IsBlock() bool       { return false }
-func (*Underline) IsBlock() bool  { return false }
-func (*Par) IsBlock() bool        { return true }
-func (*Text) IsBlock() bool       { return false }
-func (n *Raw) IsBlock() bool      { return n.Block }
-func (*Linebreak) IsBlock() bool  { return false }
-func (*Parbreak) IsBlock() bool   { return false }
-func (*HSpace) IsBlock() bool     { return false }
-func (*SmartQuote) IsBlock() bool { return false }
-func (*Link) IsBlock() bool       { return false }
-func (*Ref) IsBlock() bool        { return false }
-func (*List) IsBlock() bool       { return true }
-func (*ListItem) IsBlock() bool   { return true }
-func (*Enum) IsBlock() bool       { return true }
-func (*EnumItem) IsBlock() bool   { return true }
-func (*Terms) IsBlock() bool      { return true }
-func (*TermItem) IsBlock() bool   { return true }
-func (*Table) IsBlock() bool      { return true }
-func (*Footnote) IsBlock() bool   { return false }
-func (*Image) IsBlock() bool      { return false }
-func (n *HTMLElem) IsBlock() bool { return n.Block }
-func (*Metadata) IsBlock() bool   { return false }
-func (*Document) IsBlock() bool   { return true }
+func (Sequence) IsBlock() bool     { return false }
+func (*Heading) IsBlock() bool     { return true }
+func (*Strong) IsBlock() bool      { return false }
+func (*Emph) IsBlock() bool        { return false }
+func (*Underline) IsBlock() bool   { return false }
+func (*Par) IsBlock() bool         { return true }
+func (*Text) IsBlock() bool        { return false }
+func (n *Raw) IsBlock() bool       { return n.Block }
+func (*Linebreak) IsBlock() bool   { return false }
+func (*Parbreak) IsBlock() bool    { return false }
+func (*HSpace) IsBlock() bool      { return false }
+func (*SmartQuote) IsBlock() bool  { return false }
+func (*Link) IsBlock() bool        { return false }
+func (*Ref) IsBlock() bool         { return false }
+func (*List) IsBlock() bool        { return true }
+func (*ListItem) IsBlock() bool    { return true }
+func (*Enum) IsBlock() bool        { return true }
+func (*EnumItem) IsBlock() bool    { return true }
+func (*Terms) IsBlock() bool       { return true }
+func (*TermItem) IsBlock() bool    { return true }
+func (*Table) IsBlock() bool       { return true }
+func (*TableHeader) IsBlock() bool { return true }
+func (*Footnote) IsBlock() bool    { return false }
+func (*Image) IsBlock() bool       { return false }
+func (n *HTMLElem) IsBlock() bool  { return n.Block }
+func (*Metadata) IsBlock() bool    { return false }
+func (*Document) IsBlock() bool    { return true }
 
 func (n *Equation) IsBlock() bool     { return n.Block }
 func (*MathText) IsBlock() bool       { return false }
@@ -517,32 +531,33 @@ func (*MathVec) IsBlock() bool        { return false }
 func (*MathCases) IsBlock() bool      { return false }
 func (*MathMat) IsBlock() bool        { return false }
 
-func (Sequence) Type() types.Type    { return types.Content }
-func (*Heading) Type() types.Type    { return types.Content }
-func (*Text) Type() types.Type       { return types.Content }
-func (*Raw) Type() types.Type        { return types.Content }
-func (*Strong) Type() types.Type     { return types.Content }
-func (*Emph) Type() types.Type       { return types.Content }
-func (*Underline) Type() types.Type  { return types.Content }
-func (*Par) Type() types.Type        { return types.Content }
-func (*Linebreak) Type() types.Type  { return types.Content }
-func (*Parbreak) Type() types.Type   { return types.Content }
-func (*HSpace) Type() types.Type     { return types.Content }
-func (*SmartQuote) Type() types.Type { return types.Content }
-func (*Link) Type() types.Type       { return types.Content }
-func (*Ref) Type() types.Type        { return types.Content }
-func (*List) Type() types.Type       { return types.Content }
-func (*ListItem) Type() types.Type   { return types.Content }
-func (*Enum) Type() types.Type       { return types.Content }
-func (*EnumItem) Type() types.Type   { return types.Content }
-func (*Terms) Type() types.Type      { return types.Content }
-func (*TermItem) Type() types.Type   { return types.Content }
-func (*Table) Type() types.Type      { return types.Content }
-func (*Footnote) Type() types.Type   { return types.Content }
-func (*Image) Type() types.Type      { return types.Content }
-func (*HTMLElem) Type() types.Type   { return types.Content }
-func (*Metadata) Type() types.Type   { return types.Content }
-func (*Document) Type() types.Type   { return types.Content }
+func (Sequence) Type() types.Type     { return types.Content }
+func (*Heading) Type() types.Type     { return types.Content }
+func (*Text) Type() types.Type        { return types.Content }
+func (*Raw) Type() types.Type         { return types.Content }
+func (*Strong) Type() types.Type      { return types.Content }
+func (*Emph) Type() types.Type        { return types.Content }
+func (*Underline) Type() types.Type   { return types.Content }
+func (*Par) Type() types.Type         { return types.Content }
+func (*Linebreak) Type() types.Type   { return types.Content }
+func (*Parbreak) Type() types.Type    { return types.Content }
+func (*HSpace) Type() types.Type      { return types.Content }
+func (*SmartQuote) Type() types.Type  { return types.Content }
+func (*Link) Type() types.Type        { return types.Content }
+func (*Ref) Type() types.Type         { return types.Content }
+func (*List) Type() types.Type        { return types.Content }
+func (*ListItem) Type() types.Type    { return types.Content }
+func (*Enum) Type() types.Type        { return types.Content }
+func (*EnumItem) Type() types.Type    { return types.Content }
+func (*Terms) Type() types.Type       { return types.Content }
+func (*TermItem) Type() types.Type    { return types.Content }
+func (*Table) Type() types.Type       { return types.Content }
+func (*TableHeader) Type() types.Type { return types.Content }
+func (*Footnote) Type() types.Type    { return types.Content }
+func (*Image) Type() types.Type       { return types.Content }
+func (*HTMLElem) Type() types.Type    { return types.Content }
+func (*Metadata) Type() types.Type    { return types.Content }
+func (*Document) Type() types.Type    { return types.Content }
 
 func (*Equation) Type() types.Type       { return types.Content }
 func (*MathText) Type() types.Type       { return types.Content }

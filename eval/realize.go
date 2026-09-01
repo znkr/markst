@@ -137,7 +137,13 @@ func (s *session) realize(c value.Content) value.Content {
 		for i, ch := range c.Children {
 			children[i] = s.realize(ch)
 		}
-		return &value.Table{Children: children, Label: c.Label}
+		return &value.Table{Columns: c.Columns, Children: children, Label: c.Label}
+	case *value.TableHeader:
+		children := make([]value.Content, len(c.Children))
+		for i, ch := range c.Children {
+			children[i] = s.realize(ch)
+		}
+		return &value.TableHeader{Children: children, Label: c.Label}
 	default:
 		// Leaves: Text, Raw, Linebreak, Parbreak, Ref, …
 		return c
@@ -701,7 +707,9 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		}
 		return &value.Terms{Children: items, Label: c.Label}
 	case *value.Table:
-		return &value.Table{Children: mapEach(c.Children, f), Label: c.Label}
+		return &value.Table{Columns: c.Columns, Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.TableHeader:
+		return &value.TableHeader{Children: mapEach(c.Children, f), Label: c.Label}
 	case *value.MathOp:
 		return &value.MathOp{Text: f(c.Text), Limits: c.Limits, Label: c.Label}
 	case *value.MathAttach:

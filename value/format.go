@@ -567,11 +567,19 @@ func rowContent(row []Content) Content {
 }
 
 func (n *Table) Format(f *formatter.Formatter) {
-	var args []formatter.Arg
+	args := []formatter.Arg{formatter.NamedArg("columns", n.Columns)}
 	for i := range n.Children {
 		args = append(args, formatter.PositionalArg(n.Children[i]))
 	}
 	f.FuncCall("table", args)
+}
+
+func (n *TableHeader) Format(f *formatter.Formatter) {
+	var args []formatter.Arg
+	for i := range n.Children {
+		args = append(args, formatter.PositionalArg(n.Children[i]))
+	}
+	f.FuncCall("table.header", args)
 }
 
 func (n *Footnote) Format(f *formatter.Formatter) {

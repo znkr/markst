@@ -2115,6 +2115,8 @@ func (n *Strong) walk(yield func(Content) bool) bool {
 
 func (n *Table) Field(name name.Name) Value {
 	switch name {
+	case names.Columns:
+		return Int(n.Columns)
 	case names.Children:
 		vs := make([]Value, len(n.Children))
 		for i, v := range n.Children {
@@ -2133,6 +2135,8 @@ func (n *Table) Field(name name.Name) Value {
 
 func (n *Table) HasField(name name.Name) bool {
 	switch name {
+	case names.Columns:
+		return true
 	case names.Children:
 		return true
 	case names.Label:
@@ -2144,6 +2148,7 @@ func (n *Table) HasField(name name.Name) bool {
 
 func (n *Table) Fields() *Dict {
 	fields := new(Dict)
+	fields.Elems.Put(Str(names.Columns.String()), n.Field(names.Columns))
 	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
 	if f := n.Field(names.Label); f != nil {
 		fields.Elems.Put(Str(names.Label.String()), f)
@@ -2162,6 +2167,66 @@ func (n *Table) GetLabel() *Label {
 }
 
 func (n *Table) walk(yield func(Content) bool) bool {
+	if !yield(n) {
+		return false
+	}
+	for _, c := range n.Children {
+		if !c.walk(yield) {
+			return false
+		}
+	}
+	return true
+}
+
+func (n *TableHeader) Field(name name.Name) Value {
+	switch name {
+	case names.Children:
+		vs := make([]Value, len(n.Children))
+		for i, v := range n.Children {
+			vs[i] = v
+		}
+		return &Array{Elems: vs}
+	case names.Label:
+		if n.Label == nil {
+			return nil
+		}
+		return n.Label
+	default:
+		return nil
+	}
+}
+
+func (n *TableHeader) HasField(name name.Name) bool {
+	switch name {
+	case names.Children:
+		return true
+	case names.Label:
+		return n.Label != nil
+	default:
+		return false
+	}
+}
+
+func (n *TableHeader) Fields() *Dict {
+	fields := new(Dict)
+	fields.Elems.Put(Str(names.Children.String()), n.Field(names.Children))
+	if f := n.Field(names.Label); f != nil {
+		fields.Elems.Put(Str(names.Label.String()), f)
+	}
+	return fields
+}
+
+func (n *TableHeader) SetLabel(label *Label) *Label {
+	old := n.Label
+	n.Label = label
+	return old
+}
+
+func (n *TableHeader) GetLabel() *Label {
+	return n.Label
+}
+
+func (n *TableHeader) walk(yield func(Content) bool) bool {
 	if !yield(n) {
 		return false
 	}

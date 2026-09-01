@@ -176,17 +176,6 @@ func mathContentStrict(v value.Value) (value.Content, error) {
 // a string or symbol delimiter, or a (open, close) array pair.
 var delimType = types.SetOf(types.None, types.Str, types.Symbol, types.Array)
 
-// rejectSinkNamed reports the first named argument captured by an element's
-// positional sink as an error. vec/mat/cases have a positional children/rows
-// sink and a fixed set of named properties, so any named arg that reached the
-// sink is unrecognized (bind routes recognized ones to the declared params).
-func rejectSinkNamed(sink *value.Arguments) error {
-	for n := range sink.Named.All() {
-		return value.ArgErrorNamedPairf(n, "unexpected argument: %s", n)
-	}
-	return nil
-}
-
 // validDelims is the set of delimiter glyphs accepted by the vec/mat/cases
 // `delim` property.
 var validDelims = map[string]bool{

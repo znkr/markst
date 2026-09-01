@@ -473,15 +473,13 @@ func contentSliceEqual(a, b []Content) bool {
 
 func (n *Table) Equal(other Value) bool {
 	o, ok := other.(*Table)
-	if !ok || len(n.Children) != len(o.Children) || !labelEqual(n.Label, o.Label) {
-		return false
-	}
-	for i := range n.Children {
-		if !n.Children[i].Equal(o.Children[i]) {
-			return false
-		}
-	}
-	return true
+	return ok && n.Columns == o.Columns && contentSliceEqual(n.Children, o.Children) &&
+		labelEqual(n.Label, o.Label)
+}
+
+func (n *TableHeader) Equal(other Value) bool {
+	o, ok := other.(*TableHeader)
+	return ok && contentSliceEqual(n.Children, o.Children) && labelEqual(n.Label, o.Label)
 }
 
 func (n *Footnote) Equal(other Value) bool {

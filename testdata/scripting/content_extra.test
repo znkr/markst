@@ -107,7 +107,30 @@
 
 --- element-table ---
 #table([a], [b])
-│ #document[#table(a, b)]
+│ #document[#table(columns: 1, a, b)]
+
+--- element-table-columns ---
+#table(columns: 2, [a], [b], [c], [d])
+│ #document[#table(columns: 2, a, b, c, d)]
+
+--- element-table-header ---
+#table(columns: 2, table.header([a], [b]), [c], [d])
+│ #document[
+│   #table(
+│     columns: 2,
+│     #table.header(a, b),
+│     c,
+│     d,
+│   )
+│ ]
+
+--- element-table-columns-zero ---
+// Error: 17-18 columns must be at least 1, found 0
+#table(columns: 0, [a])
+
+--- element-table-unknown-named ---
+// Error: 8-17 unexpected argument: colums
+#table(colums: 2, [a])
 
 --- element-unknown-method ---
 // Error: 2-11 `nope` is not a valid method for element `list`

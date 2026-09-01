@@ -60,3 +60,15 @@ func applyPredicate(call *value.FunctionCallContext, fn *value.Function, v value
 func applyMapper(call *value.FunctionCallContext, fn *value.Function, v value.Value) (res value.Value, poison *value.Error, err error) {
 	return applyCallback(call, fn, v)
 }
+
+// rejectSinkNamed reports the first named argument captured by an element's
+// positional sink as an error. An element with a sink and a fixed set of named
+// properties has no use for any other named argument: bind routes the
+// recognized ones to the declared params, so whatever reached the sink is a
+// typo.
+func rejectSinkNamed(sink *value.Arguments) error {
+	for n := range sink.Named.All() {
+		return value.ArgErrorNamedPairf(n, "unexpected argument: %s", n)
+	}
+	return nil
+}
