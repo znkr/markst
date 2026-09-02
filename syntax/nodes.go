@@ -71,11 +71,11 @@ type Inner struct {
 
 var _ Node = (*Inner)(nil)
 
-// NewInner creates a new non-terminal node with the given kind and children.
-// The children must not be mutated afterwards: the node's span is derived from
-// them once, here, rather than on every [Inner.Span] call — recomputing it would
-// recurse into both the first and the last child, which costs 2^depth for a
-// deeply nested tree.
+// NewInner creates a new non-terminal node with the given kind and children,
+// which must not be empty — use [NewEmptyInner] for that. The children must not
+// be mutated afterwards: the node's span is derived from them once, here, rather
+// than on every [Inner.Span] call — recomputing it would recurse into both the
+// first and the last child, which costs 2^depth for a deeply nested tree.
 func NewInner(kind Kind, children []Node) *Inner {
 	return &Inner{
 		kind:     kind,
@@ -84,11 +84,21 @@ func NewInner(kind Kind, children []Node) *Inner {
 	}
 }
 
+// NewEmptyInner creates a new non-terminal node with no children, spanning
+// nothing at offset pos.
+func NewEmptyInner(kind Kind, pos uint32) *Inner {
+	return &Inner{kind: kind, span: Span{Start: pos, End: pos}}
+}
+
 // spanOf is the span an inner node covers: from the start of its first child to
-// the end of its last.
+// the end of its last. It panics on no children, which have no span to derive:
+// a childless node must be built by [NewEmptyInner] or [Arena.EmptyInner],
+// which take the offset it sits at. Deriving Span{0, 0} instead would put the
+// node at the start of the file and drag any parent whose last child it is down
+// with it, leaving a parent span that runs backwards.
 func spanOf(children []Node) Span {
 	if len(children) == 0 {
-		return Span{}
+		panic("syntax: inner node with no children has no span to derive")
 	}
 	return Span{
 		Start: children[0].Span().Start,
@@ -131,15 +141,15 @@ func (n *Error) Hints() []string  { return n.hints }
 func (n *Error) Error() string    { return n.message }
 func (n *Error) aNode()           {}
 
-// ConvertNode creates a copy of node with a different kind, preserving the
-// span (for Leaf) or children (for Inner). It panics if node is an Error, since
-// error nodes should not be reinterpreted.
+// ConvertNode creates a copy of node with a different kind, preserving its span
+// and, for an [Inner], its children. It panics if node is an Error, since error
+// nodes should not be reinterpreted.
 func ConvertNode(node Node, kind Kind) Node {
 	switch v := node.(type) {
 	case *Leaf:
 		return NewLeaf(kind, v.span)
 	case *Inner:
-		return NewInner(kind, v.children)
+		return &Inner{kind: kind, span: v.span, children: v.children}
 	case *Error:
 		panic("cannot convert error node")
 	default:

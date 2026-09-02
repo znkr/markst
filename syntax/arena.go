@@ -24,11 +24,18 @@ func (a *Arena) Leaf(kind Kind, span Span) *Leaf {
 	return a.leaves.New(Leaf{kind: kind, span: span})
 }
 
-// Inner returns a non-terminal node with the given kind and children, which the
-// node takes over: they must not be mutated afterwards, for the reason
-// [NewInner] gives. [Arena.Nodes] is where to get a slice to fill in.
+// Inner returns a non-terminal node with the given kind and children, which must
+// not be empty — use [Arena.EmptyInner] for that. The node takes the children
+// over: they must not be mutated afterwards, for the reason [NewInner] gives.
+// [Arena.Nodes] is where to get a slice to fill in.
 func (a *Arena) Inner(kind Kind, children []Node) *Inner {
 	return a.inners.New(Inner{kind: kind, span: spanOf(children), children: children})
+}
+
+// EmptyInner returns a non-terminal node with no children, spanning nothing at
+// offset pos.
+func (a *Arena) EmptyInner(kind Kind, pos uint32) *Inner {
+	return a.inners.New(Inner{kind: kind, span: Span{Start: pos, End: pos}})
 }
 
 // Error returns an error node with the given span, diagnostic message, and
@@ -53,13 +60,14 @@ func (a *Arena) CloneNodes(nodes []Node) []Node {
 }
 
 // Convert returns a copy of node with a different kind, allocated in the arena.
-// It panics on an [Error] node, which must not be reinterpreted.
+// The copy keeps the node's span and, for an [Inner], its children. It panics on
+// an [Error] node, which must not be reinterpreted.
 func (a *Arena) Convert(node Node, kind Kind) Node {
 	switch v := node.(type) {
 	case *Leaf:
 		return a.Leaf(kind, v.span)
 	case *Inner:
-		return a.Inner(kind, v.children)
+		return a.inners.New(Inner{kind: kind, span: v.span, children: v.children})
 	case *Error:
 		panic("cannot convert error node")
 	default:

@@ -82,15 +82,8 @@ var notLowered = map[string]bool{
 // FuzzAnalyze runs the parser and the analyzer over arbitrary input. Both stages
 // are total by contract — syntax errors travel through the tree as
 // [syntax.Error] nodes and through the IR as [expr.Error] instructions — so any
-// panic is a bug and fails the test. This is the opposite stance from
-// [parser.FuzzTextRoundTrip], which recovers and skips because it only asserts
-// the text round-trip.
-//
-// The parser has no recursion-depth guard (IDEAS.md, "Parser recursion-depth
-// guard"), but the target does not filter deeply nested inputs for it: the
-// threshold measures at roughly a million nesting levels, far past anything
-// mutation produces, and it manifests as an unrecoverable `fatal error: stack
-// overflow` that no input filter here could turn into a clean skip anyway.
+// panic is a bug and fails the test. The shape of the tree itself is
+// [parser.FuzzParse]'s job.
 func FuzzAnalyze(f *testing.F) {
 	for _, glob := range seedGlobs {
 		files, err := filepath.Glob(glob)

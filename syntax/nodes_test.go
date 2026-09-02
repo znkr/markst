@@ -12,7 +12,7 @@ func TestInnerSpan(t *testing.T) {
 		node *Inner
 		want Span
 	}{
-		{"empty", NewInner(KindMarkup, nil), Span{}},
+		{"empty", NewEmptyInner(KindMarkup, 7), Span{Start: 7, End: 7}},
 		{"single child", NewInner(KindMarkup, []Node{leaf(2, 5)}), Span{Start: 2, End: 5}},
 		{
 			"spans first through last child",

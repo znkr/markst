@@ -384,9 +384,21 @@ func (p *parser) flushTrivia() {
 func (p *parser) wrap(start int, kind syntax.Kind) {
 	to := len(p.nodes) - p.cur.trivia
 	from := min(start, to)
-	children := p.a.CloneNodes(p.nodes[from:to])
-	p.nodes = slices.Delete(p.nodes, from, to)
-	p.nodes = slices.Insert(p.nodes, from, syntax.Node(p.a.Inner(kind, children)))
+	var wrapped syntax.Node
+	if from == to {
+		// Nothing to wrap: the node sits between the node before it and the
+		// trivia after, so it spans nothing there. It needs the offset handed
+		// to it — a node with no children has none to derive a span from.
+		var pos uint32
+		if from > 0 {
+			pos = p.nodes[from-1].Span().End
+		}
+		wrapped = p.a.EmptyInner(kind, pos)
+	} else {
+		wrapped = p.a.Inner(kind, p.a.CloneNodes(p.nodes[from:to]))
+		p.nodes = slices.Delete(p.nodes, from, to)
+	}
+	p.nodes = slices.Insert(p.nodes, from, wrapped)
 }
 
 func (p *parser) withMode(mode syntax.Mode, nlmode nlMode, fn func()) {
