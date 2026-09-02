@@ -144,6 +144,10 @@ func (s *session) realize(c value.Content) value.Content {
 			children[i] = s.realize(ch)
 		}
 		return &value.TableHeader{Children: children, Label: c.Label}
+	case *value.Footnote:
+		return s.realizeFootnote(c)
+	case *value.Ref:
+		return &value.Ref{Target: c.Target, Supplement: mapOpt(c.Supplement, s.realizeInline), Label: c.Label}
 	default:
 		// Leaves: Text, Raw, Linebreak, Parbreak, Ref, …
 		return c
@@ -183,6 +187,10 @@ func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 			appendFlat(&children, s.realizeInline(ch))
 		}
 		return &value.Sequence{Children: trimRun(mergeText(children), edges, edges), Label: c.Label}
+	case *value.Footnote:
+		// Opaque to the edges either way: a footnote is a mark on the line, and
+		// the body behind it is a run of its own.
+		return s.realizeFootnote(c)
 	default:
 		// A run of one: this element is its own first and last item, so a block
 		// edge reaches straight into it.
@@ -213,6 +221,25 @@ func (s *session) realizeHtmlBody(c *value.HTMLElem) value.Content {
 	// The element's own edges are where its body ends, so edge whitespace has
 	// nothing left to separate — realizeInlineBlock, as for a heading.
 	return s.realizeInlineBlock(c.Body)
+}
+
+// realizeFootnote realizes a footnote's body as a block body. An endnote is a
+// document of its own — it is printed away from the line that cites it — so
+// paragraphs form in it no matter where the citation sits.
+//
+// The same footnote reached twice realizes to the same element, not to two
+// equal ones: `#let n = footnote[…]` used in two places is one footnote, and a
+// presenter tells that from identity.
+func (s *session) realizeFootnote(c *value.Footnote) value.Content {
+	if r, ok := s.footnotes[c]; ok {
+		return r
+	}
+	r := &value.Footnote{Body: s.realizeBody(topChildren(c.Body), nil), Label: c.Label}
+	if s.footnotes == nil {
+		s.footnotes = make(map[*value.Footnote]value.Content)
+	}
+	s.footnotes[c] = r
+	return r
 }
 
 // groupContent groups a flat run of realized siblings into paragraphs and item
@@ -710,6 +737,10 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		return &value.Table{Columns: c.Columns, Children: mapEach(c.Children, f), Label: c.Label}
 	case *value.TableHeader:
 		return &value.TableHeader{Children: mapEach(c.Children, f), Label: c.Label}
+	case *value.Footnote:
+		return &value.Footnote{Body: f(c.Body), Label: c.Label}
+	case *value.Ref:
+		return &value.Ref{Target: c.Target, Supplement: mapOpt(c.Supplement, f), Label: c.Label}
 	case *value.MathOp:
 		return &value.MathOp{Text: f(c.Text), Limits: c.Limits, Label: c.Label}
 	case *value.MathAttach:

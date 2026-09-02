@@ -116,3 +116,65 @@ After.
 │   #state("s").update(2)
 │   #par[After.]
 │ ]
+
+--- realize-footnote-body-is-a-block-context ---
+// A footnote is printed away from the line that cites it, so its body is a
+// document of its own: paragraphs form in it, and the parbreak that separated
+// them is gone.
+Text.#footnote[One paragraph.
+
+And another.]
+│ #document[
+│   #par[
+│     Text.
+│     #footnote[
+│       #par[One paragraph.]
+│       #par[And another.]
+│     ]
+│   ]
+│ ]
+
+--- realize-footnote-body-realized-inside-inline-wrapper ---
+// The body is a block context wherever the citation sits — here inside a
+// strong, which is realized as an inline run.
+*Bold.#footnote[A *nested* note.]*
+│ #document[
+│   #par[
+│     #strong[
+│       Bold.
+│       #footnote[#par[A #strong[nested] note.]]
+│     ]
+│   ]
+│ ]
+
+--- realize-footnote-body-list-grouped ---
+Text.#footnote[
+- apples
+- pears
+]
+│ #document[
+│   #par[
+│     Text.
+│     #footnote[
+│       #list(
+│         #list.item[apples],
+│         #list.item[pears],
+│       )
+│     ]
+│   ]
+│ ]
+
+--- realize-ref-supplement-realized ---
+// A reference's supplement is inline content that reaches the presenter, so it
+// is realized like any other inline run.
+= Intro <intro>
+
+See @intro[the *first* section].
+│ #document[
+│   #heading(level: 1)[Intro]
+│   #par[
+│     See 
+│     #ref(target: "intro")[the #strong[first] section]
+│     .
+│   ]
+│ ]

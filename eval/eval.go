@@ -173,6 +173,13 @@ type session struct {
 	// order), so the slice-shift cost amortizes; binary search keeps the
 	// containment lookup off the hot path.
 	errors []Error
+
+	// footnotes is the realized form of each footnote met during realization,
+	// keyed by the one it was realized from. A footnote bound to a name and
+	// used twice is one footnote — it carries one number and is printed once —
+	// and identity is what says so, so realizing it a second time has to hand
+	// back the same element rather than an equal one.
+	footnotes map[*value.Footnote]value.Content
 }
 
 // callSite is one entry on [session.stack]: a call in progress, recorded where
