@@ -77,11 +77,11 @@ $ a thin b med c thick d quad e wide f $
 │ #document[
 │   #math.equation(block: true)[
 │     #math.text("a")
-│     #h(0.16666666666666666em)
+│     #h(0.17em)
 │     #math.text("b")
-│     #h(0.2222222222222222em)
+│     #h(0.22em)
 │     #math.text("c")
-│     #h(0.2777777777777778em)
+│     #h(0.28em)
 │     #math.text("d")
 │     #h(1em)
 │     #math.text("e")

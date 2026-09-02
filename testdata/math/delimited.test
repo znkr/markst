@@ -160,7 +160,7 @@ $ lr(]sum_(x=1)^n x], size: #70%)
 │       #math.text("]")
 │     ]
 │     #math.text("<")
-│     #math.lr(size: #220.00000000000003%)[
+│     #math.lr(size: #220%)[
 │       #math.lr[
 │         #math.text("(")
 │         #math.text("1")

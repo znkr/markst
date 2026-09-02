@@ -75,7 +75,7 @@ $ underline(f' : NN -> RR) \
 │       #math.text("1")
 │       #math.text("−")
 │       #math.text("0")
-│       #h(0.2777777777777778em)
+│       #h(0.28em)
 │       #math.align-point()
 │       #math.text("…")
 │     ]

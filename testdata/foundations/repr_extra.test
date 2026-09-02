@@ -1,0 +1,34 @@
+// Test that repr rounds unit-suffixed scalars, as Typst's
+// `format_float_with_unit` does. Without it binary floating point leaks into
+// the output: 220% is held as 2.2, and 2.2*100 is 220.00000000000003.
+
+--- repr-ratio-rounds ---
+#test(repr(220%), "220%")
+#test(repr(70%), "70%")
+#test(repr(2.2 * 100%), "220%")
+│ #document[]
+
+--- repr-ratio-keeps-two-decimals ---
+#test(repr(33.333%), "33.33%")
+#test(repr(0.5%), "0.5%")
+│ #document[]
+
+--- repr-length-rounds ---
+#test(repr(2.2 * 100pt), "220pt")
+#test(repr(2.2 * 100em), "220em")
+#test(repr(2.2 * 100pt + 2.2 * 100em), "220pt + 220em")
+#test(repr(1em / 6), "0.17em")
+│ #document[]
+
+--- repr-angle-rounds ---
+#test(repr(45deg), "45deg")
+#test(repr(2.2 * 100deg), "220deg")
+│ #document[]
+
+--- repr-fraction-rounds ---
+#test(repr(2.2 * 100fr), "220fr")
+│ #document[]
+
+--- repr-relative-rounds ---
+#test(repr(2.2 * 100% + 2.2 * 100pt), "220% + 220pt")
+│ #document[]

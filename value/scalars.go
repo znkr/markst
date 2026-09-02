@@ -66,12 +66,25 @@ func (n Bool) String() string { return fmt.Sprintf("%t", n) }
 
 func (n Int) String() string { return strconv.FormatInt(int64(n), 10) }
 
+// formatUnit renders a scalar and its unit, rounding to two decimals as Typst
+// does for every unit-suffixed value. The rounding is what keeps binary
+// floating point out of the output: 220% is held as 2.2, and 2.2*100 is
+// 220.00000000000003.
+func formatUnit(v float64, unit string) string {
+	// Rounding a value that large has no effect, and the multiplication below
+	// would overflow to infinity.
+	if !math.IsInf(v, 0) && !math.IsNaN(v) && math.Abs(v) < 1<<53 {
+		v = math.Round(v*100) / 100
+	}
+	return fmt.Sprintf("%g%s", v, unit)
+}
+
 func (n Ratio) String() string {
-	return fmt.Sprintf("%g%%", float64(n)*100)
+	return formatUnit(float64(n)*100, "%")
 }
 
 func (n Fraction) String() string {
-	return fmt.Sprintf("%gfr", float64(n))
+	return formatUnit(float64(n), "fr")
 }
 
 func (n Float) String() string {
@@ -114,13 +127,13 @@ func (n Length) String() string {
 	}
 	var sb strings.Builder
 	if n.Pt != 0 {
-		fmt.Fprintf(&sb, "%gpt", n.Pt)
+		sb.WriteString(formatUnit(n.Pt, "pt"))
 	}
 	if n.Pt != 0 && n.Em != 0 {
 		sb.WriteString(" + ")
 	}
 	if n.Em != 0 {
-		fmt.Fprintf(&sb, "%gem", n.Em)
+		sb.WriteString(formatUnit(n.Em, "em"))
 	}
 	if sb.Len() == 0 {
 		sb.WriteString("0pt")
@@ -129,11 +142,11 @@ func (n Length) String() string {
 }
 
 func (r Relative) String() string {
-	return fmt.Sprintf("%g%% + %s", float64(r.Ratio)*100, r.Length)
+	return fmt.Sprintf("%s + %s", r.Ratio, r.Length)
 }
 
 func (n Angle) String() string {
-	return fmt.Sprintf("%gdeg", float64(n*180/math.Pi))
+	return formatUnit(float64(n*180/math.Pi), "deg")
 }
 
 func (None) aValue()     {}
