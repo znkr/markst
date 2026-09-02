@@ -113,6 +113,10 @@ type parser struct {
 	memos          map[int]memo
 	bracketNesting int
 
+	// depth is how many levels of nesting the parser has descended into; see
+	// [maxDepth].
+	depth int
+
 	// errAnchor is the node index of the error most recently produced by
 	// [parser.expected] or [parser.errorf], or noAnchor when the last such call
 	// only reused an error node that was already there. Read through
@@ -159,6 +163,12 @@ func (p *parser) at(kind syntax.Kind) bool {
 
 func (p *parser) atSet(kinds syntax.Set) bool {
 	return kinds.Contains(p.cur.kind)
+}
+
+// atEnd reports whether the parser is at the end of the input, as opposed to
+// the end a newline mode fakes to stop the current construct.
+func (p *parser) atEnd() bool {
+	return p.cur.node.Kind() == syntax.KindEnd
 }
 
 func (p *parser) directlyAt(kind syntax.Kind) bool {
@@ -479,7 +489,23 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 		// place of the body's Markup node.
 		start -= p.cur.trivia
 	}
-	atStart := p.cur.newline || flags&mfAtStart != 0
+	p.parseMarkupExprs(stops, flags&mfAtStart != 0)
+	if flags&mfWrapTrivia != 0 {
+		p.flushTrivia()
+	}
+	p.wrap(start, syntax.KindMarkup)
+}
+
+// parseMarkupExprs parses markup expressions until a token in stops. Nesting
+// is counted here rather than per expression, because every markup construct
+// that holds markup comes back through it.
+func (p *parser) parseMarkupExprs(stops syntax.Set, atStart bool) {
+	if !p.enterDepth(stops) {
+		return
+	}
+	defer p.leaveDepth()
+
+	atStart = p.cur.newline || atStart
 	// ifAtStart calls parseFn when at the start of a line, otherwise
 	// consumes the current token as plain text.
 	ifAtStart := func(parseFn func()) {
@@ -530,29 +556,29 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 
 		atStart = p.cur.newline
 	}
-	if flags&mfWrapTrivia != 0 {
-		p.flushTrivia()
-	}
-	p.wrap(start, syntax.KindMarkup)
 }
 
 func (p *parser) parseCode(stops syntax.Set) {
 	start := len(p.nodes) - p.cur.trivia
-	for !p.atSet(stops) {
-		p.withNewlineMode(nlContextualContinue, func() {
-			if !p.atSet(syntax.CodeExpr) {
-				p.unexpected()
-				return
-			}
-			p.parseCodeExpr()
-			if !p.atSet(stops) && !p.consumeIf(syntax.KindSemicolon) {
-				err := p.expected("semicolon or line break")
-				if p.at(syntax.KindLabel) {
-					err.Hint("labels can only be applied in markup mode")
-					err.Hint("try wrapping your code in a markup block (`[ ]`)")
+	// Nesting is counted in parseCodeExprPrec; the check here only keeps a
+	// parse that is already too deep from erroring once per expression.
+	if p.checkDepth(stops) {
+		for !p.atSet(stops) {
+			p.withNewlineMode(nlContextualContinue, func() {
+				if !p.atSet(syntax.CodeExpr) {
+					p.unexpected()
+					return
 				}
-			}
-		})
+				p.parseCodeExpr()
+				if !p.atSet(stops) && !p.consumeIf(syntax.KindSemicolon) {
+					err := p.expected("semicolon or line break")
+					if p.at(syntax.KindLabel) {
+						err.Hint("labels can only be applied in markup mode")
+						err.Hint("try wrapping your code in a markup block (`[ ]`)")
+					}
+				}
+			})
+		}
 	}
 	p.flushTrivia()
 	p.wrap(start, syntax.KindCode)
@@ -680,6 +706,13 @@ func (p *parser) parseMath(stops syntax.Set) {
 // parseMathExprs parses a sequence of math expressions, returning the count
 // parsed (including errors).
 func (p *parser) parseMathExprs(stops syntax.Set) int {
+	// Nesting is counted in parseMathExprPrec; the check here only keeps a
+	// parse that is already too deep from erroring once per expression. The
+	// count it reports is 1 so that the caller treats the error node it left
+	// behind as the single expression it stands for.
+	if !p.checkDepth(stops) {
+		return 1
+	}
 	count := 0
 	for !p.atSet(stops) {
 		if p.atSet(syntax.MathExpr) {
@@ -747,6 +780,10 @@ func attachChainSet(op syntax.Kind) syntax.Set {
 // root). stopSet holds kinds at which to stop (used to constrain attachment
 // chains).
 func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
+	if !p.enterDepth(noStops) {
+		return
+	}
+
 	m := len(p.nodes)
 	continuable := false
 	switch p.cur.kind {
@@ -860,6 +897,7 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 
 		p.wrap(m, wrapper)
 	}
+	p.leaveDepth()
 }
 
 // isMathAlphabetic reports whether text counts as alphabetic in math, which
@@ -1031,6 +1069,10 @@ func (p *parser) parseCodeBlock() {
 }
 
 func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
+	if !p.enterDepth(noStops) {
+		return
+	}
+
 	start := len(p.nodes)
 	if !atomic && p.atSet(syntax.UnaryOps) {
 		op := syntax.UnaryOpFromKind(p.cur.kind)
@@ -1096,6 +1138,7 @@ func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
 		p.parseCodeExprPrec(false, prec)
 		p.wrap(start, syntax.KindBinary)
 	}
+	p.leaveDepth()
 }
 
 func (p *parser) parseCodeExpr() {
@@ -1327,6 +1370,13 @@ func (p *parser) parseParam(sink *bool) {
 // If reassignment is true, we're parsing a reassignment pattern and expressions are allowed.
 // If reassignment is false, we're parsing a binding pattern and only identifiers are allowed.
 func (p *parser) parsePattern(reassignment bool) {
+	// Destructuring nests without going through parseCodeExprPrec, so it is
+	// counted here as well.
+	if !p.enterDepth(noStops) {
+		return
+	}
+	defer p.leaveDepth()
+
 	switch p.cur.kind {
 	case syntax.KindUnderscore:
 		p.consume()
