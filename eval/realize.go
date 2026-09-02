@@ -478,17 +478,13 @@ func mergeable(c value.Content) (*value.Text, bool) {
 // whitespace pointless. That is every block element, plus the two breaks, which
 // end a line without being content on it.
 func breaksLine(c value.Content) bool {
-	switch c.(type) {
-	case *value.Parbreak, *value.Linebreak:
-		return true
-	}
-	return c.IsBlock()
+	return breakKinds.Contains(c.Kind()) || c.IsBlock()
 }
 
-func isFootnote(c value.Content) bool {
-	_, ok := c.(*value.Footnote)
-	return ok
-}
+// breakKinds are the two elements that end a line without being content on it.
+var breakKinds = value.SetOf(value.KindParbreak, value.KindLinebreak)
+
+func isFootnote(c value.Content) bool { return c.Kind() == value.KindFootnote }
 
 func endsWithSpace(s string) bool {
 	r, size := utf8.DecodeLastRuneInString(s)
@@ -498,15 +494,14 @@ func endsWithSpace(s string) bool {
 func trimLeftSpace(s string) string  { return strings.TrimLeftFunc(s, unicode.IsSpace) }
 func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
-func isParbreak(c value.Content) bool { _, ok := c.(*value.Parbreak); return ok }
+func isParbreak(c value.Content) bool { return c.Kind() == value.KindParbreak }
 
 // isVisible reports whether c is an element a reader can see. The introspection
 // elements are not: they ride the document to be found again — by
 // znkr.io/markst.Query, or by whatever comes to resolve state — and produce no
 // output where they sit.
 func isVisible(c value.Content) bool {
-	switch c.(type) {
-	case *value.Metadata, *value.StateUpdate:
+	if introspectionKinds.Contains(c.Kind()) {
 		return false
 	}
 	// Whitespace is not visible on its own account: it is only ever there to
@@ -515,17 +510,18 @@ func isVisible(c value.Content) bool {
 	return !spaceOnly(c)
 }
 
+// introspectionKinds are the elements that ride the document to be found
+// again rather than to be read.
+var introspectionKinds = value.SetOf(value.KindMetadata, value.KindStateUpdate)
+
 // isItem reports whether c is one of the item elements. Items are block content
 // like any other ([value.Content.IsBlock]); this narrower question is only
 // [groupContent]'s, which must gather a run of them into a container instead of
 // emitting them one by one, and so asks it first.
-func isItem(c value.Content) bool {
-	switch c.(type) {
-	case *value.ListItem, *value.EnumItem, *value.TermItem:
-		return true
-	}
-	return false
-}
+func isItem(c value.Content) bool { return itemKinds.Contains(c.Kind()) }
+
+// itemKinds are the elements a run of which groups into a container.
+var itemKinds = value.SetOf(value.KindListItem, value.KindEnumItem, value.KindTermItem)
 
 // resolveStyled realizes a style scope: it realizes the body, applies the
 // recorded set rules and show recipes to it, and returns the result with the
