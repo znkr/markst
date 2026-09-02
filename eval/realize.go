@@ -68,7 +68,9 @@ func (s *session) realizeBody(children []value.Content, label *value.Label) valu
 // resolved style scopes) into a single flat run, so paragraph/item grouping sees
 // across nested-sequence boundaries.
 func (s *session) flattenAndRealize(children []value.Content) []value.Content {
-	var out []value.Content
+	// One entry per child before anything flattens into it, which is what most
+	// runs come to: sized from the run rather than doubled up to it.
+	out := make([]value.Content, 0, len(children))
 	for _, ch := range children {
 		switch c := ch.(type) {
 		case *value.Styled:
@@ -192,7 +194,7 @@ func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 			return s.realizeInlineRun(body, edges)
 		})
 	case *value.Sequence:
-		var children []value.Content
+		children := make([]value.Content, 0, len(c.Children))
 		for _, ch := range c.Children {
 			// A nested sequence is spliced into this run, so its own ends are
 			// not edges: realizeInline, never realizeInlineBlock.
@@ -259,7 +261,7 @@ func (s *session) realizeFootnote(c *value.Footnote) value.Content {
 // inline content delimited by parbreaks or block content become a Par, and
 // parbreak separators are dropped.
 func groupContent(items []value.Content) []value.Content {
-	var out []value.Content
+	out := make([]value.Content, 0, len(items))
 	var para []value.Content
 	flush := func() {
 		if len(para) == 0 {
@@ -355,20 +357,59 @@ func appendItemRun(out *[]value.Content, items []value.Content, i int) int {
 // #text("a    b") keeps its spacing.
 func mergeText(items []value.Content) []value.Content {
 	out := make([]value.Content, 0, len(items))
-	for _, it := range items {
-		if text, ok := mergeable(it); ok && len(out) > 0 {
-			if prev, ok := mergeable(out[len(out)-1]); ok {
-				// Both sides contribute whitespace at the seam: keep one.
-				if endsWithSpace(prev.Text) {
-					text = &value.Text{Text: trimLeftSpace(text.Text)}
-				}
-				out[len(out)-1] = &value.Text{Text: prev.Text + text.Text}
-				continue
-			}
+	for i := 0; i < len(items); {
+		if _, ok := mergeable(items[i]); !ok {
+			out = append(out, items[i])
+			i++
+			continue
 		}
-		out = append(out, it)
+		// Take the whole run of mergeable text at once. Folding it one item at
+		// a time would build every prefix of the result along the way, which
+		// for a paragraph of forty words is forty strings, each longer than the
+		// last.
+		j := i + 1
+		for j < len(items) {
+			if _, ok := mergeable(items[j]); !ok {
+				break
+			}
+			j++
+		}
+		if j == i+1 {
+			// A run of one is the item itself; merging it would only copy it.
+			out = append(out, items[i])
+		} else {
+			out = append(out, mergeRun(items[i:j]))
+		}
+		i = j
 	}
 	return out
+}
+
+// mergeRun joins a run of two or more mergeable texts into one Text.
+func mergeRun(run []value.Content) *value.Text {
+	size := 0
+	for _, it := range run {
+		text, _ := mergeable(it)
+		size += len(text.Text)
+	}
+	var sb strings.Builder
+	sb.Grow(size)
+	// Whether what has been written so far ends in whitespace, which is what
+	// decides the seam: both sides contributing space means keeping one.
+	endsSpace := false
+	for _, it := range run {
+		text, _ := mergeable(it)
+		s := text.Text
+		if endsSpace {
+			s = trimLeftSpace(s)
+		}
+		if s == "" {
+			continue
+		}
+		sb.WriteString(s)
+		endsSpace = endsWithSpace(s)
+	}
+	return &value.Text{Text: sb.String()}
 }
 
 // trimRun drops the whitespace in a merged run that has nothing to separate:

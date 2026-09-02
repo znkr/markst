@@ -74,6 +74,9 @@ func (p *idPool) claim(id string) string {
 // outright (`Über uns` is `ber-uns` to it, and `日本語` is `heading`).
 func slug(text string) string {
 	var b strings.Builder
+	// A slug is never longer than the text it comes from: every rune is kept as
+	// itself, replaced by one byte, or dropped.
+	b.Grow(len(text))
 	for _, r := range strings.TrimSpace(text) {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
