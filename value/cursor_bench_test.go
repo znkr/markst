@@ -102,3 +102,48 @@ func BenchmarkWalkFirstMatch(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkIndexInit is what an index costs to build: one full walk, plus a
+// record per element.
+func BenchmarkIndexInit(b *testing.B) {
+	c := article(64)
+	var x Index
+	b.ReportAllocs()
+	for b.Loop() {
+		x.Init(c)
+	}
+	b.ReportMetric(float64(x.Len()), "elems")
+}
+
+// BenchmarkIndexWalkFiltered is the same filtered walk as BenchmarkWalkFiltered,
+// read off an index instead of the tree — the comparison that says how many
+// walks it takes to pay the index back.
+func BenchmarkIndexWalkFiltered(b *testing.B) {
+	x := NewIndex(article(64))
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for range x.Preorder(SetOf(KindMetadata)) {
+			n++
+		}
+		if n == 0 {
+			b.Fatal("found nothing")
+		}
+	}
+}
+
+// BenchmarkIndexWalkAll is the unfiltered walk, where the index can skip
+// nothing and is pure overhead against the tree.
+func BenchmarkIndexWalkAll(b *testing.B) {
+	x := NewIndex(article(64))
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for range x.Preorder(AnyKind) {
+			n++
+		}
+		if n == 0 {
+			b.Fatal("walked nothing")
+		}
+	}
+}
