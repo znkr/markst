@@ -83,10 +83,12 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"sync"
 
 	"znkr.io/markst/builtin"
 	"znkr.io/markst/expr"
 	"znkr.io/markst/internal/names"
+	"znkr.io/markst/internal/slab"
 	"znkr.io/markst/name"
 	"znkr.io/markst/syntax"
 	"znkr.io/markst/value"
@@ -163,11 +165,12 @@ func WithExports() Option {
 // is always non-nil.
 func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 	a := &analyzer{source: n.Source, text: string(n.Src)}
-	bindings := make(map[name.Name]binding, len(builtin.Universe))
-	for name, val := range builtin.Universe {
-		bindings[name] = valueBinding{val: val}
-	}
-	a.scope = &scope{bindings: bindings}
+	// The universe is shared rather than copied per analysis: it is a binding
+	// per built-in, and building that map was one of the more expensive things
+	// an analysis did. A scope is pushed on top of it for the options to bind
+	// into, so nothing ever writes to the shared one.
+	a.scope = universe()
+	a.openScope()
 
 	for _, opt := range opts {
 		opt(a)
@@ -229,6 +232,13 @@ func (a *analyzer) exportDict(top *scope, span syntax.Span) expr.Ref {
 
 type analyzer struct {
 	source syntax.Source
+
+	// texts and mathTexts allocate the content values a markup or math token
+	// lowers to. There is one per token — the constant pool cannot hold them,
+	// since a content value carries a label that the evaluator may set — so
+	// they are the values worth allocating in blocks rather than singly.
+	texts     slab.Of[value.Text]
+	mathTexts slab.Of[value.MathText]
 
 	// text is the source as a string, converted once. The syntax tree carries
 	// bytes — scanning allocates nothing for a token's text that way — and the
@@ -436,6 +446,17 @@ func (a *analyzer) lookupMath(source name.Name) (binding, bool) {
 	}
 	return nil, false
 }
+
+// universe is the scope every analysis starts from: one binding per name in the
+// built-in universe, built once and read by every analysis after that. Nothing
+// writes to it; see [Analyze].
+var universe = sync.OnceValue(func() *scope {
+	bindings := make(map[name.Name]binding, len(builtin.Universe))
+	for n, val := range builtin.Universe {
+		bindings[n] = valueBinding{val: val}
+	}
+	return &scope{bindings: bindings}
+})
 
 func (a *analyzer) openScope() *scope {
 	a.scope = &scope{parent: a.scope}

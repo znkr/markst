@@ -157,20 +157,20 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	switch n.Kind() {
 	// Markup leaves
 	case syntax.KindText:
-		return a.b.Const(n.Span(), &value.Text{Text: a.str(n)})
+		return a.b.Const(n.Span(), a.textValue(a.str(n)))
 	case syntax.KindSpace:
 		// A markup whitespace run is worth exactly one space: two blank lines
 		// scan as a parbreak instead, so there is nothing longer to preserve.
-		return a.b.Const(n.Span(), &value.Text{Text: " "})
+		return a.b.Const(n.Span(), a.textValue(" "))
 	case syntax.KindEscape:
 		// In math, an escape like `\(` denotes a symbol character (matching
 		// Typst, where it can stand in as a delimiter); in markup it is text.
 		if a.mathDepth > 0 {
 			return a.b.Const(n.Span(), &value.Symbol{Variants: symbols.Variants{{Value: unescape(a.str(n))}}})
 		}
-		return a.b.Const(n.Span(), &value.Text{Text: unescape(a.str(n))})
+		return a.b.Const(n.Span(), a.textValue(unescape(a.str(n))))
 	case syntax.KindShorthand:
-		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(a.str(n))})
+		return a.b.Const(n.Span(), a.textValue(unshorthand(a.str(n))))
 	case syntax.KindSmartQuote:
 		return a.b.Const(n.Span(), &value.SmartQuote{Double: a.str(n) == `"`})
 	case syntax.KindLinebreak:
@@ -196,7 +196,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 		return a.lowerEmph(n)
 	case syntax.KindLink:
 		lit := a.str(n)
-		body := a.b.Const(n.Span(), &value.Text{Text: lit})
+		body := a.b.Const(n.Span(), a.textValue(lit))
 		return a.b.Link(n.Span(), lit, body)
 	case syntax.KindRef:
 		return a.lowerRef(n)
@@ -286,7 +286,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindMathIdent:
 		return a.lowerMathIdent(n)
 	case syntax.KindMathShorthand:
-		return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(a.str(n))})
+		return a.b.Const(n.Span(), a.mathTextValue(mathShorthand(a.str(n))))
 	case syntax.KindMathAlignPoint:
 		return a.b.Const(n.Span(), &value.MathAlignPoint{})
 	case syntax.KindMathAttach:
@@ -815,7 +815,7 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 			entry := a.inner(child, syntax.KindKeyed)
 			var keyStr string
 			if entry.at(syntax.KindStr) {
-				if leaf, ok := a.peekLeafText(entry); ok {
+				if leaf, ok := a.peekLeafText(&entry); ok {
 					keyStr = unquote(leaf)
 				}
 			}
@@ -1515,7 +1515,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		ns.node()
 	}
 	if ns.done() {
-		a.expected(ns, "expression")
+		a.expected(&ns, "expression")
 		return expr.NoRef
 	}
 	bodyNode := ns.node()
@@ -1917,7 +1917,7 @@ func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindSetRule)
 	ns.take(syntax.KindSet)
 	if ns.done() {
-		a.expected(ns, "expression")
+		a.expected(&ns, "expression")
 		return expr.NoRef
 	}
 	target := a.lowerExpr(ns.node())
@@ -1928,7 +1928,7 @@ func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 		if ns.at(syntax.KindError) {
 			a.unexpected(ns.node())
 		} else {
-			a.expected(ns, "argument list")
+			a.expected(&ns, "argument list")
 		}
 		return expr.NoRef
 	}
@@ -1937,7 +1937,7 @@ func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 	if ns.at(syntax.KindIf) {
 		ns.node()
 		if ns.done() {
-			a.expected(ns, "expression")
+			a.expected(&ns, "expression")
 			return expr.NoRef
 		}
 		cond = a.lowerExpr(ns.node())
@@ -1951,14 +1951,14 @@ func (a *analyzer) lowerShowRule(n syntax.Node) expr.Ref {
 	selector := expr.NoRef
 	if !ns.at(syntax.KindColon) {
 		if ns.done() {
-			a.expected(ns, "selector")
+			a.expected(&ns, "selector")
 			return expr.NoRef
 		}
 		selector = a.lowerExpr(ns.node())
 	}
 	ns.take(syntax.KindColon)
 	if ns.done() {
-		a.expected(ns, "expression")
+		a.expected(&ns, "expression")
 		return expr.NoRef
 	}
 	transform := a.lowerExpr(ns.node())

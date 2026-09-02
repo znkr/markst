@@ -1,5 +1,7 @@
 package syntax
 
+import "znkr.io/markst/internal/slab"
+
 // Arena allocates syntax nodes in blocks rather than one at a time. A tree's
 // nodes are built together and dropped together — a parse has no use for one
 // node without the rest — so they can share an allocation.
@@ -11,64 +13,35 @@ package syntax
 // [NewLeaf], [NewInner] and [NewError] are the same nodes allocated singly, for
 // a caller building a tree of its own rather than parsing one.
 type Arena struct {
-	leaves   []Leaf
-	inners   []Inner
-	errors   []Error
-	children []Node
+	leaves   slab.Of[Leaf]
+	inners   slab.Of[Inner]
+	errors   slab.Of[Error]
+	children slab.Of[Node]
 }
-
-// blockSize is how many nodes a block holds. Every block is the same size: a
-// block that ends up half used wastes a few kilobytes at most, and sizing them
-// from the source would be guessing at a ratio that varies with what the
-// document is made of.
-const blockSize = 128
 
 // Leaf returns a terminal node with the given kind and span.
 func (a *Arena) Leaf(kind Kind, span Span) *Leaf {
-	if len(a.leaves) == cap(a.leaves) {
-		// A fresh block rather than a longer one: growing would copy the
-		// nodes already handed out, and the pointers to them point at the
-		// block they were cut from.
-		a.leaves = make([]Leaf, 0, blockSize)
-	}
-	a.leaves = append(a.leaves, Leaf{kind: kind, span: span})
-	return &a.leaves[len(a.leaves)-1]
+	return a.leaves.New(Leaf{kind: kind, span: span})
 }
 
 // Inner returns a non-terminal node with the given kind and children, which the
 // node takes over: they must not be mutated afterwards, for the reason
 // [NewInner] gives. [Arena.Nodes] is where to get a slice to fill in.
 func (a *Arena) Inner(kind Kind, children []Node) *Inner {
-	if len(a.inners) == cap(a.inners) {
-		a.inners = make([]Inner, 0, blockSize)
-	}
-	a.inners = append(a.inners, Inner{kind: kind, span: spanOf(children), children: children})
-	return &a.inners[len(a.inners)-1]
+	return a.inners.New(Inner{kind: kind, span: spanOf(children), children: children})
 }
 
 // Error returns an error node with the given span, diagnostic message, and
 // optional hints.
 func (a *Arena) Error(span Span, message string, hints ...string) *Error {
-	if len(a.errors) == cap(a.errors) {
-		a.errors = make([]Error, 0, blockSize)
-	}
-	a.errors = append(a.errors, Error{span: span, message: message, hints: hints})
-	return &a.errors[len(a.errors)-1]
+	return a.errors.New(Error{span: span, message: message, hints: hints})
 }
 
 // Nodes returns a slice of n nil nodes to fill in and hand to [Arena.Inner].
 // Its capacity is its length, so appending to it copies rather than writing
-// over the children of the node allocated after it.
+// over the children of the node allocated next.
 func (a *Arena) Nodes(n int) []Node {
-	if n == 0 {
-		return nil
-	}
-	if n > cap(a.children)-len(a.children) {
-		a.children = make([]Node, 0, max(blockSize, n))
-	}
-	start := len(a.children)
-	a.children = a.children[:start+n]
-	return a.children[start : start+n : start+n]
+	return a.children.Slice(n)
 }
 
 // CloneNodes returns a copy of nodes allocated in the arena, for an [Inner]

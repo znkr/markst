@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 
+	"znkr.io/markst/internal/slab"
 	"znkr.io/markst/name"
 	"znkr.io/markst/syntax"
 	"znkr.io/markst/value"
@@ -18,6 +19,12 @@ type ModuleBuilder struct {
 	// entries so repeated references to the same constant share a single module
 	// constant entry.
 	constIndex map[any]int32
+
+	// consts allocates the Const instructions of every function in the module
+	// in blocks. Const is three quarters of the instructions a document lowers
+	// to — one per markup token that is not poolable, which content values are
+	// not — so it is the one kind worth not allocating singly.
+	consts slab.Of[Const]
 }
 
 // Builder constructs an SSA [Function]. The analyzer drives it as it walks the
@@ -353,7 +360,7 @@ func (b *Builder) Const(span syntax.Span, v value.Value) Ref {
 		return ref
 	}
 	return b.emit(span, func(ref Ref) Instruction {
-		return &Const{instr: instr{result: ref}, Value: v}
+		return b.mb.consts.New(Const{instr: instr{result: ref}, Value: v})
 	})
 }
 

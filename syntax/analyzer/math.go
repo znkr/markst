@@ -86,7 +86,7 @@ func (a *analyzer) lowerMathOperand(ns *nodes) expr.Ref {
 }
 
 func (a *analyzer) lowerMathText(n syntax.Node) expr.Ref {
-	return a.b.Const(n.Span(), &value.MathText{Text: a.leaf(n, syntax.KindMathText)})
+	return a.b.Const(n.Span(), a.mathTextValue(a.leaf(n, syntax.KindMathText)))
 }
 
 // lowerMathIdent resolves a math identifier against what math can see — a
@@ -127,18 +127,18 @@ func unknownMathVarHints(a *analyzer, source name.Name, ident string) []string {
 // is returned as-is.
 func (a *analyzer) lowerMathAttach(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindMathAttach)
-	base := a.lowerMathOperand(ns)
+	base := a.lowerMathOperand(&ns)
 	top, bottom := expr.NoRef, expr.NoRef
 	for !ns.done() {
 		op := ns.node()
 		switch op.Kind() {
 		case syntax.KindUnderscore:
 			if !ns.done() {
-				bottom = a.lowerMathOperand(ns)
+				bottom = a.lowerMathOperand(&ns)
 			}
 		case syntax.KindHat:
 			if !ns.done() {
-				top = a.lowerMathOperand(ns)
+				top = a.lowerMathOperand(&ns)
 			}
 		case syntax.KindMathPrimes:
 			base = a.b.MathPrimes(op.Span(), base, primeCount(a.str(op)))
@@ -154,23 +154,23 @@ func (a *analyzer) lowerMathAttach(n syntax.Node) expr.Ref {
 
 func (a *analyzer) lowerMathFrac(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindMathFrac)
-	num := a.lowerMathOperand(ns)
+	num := a.lowerMathOperand(&ns)
 	ns.take(syntax.KindSlash)
-	denom := a.lowerMathOperand(ns)
+	denom := a.lowerMathOperand(&ns)
 	return a.b.MathFrac(n.Span(), num, denom)
 }
 
 func (a *analyzer) lowerMathRoot(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindMathRoot)
 	ns.take(syntax.KindRoot)
-	radicand := a.lowerMathOperand(ns)
+	radicand := a.lowerMathOperand(&ns)
 	return a.b.MathRoot(n.Span(), expr.NoRef, radicand)
 }
 
 // lowerMathPrimes lowers a standalone primes node (with no base) by attaching
 // the primes to empty content.
 func (a *analyzer) lowerMathPrimes(n syntax.Node) expr.Ref {
-	base := a.b.Const(n.Span(), &value.MathText{Text: ""})
+	base := a.b.Const(n.Span(), a.mathTextValue(""))
 	return a.b.MathPrimes(n.Span(), base, primeCount(a.leaf(n, syntax.KindMathPrimes)))
 }
 
@@ -185,7 +185,7 @@ func (a *analyzer) lowerMathDelimited(n syntax.Node) expr.Ref {
 // lowerMathDelim lowers a delimiter token (MathText or MathShorthand) to a
 // MathText content value, mapping shorthand delimiters (`[|`, `|]`) to glyphs.
 func (a *analyzer) lowerMathDelim(n syntax.Node) expr.Ref {
-	return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(a.str(n))})
+	return a.b.Const(n.Span(), a.mathTextValue(mathShorthand(a.str(n))))
 }
 
 func (a *analyzer) lowerMathCall(n syntax.Node) expr.Ref {

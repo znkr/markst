@@ -70,6 +70,17 @@ func (a *analyzer) str(n syntax.Node) string {
 	return a.text[span.Start:span.End]
 }
 
+// textValue returns a [value.Text] holding s, allocated in blocks; see
+// [analyzer.texts].
+func (a *analyzer) textValue(s string) *value.Text {
+	return a.texts.New(value.Text{Text: s})
+}
+
+// mathTextValue is [analyzer.textValue] for math.
+func (a *analyzer) mathTextValue(s string) *value.MathText {
+	return a.mathTexts.New(value.MathText{Text: s})
+}
+
 // expected emits a synthetic "expected X" error at the cursor's position
 // (the end of the most recently consumed node). Used when the cursor runs
 // out of nodes early; callers should return NoRef after.
@@ -170,14 +181,16 @@ type nodes struct {
 	skips syntax.Set
 }
 
-// inner returns a cursor for the children of n. When n's kind doesn't
+// inner returns a cursor for the children of n. It is returned by value: a
+// cursor is a few words the caller walks and drops, and handing back a pointer
+// put one on the heap for every node lowered. When n's kind doesn't
 // match — either because the parser substituted a [*syntax.Error] or
 // because the caller is being defensive about a malformed sub-tree — the
 // returned cursor is empty so iteration is a no-op and callers can fall
 // through to their cleanup with NoRef.
-func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) *nodes {
+func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) nodes {
 	if !a.expect(kind, n) {
-		return &nodes{a: a, items: nil, skips: skipped}
+		return nodes{a: a, items: nil, skips: skipped}
 	}
 	if m, ok := n.(syntax.RootNode); ok {
 		n = m.Inner
@@ -189,7 +202,7 @@ func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) *nodes {
 	case syntax.KindMarkup:
 		skips = markupSkipped
 	}
-	ns := &nodes{a: a, items: n.(*syntax.Inner).Children(), skips: skips}
+	ns := nodes{a: a, items: n.(*syntax.Inner).Children(), skips: skips}
 	ns.skip()
 	return ns
 }

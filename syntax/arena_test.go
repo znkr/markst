@@ -1,10 +1,14 @@
 package syntax
 
-import "testing"
+import (
+	"testing"
+
+	"znkr.io/markst/internal/slab"
+)
 
 func TestArenaAcrossBlocks(t *testing.T) {
 	// Enough nodes to cross several blocks.
-	const n = 4 * blockSize
+	const n = 4 * slab.Block
 	var a Arena
 	leaves := make([]*Leaf, n)
 	inners := make([]*Inner, n)
@@ -81,14 +85,14 @@ func TestArenaConvert(t *testing.T) {
 // TestArenaBlocks pins what a block buys: a run of nodes costs one allocation
 // per block of them, not one each.
 func TestArenaBlocks(t *testing.T) {
-	const n = 4 * blockSize
+	const n = 4 * slab.Block
 	allocs := testing.AllocsPerRun(10, func() {
 		var a Arena
 		for range n {
 			a.Leaf(KindText, Span{})
 		}
 	})
-	if want := float64(n / blockSize); allocs != want {
+	if want := float64(n / slab.Block); allocs != want {
 		t.Errorf("%d leaves took %v allocations, want %v", n, allocs, want)
 	}
 }
