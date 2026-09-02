@@ -334,6 +334,12 @@ type frame struct {
 	// (IterOpen). Keyed by the Ref of the IterOpen, since *iteratorState can't
 	// satisfy [value.Value]'s unexported aValue() method.
 	iters map[expr.Ref]*iteratorState
+
+	// ops is the buffer the operand-error check reads each instruction's
+	// operands into. It is one buffer per frame rather than one slice per
+	// instruction, which is what the check used to cost — on every instruction
+	// the frame runs, however many times it runs it.
+	ops []expr.Ref
 }
 
 // get returns the value stored for ref. Module-constant refs are looked up
@@ -596,7 +602,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	r := inst.Result()
 
 	if propagatesFromOperands(inst) {
-		for _, op := range inst.Operands() {
+		fr.ops = inst.Operands(fr.ops[:0])
+		for _, op := range fr.ops {
 			if e, ok := value.IsError(fr.get(op)); ok {
 				if r != expr.NoRef {
 					fr.vals[r] = e

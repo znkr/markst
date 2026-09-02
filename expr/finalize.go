@@ -129,6 +129,10 @@ func (b *Builder) Finalize() {
 	for _, r := range b.liveWrites {
 		bumpUse(r)
 	}
+	// ops is the scratch buffer every Operands call appends into, so walking
+	// the operands of a whole function allocates once rather than per
+	// instruction.
+	var ops []Ref
 	for _, block := range b.fn.Blocks {
 		for i, p := range block.Params {
 			if r := p.Result(); r != NoRef {
@@ -139,12 +143,14 @@ func (b *Builder) Finalize() {
 			if r := inst.Result(); r != NoRef {
 				prods[r] = producer{block: block.ID, idx: i, isParam: false, exists: true}
 			}
-			for _, op := range inst.Operands() {
+			ops = inst.Operands(ops[:0])
+			for _, op := range ops {
 				bumpUse(op)
 			}
 		}
 		if block.Term != nil {
-			for _, op := range block.Term.Operands() {
+			ops = block.Term.Operands(ops[:0])
+			for _, op := range ops {
 				bumpUse(op)
 			}
 		}
@@ -193,7 +199,8 @@ func (b *Builder) Finalize() {
 				}
 			}
 		} else {
-			for _, op := range b.fn.Blocks[p.block].Instrs[p.idx].Operands() {
+			ops = b.fn.Blocks[p.block].Instrs[p.idx].Operands(ops[:0])
+			for _, op := range ops {
 				visitDrop(op)
 			}
 		}

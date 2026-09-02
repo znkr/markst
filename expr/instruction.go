@@ -16,7 +16,7 @@ import (
 // [voidInstr] base.
 type Instruction interface {
 	Result() Ref
-	Operands() []Ref
+	Operands(dst []Ref) []Ref
 	// RemapOperands substitutes every Ref-typed operand through rename.
 	// Used by [Builder.Finalize] to inline trivial-param removals.
 	RemapOperands(rename func(Ref) Ref)
@@ -79,7 +79,7 @@ type Terminator interface {
 	Successors() []BlockID
 	// Operands returns the Ref-typed operands of the terminator, including
 	// every arg flowing to a successor's [BlockParam] slot.
-	Operands() []Ref
+	Operands(dst []Ref) []Ref
 	// RemapOperands substitutes every Ref-typed operand through rename,
 	// including args.
 	RemapOperands(rename func(Ref) Ref)
@@ -103,8 +103,8 @@ type Jump struct {
 	Args   []Ref
 }
 
-func (t *Jump) Successors() []BlockID { return []BlockID{t.Target} }
-func (t *Jump) Operands() []Ref       { return t.Args }
+func (t *Jump) Successors() []BlockID    { return []BlockID{t.Target} }
+func (t *Jump) Operands(dst []Ref) []Ref { return append(dst, t.Args...) }
 func (t *Jump) RemapOperands(f func(Ref) Ref) {
 	for i := range t.Args {
 		t.Args[i] = f(t.Args[i])
@@ -125,12 +125,11 @@ type Branch struct {
 }
 
 func (t *Branch) Successors() []BlockID { return []BlockID{t.Then, t.Else} }
-func (t *Branch) Operands() []Ref {
-	out := make([]Ref, 0, 1+len(t.ThenArgs)+len(t.ElseArgs))
-	out = append(out, t.Cond)
-	out = append(out, t.ThenArgs...)
-	out = append(out, t.ElseArgs...)
-	return out
+func (t *Branch) Operands(dst []Ref) []Ref {
+	dst = append(dst, t.Cond)
+	dst = append(dst, t.ThenArgs...)
+	dst = append(dst, t.ElseArgs...)
+	return dst
 }
 func (t *Branch) RemapOperands(f func(Ref) Ref) {
 	t.Cond = f(t.Cond)
@@ -150,11 +149,11 @@ type Return struct {
 }
 
 func (t *Return) Successors() []BlockID { return nil }
-func (t *Return) Operands() []Ref {
+func (t *Return) Operands(dst []Ref) []Ref {
 	if t.Value == NoRef {
-		return nil
+		return dst
 	}
-	return []Ref{t.Value}
+	return append(dst, t.Value)
 }
 func (t *Return) RemapOperands(f func(Ref) Ref) {
 	if t.Value != NoRef {
@@ -170,7 +169,7 @@ type Unreachable struct {
 }
 
 func (t *Unreachable) Successors() []BlockID         { return nil }
-func (t *Unreachable) Operands() []Ref               { return nil }
+func (t *Unreachable) Operands(dst []Ref) []Ref      { return dst }
 func (t *Unreachable) RemapOperands(_ func(Ref) Ref) {}
 
 // edgeArgs returns a pointer to the args slice on pred's terminator that
@@ -204,7 +203,7 @@ type Const struct {
 	Value value.Value
 }
 
-func (c *Const) Operands() []Ref               { return nil }
+func (c *Const) Operands(dst []Ref) []Ref      { return dst }
 func (c *Const) RemapOperands(_ func(Ref) Ref) {}
 
 // Unary applies a unary operator to a single operand.
@@ -214,7 +213,7 @@ type Unary struct {
 	X  Ref
 }
 
-func (u *Unary) Operands() []Ref               { return []Ref{u.X} }
+func (u *Unary) Operands(dst []Ref) []Ref      { return append(dst, u.X) }
 func (u *Unary) RemapOperands(f func(Ref) Ref) { u.X = f(u.X) }
 
 // Binary applies a non-assignment binary operator. Assignment forms
@@ -226,7 +225,7 @@ type Binary struct {
 	R  Ref
 }
 
-func (b *Binary) Operands() []Ref               { return []Ref{b.L, b.R} }
+func (b *Binary) Operands(dst []Ref) []Ref      { return append(dst, b.L, b.R) }
 func (b *Binary) RemapOperands(f func(Ref) Ref) { b.L = f(b.L); b.R = f(b.R) }
 
 // MakeArray constructs an array. Items may be plain values or spread sources;
@@ -236,12 +235,11 @@ type MakeArray struct {
 	Items []ArrayItem
 }
 
-func (m *MakeArray) Operands() []Ref {
-	out := make([]Ref, len(m.Items))
-	for i, it := range m.Items {
-		out[i] = it.Value
+func (m *MakeArray) Operands(dst []Ref) []Ref {
+	for _, it := range m.Items {
+		dst = append(dst, it.Value)
 	}
-	return out
+	return dst
 }
 
 func (m *MakeArray) RemapOperands(f func(Ref) Ref) {
@@ -264,7 +262,7 @@ type MakeDict struct {
 	Entries []DictEntry
 }
 
-func (m *MakeDict) Operands() []Ref {
+func (m *MakeDict) Operands(dst []Ref) []Ref {
 	out := make([]Ref, 0, 2*len(m.Entries))
 	for _, e := range m.Entries {
 		if e.Key != NoRef {
@@ -306,7 +304,7 @@ type fieldAccess struct {
 	FieldSpan syntax.Span
 }
 
-func (f *fieldAccess) Operands() []Ref                { return []Ref{f.Target} }
+func (f *fieldAccess) Operands(dst []Ref) []Ref       { return append(dst, f.Target) }
 func (f *fieldAccess) RemapOperands(rn func(Ref) Ref) { f.Target = rn(f.Target) }
 
 // FieldRead reads a named field from a value (dictionary, content, or function
@@ -428,7 +426,7 @@ type MutCheck struct {
 	MathCall string
 }
 
-func (c *Call) Operands() []Ref {
+func (c *Call) Operands(dst []Ref) []Ref {
 	n := 1 + len(c.Args) + len(c.Blocks)
 	if c.Mut != nil {
 		n += len(c.Mut.RecvAccessors)
@@ -492,15 +490,13 @@ type CallSet struct {
 	Op     syntax.BinaryOp
 }
 
-func (c *CallSet) Operands() []Ref {
-	out := make([]Ref, 0, 2+len(c.Args)+len(c.Blocks))
-	out = append(out, c.Callee.Ref)
+func (c *CallSet) Operands(dst []Ref) []Ref {
+	dst = append(dst, c.Callee.Ref)
 	for _, a := range c.Args {
-		out = append(out, a.Value)
+		dst = append(dst, a.Value)
 	}
-	out = append(out, c.Blocks...)
-	out = append(out, c.NewVal)
-	return out
+	dst = append(dst, c.Blocks...)
+	return append(dst, c.NewVal)
 }
 
 func (c *CallSet) RemapOperands(f func(Ref) Ref) {
@@ -526,7 +522,7 @@ type FieldWrite struct {
 	Op     syntax.BinaryOp
 }
 
-func (f *FieldWrite) Operands() []Ref { return []Ref{f.Target, f.NewVal} }
+func (f *FieldWrite) Operands(dst []Ref) []Ref { return append(dst, f.Target, f.NewVal) }
 func (f *FieldWrite) RemapOperands(rn func(Ref) Ref) {
 	f.Target = rn(f.Target)
 	f.NewVal = rn(f.NewVal)
@@ -552,10 +548,10 @@ type Warn struct {
 	Hints []string
 }
 
-func (w *Warn) Operands() []Ref             { return nil }
+func (w *Warn) Operands(dst []Ref) []Ref    { return dst }
 func (w *Warn) RemapOperands(func(Ref) Ref) {}
 
-func (d *DiscardCheck) Operands() []Ref                { return []Ref{d.Value} }
+func (d *DiscardCheck) Operands(dst []Ref) []Ref       { return append(dst, d.Value) }
 func (d *DiscardCheck) RemapOperands(rn func(Ref) Ref) { d.Value = rn(d.Value) }
 
 // DestructArray validates Source for a destructuring pattern with positional
@@ -581,7 +577,7 @@ type DestructArray struct {
 	Hybrid  bool
 }
 
-func (d *DestructArray) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DestructArray) Operands(dst []Ref) []Ref      { return append(dst, d.Source) }
 func (d *DestructArray) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
 
 // ArrayElem reads a single element from Source. When FromEnd is false the
@@ -596,7 +592,7 @@ type ArrayElem struct {
 	Key     name.Name
 }
 
-func (a *ArrayElem) Operands() []Ref               { return []Ref{a.Source} }
+func (a *ArrayElem) Operands(dst []Ref) []Ref      { return append(dst, a.Source) }
 func (a *ArrayElem) RemapOperands(f func(Ref) Ref) { a.Source = f(a.Source) }
 
 // ArraySlice produces a sub-array Source[Before:len-After] — i.e. the
@@ -612,7 +608,7 @@ type ArraySlice struct {
 	ExcludeKeys []name.Name
 }
 
-func (a *ArraySlice) Operands() []Ref               { return []Ref{a.Source} }
+func (a *ArraySlice) Operands(dst []Ref) []Ref      { return append(dst, a.Source) }
 func (a *ArraySlice) RemapOperands(f func(Ref) Ref) { a.Source = f(a.Source) }
 
 // DestructDict validates Source for a dict-shape destructuring pattern.
@@ -628,7 +624,7 @@ type DestructDict struct {
 	FirstNamedSpan syntax.Span
 }
 
-func (d *DestructDict) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DestructDict) Operands(dst []Ref) []Ref      { return append(dst, d.Source) }
 func (d *DestructDict) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
 
 // DictField reads a key from Source for a destructuring pattern. Unlike
@@ -641,7 +637,7 @@ type DictField struct {
 	FieldSpan syntax.Span
 }
 
-func (d *DictField) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DictField) Operands(dst []Ref) []Ref      { return append(dst, d.Source) }
 func (d *DictField) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
 
 // DictRest produces a dictionary containing all entries of Source whose
@@ -652,7 +648,7 @@ type DictRest struct {
 	Consumed []name.Name
 }
 
-func (d *DictRest) Operands() []Ref               { return []Ref{d.Source} }
+func (d *DictRest) Operands(dst []Ref) []Ref      { return append(dst, d.Source) }
 func (d *DictRest) RemapOperands(f func(Ref) Ref) { d.Source = f(d.Source) }
 
 // IterOpen produces an opaque iterator over an array/dict/string.
@@ -669,7 +665,7 @@ type IterOpen struct {
 	PatternSpan   syntax.Span
 }
 
-func (i *IterOpen) Operands() []Ref               { return []Ref{i.Iterable} }
+func (i *IterOpen) Operands(dst []Ref) []Ref      { return append(dst, i.Iterable) }
 func (i *IterOpen) RemapOperands(f func(Ref) Ref) { i.Iterable = f(i.Iterable) }
 
 // IterHasNext returns a boolean indicating whether the iterator has more
@@ -679,7 +675,7 @@ type IterHasNext struct {
 	Iter Ref
 }
 
-func (i *IterHasNext) Operands() []Ref               { return []Ref{i.Iter} }
+func (i *IterHasNext) Operands(dst []Ref) []Ref      { return append(dst, i.Iter) }
 func (i *IterHasNext) RemapOperands(f func(Ref) Ref) { i.Iter = f(i.Iter) }
 
 // IterAdvance advances the iterator one step and yields the next element. Must
@@ -689,7 +685,7 @@ type IterAdvance struct {
 	Iter Ref
 }
 
-func (i *IterAdvance) Operands() []Ref               { return []Ref{i.Iter} }
+func (i *IterAdvance) Operands(dst []Ref) []Ref      { return append(dst, i.Iter) }
 func (i *IterAdvance) RemapOperands(f func(Ref) Ref) { i.Iter = f(i.Iter) }
 
 // MakeClosure constructs a closure value pointing at the [Function] with the
@@ -701,7 +697,7 @@ type MakeClosure struct {
 	Captures []Ref
 }
 
-func (m *MakeClosure) Operands() []Ref { return m.Captures }
+func (m *MakeClosure) Operands(dst []Ref) []Ref { return append(dst, m.Captures...) }
 func (m *MakeClosure) RemapOperands(f func(Ref) Ref) {
 	for i := range m.Captures {
 		m.Captures[i] = f(m.Captures[i])
@@ -724,7 +720,7 @@ type ContentResult struct {
 	Math  bool
 }
 
-func (c *ContentResult) Operands() []Ref { return c.Items }
+func (c *ContentResult) Operands(dst []Ref) []Ref { return append(dst, c.Items...) }
 func (c *ContentResult) RemapOperands(f func(Ref) Ref) {
 	for i := range c.Items {
 		c.Items[i] = f(c.Items[i])
@@ -753,11 +749,11 @@ type Error struct {
 	Reported bool
 }
 
-func (r *Error) Operands() []Ref {
+func (r *Error) Operands(dst []Ref) []Ref {
 	if r.From == NoRef {
-		return nil
+		return dst
 	}
-	return []Ref{r.From}
+	return append(dst, r.From)
 }
 func (r *Error) RemapOperands(f func(Ref) Ref) {
 	if r.From != NoRef {
@@ -775,7 +771,7 @@ type AttachLabel struct {
 	Label   name.Name
 }
 
-func (a *AttachLabel) Operands() []Ref               { return []Ref{a.Content} }
+func (a *AttachLabel) Operands(dst []Ref) []Ref      { return append(dst, a.Content) }
 func (a *AttachLabel) RemapOperands(f func(Ref) Ref) { a.Content = f(a.Content) }
 
 // CodeJoin joins a sequence of value refs using the code-mode joiner. The
@@ -787,7 +783,7 @@ type CodeJoin struct {
 	ItemSpans []syntax.Span // parallel to Items; used for per-item error reporting
 }
 
-func (c *CodeJoin) Operands() []Ref { return c.Items }
+func (c *CodeJoin) Operands(dst []Ref) []Ref { return append(dst, c.Items...) }
 func (c *CodeJoin) RemapOperands(f func(Ref) Ref) {
 	for i := range c.Items {
 		c.Items[i] = f(c.Items[i])
@@ -805,7 +801,7 @@ type JoinBegin struct {
 	instr
 }
 
-func (*JoinBegin) Operands() []Ref               { return nil }
+func (*JoinBegin) Operands(dst []Ref) []Ref      { return dst }
 func (*JoinBegin) RemapOperands(_ func(Ref) Ref) {}
 
 // JoinAdd appends item to a loop accumulator and returns the same accumulator
@@ -818,7 +814,7 @@ type JoinAdd struct {
 	Item Ref
 }
 
-func (a *JoinAdd) Operands() []Ref { return []Ref{a.Acc, a.Item} }
+func (a *JoinAdd) Operands(dst []Ref) []Ref { return append(dst, a.Acc, a.Item) }
 func (a *JoinAdd) RemapOperands(f func(Ref) Ref) {
 	a.Acc = f(a.Acc)
 	a.Item = f(a.Item)
@@ -833,7 +829,7 @@ type JoinResult struct {
 	Acc Ref
 }
 
-func (a *JoinResult) Operands() []Ref               { return []Ref{a.Acc} }
+func (a *JoinResult) Operands(dst []Ref) []Ref      { return append(dst, a.Acc) }
 func (a *JoinResult) RemapOperands(f func(Ref) Ref) { a.Acc = f(a.Acc) }
 
 // Heading represents a `= Title`-style heading at the given level.
@@ -843,7 +839,7 @@ type Heading struct {
 	Body  Ref
 }
 
-func (h *Heading) Operands() []Ref               { return []Ref{h.Body} }
+func (h *Heading) Operands(dst []Ref) []Ref      { return append(dst, h.Body) }
 func (h *Heading) RemapOperands(f func(Ref) Ref) { h.Body = f(h.Body) }
 
 // Strong wraps content in bold formatting.
@@ -852,7 +848,7 @@ type Strong struct {
 	Body Ref
 }
 
-func (s *Strong) Operands() []Ref               { return []Ref{s.Body} }
+func (s *Strong) Operands(dst []Ref) []Ref      { return append(dst, s.Body) }
 func (s *Strong) RemapOperands(f func(Ref) Ref) { s.Body = f(s.Body) }
 
 // Emph wraps content in italic formatting.
@@ -861,7 +857,7 @@ type Emph struct {
 	Body Ref
 }
 
-func (e *Emph) Operands() []Ref               { return []Ref{e.Body} }
+func (e *Emph) Operands(dst []Ref) []Ref      { return append(dst, e.Body) }
 func (e *Emph) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
 // Link is a hyperlink with a destination URL and body content.
@@ -871,7 +867,7 @@ type Link struct {
 	Body Ref
 }
 
-func (l *Link) Operands() []Ref               { return []Ref{l.Body} }
+func (l *Link) Operands(dst []Ref) []Ref      { return append(dst, l.Body) }
 func (l *Link) RemapOperands(f func(Ref) Ref) { l.Body = f(l.Body) }
 
 // RefMarkup is the `@label` reference construct (named with the `Markup`
@@ -882,11 +878,11 @@ type RefMarkup struct {
 	Supplement Ref // NoRef when no supplement was provided
 }
 
-func (r *RefMarkup) Operands() []Ref {
+func (r *RefMarkup) Operands(dst []Ref) []Ref {
 	if r.Supplement == NoRef {
-		return nil
+		return dst
 	}
-	return []Ref{r.Supplement}
+	return append(dst, r.Supplement)
 }
 
 func (r *RefMarkup) RemapOperands(f func(Ref) Ref) {
@@ -901,7 +897,7 @@ type ListItem struct {
 	Body Ref
 }
 
-func (l *ListItem) Operands() []Ref               { return []Ref{l.Body} }
+func (l *ListItem) Operands(dst []Ref) []Ref      { return append(dst, l.Body) }
 func (l *ListItem) RemapOperands(f func(Ref) Ref) { l.Body = f(l.Body) }
 
 // EnumItem represents a numbered list item. Number is -1 for "+" markers.
@@ -911,7 +907,7 @@ type EnumItem struct {
 	Body   Ref
 }
 
-func (e *EnumItem) Operands() []Ref               { return []Ref{e.Body} }
+func (e *EnumItem) Operands(dst []Ref) []Ref      { return append(dst, e.Body) }
 func (e *EnumItem) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
 // TermItem represents a definition-list entry: term / description.
@@ -921,7 +917,7 @@ type TermItem struct {
 	Description Ref
 }
 
-func (t *TermItem) Operands() []Ref { return []Ref{t.Term, t.Description} }
+func (t *TermItem) Operands(dst []Ref) []Ref { return append(dst, t.Term, t.Description) }
 func (t *TermItem) RemapOperands(f func(Ref) Ref) {
 	t.Term = f(t.Term)
 	t.Description = f(t.Description)
@@ -937,7 +933,7 @@ type Equation struct {
 	Body  Ref
 }
 
-func (e *Equation) Operands() []Ref               { return []Ref{e.Body} }
+func (e *Equation) Operands(dst []Ref) []Ref      { return append(dst, e.Body) }
 func (e *Equation) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
 // MathAttach is a base with optional sub-/superscripts: a_1^2. Top and Bottom
@@ -949,15 +945,15 @@ type MathAttach struct {
 	Bottom Ref
 }
 
-func (m *MathAttach) Operands() []Ref {
-	out := []Ref{m.Base}
+func (m *MathAttach) Operands(dst []Ref) []Ref {
+	dst = append(dst, m.Base)
 	if m.Top != NoRef {
-		out = append(out, m.Top)
+		dst = append(dst, m.Top)
 	}
 	if m.Bottom != NoRef {
-		out = append(out, m.Bottom)
+		dst = append(dst, m.Bottom)
 	}
-	return out
+	return dst
 }
 
 func (m *MathAttach) RemapOperands(f func(Ref) Ref) {
@@ -977,7 +973,7 @@ type MathFrac struct {
 	Denom Ref
 }
 
-func (m *MathFrac) Operands() []Ref { return []Ref{m.Num, m.Denom} }
+func (m *MathFrac) Operands(dst []Ref) []Ref { return append(dst, m.Num, m.Denom) }
 func (m *MathFrac) RemapOperands(f func(Ref) Ref) {
 	m.Num = f(m.Num)
 	m.Denom = f(m.Denom)
@@ -990,7 +986,7 @@ type MathRoot struct {
 	Radicand Ref
 }
 
-func (m *MathRoot) Operands() []Ref {
+func (m *MathRoot) Operands(dst []Ref) []Ref {
 	if m.Index == NoRef {
 		return []Ref{m.Radicand}
 	}
@@ -1011,7 +1007,7 @@ type MathPrimes struct {
 	Count int
 }
 
-func (m *MathPrimes) Operands() []Ref               { return []Ref{m.Base} }
+func (m *MathPrimes) Operands(dst []Ref) []Ref      { return append(dst, m.Base) }
 func (m *MathPrimes) RemapOperands(f func(Ref) Ref) { m.Base = f(m.Base) }
 
 // MathDelimited is a delimited group in math: [x + y]. Open and Close hold the
@@ -1023,7 +1019,7 @@ type MathDelimited struct {
 	Close Ref
 }
 
-func (m *MathDelimited) Operands() []Ref { return []Ref{m.Open, m.Body, m.Close} }
+func (m *MathDelimited) Operands(dst []Ref) []Ref { return append(dst, m.Open, m.Body, m.Close) }
 func (m *MathDelimited) RemapOperands(f func(Ref) Ref) {
 	m.Open = f(m.Open)
 	m.Body = f(m.Body)
@@ -1044,15 +1040,15 @@ type SetRule struct {
 	Condition Ref // NoRef when no `if` clause
 }
 
-func (s *SetRule) Operands() []Ref {
-	out := []Ref{s.Target}
+func (s *SetRule) Operands(dst []Ref) []Ref {
+	dst = append(dst, s.Target)
 	for _, a := range s.Args {
-		out = append(out, a.Value)
+		dst = append(dst, a.Value)
 	}
 	if s.Condition != NoRef {
-		out = append(out, s.Condition)
+		dst = append(dst, s.Condition)
 	}
-	return out
+	return dst
 }
 
 func (s *SetRule) RemapOperands(f func(Ref) Ref) {
@@ -1072,7 +1068,7 @@ type ShowRule struct {
 	Transform Ref
 }
 
-func (s *ShowRule) Operands() []Ref {
+func (s *ShowRule) Operands(dst []Ref) []Ref {
 	if s.Selector == NoRef {
 		return []Ref{s.Transform}
 	}
@@ -1092,7 +1088,7 @@ type Contextual struct {
 	Body Ref
 }
 
-func (c *Contextual) Operands() []Ref               { return []Ref{c.Body} }
+func (c *Contextual) Operands(dst []Ref) []Ref      { return append(dst, c.Body) }
 func (c *Contextual) RemapOperands(f func(Ref) Ref) { c.Body = f(c.Body) }
 
 // ModuleInclude is `include "path"`.
@@ -1101,5 +1097,5 @@ type ModuleInclude struct {
 	Source Ref
 }
 
-func (m *ModuleInclude) Operands() []Ref               { return []Ref{m.Source} }
+func (m *ModuleInclude) Operands(dst []Ref) []Ref      { return append(dst, m.Source) }
 func (m *ModuleInclude) RemapOperands(f func(Ref) Ref) { m.Source = f(m.Source) }
