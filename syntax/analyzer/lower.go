@@ -128,7 +128,7 @@ func (a *analyzer) ownsLine(n syntax.Node) bool {
 	case syntax.KindEquation:
 		return equationIsBlock(n)
 	case syntax.KindRaw:
-		return rawIsBlock(n)
+		return a.rawIsBlock(n)
 	}
 	return false
 }
@@ -136,14 +136,14 @@ func (a *analyzer) ownsLine(n syntax.Node) bool {
 // rawIsBlock reports whether a raw node is delimited by more than one backtick,
 // which is what makes it a block rather than an inline snippet. It mirrors the
 // `block` decision in [analyzer.lowerRaw].
-func rawIsBlock(n syntax.Node) bool {
+func (a *analyzer) rawIsBlock(n syntax.Node) bool {
 	inner, ok := n.(*syntax.Inner)
 	if !ok {
 		return false
 	}
 	for _, child := range inner.Children() {
 		if child.Kind() == syntax.KindRawDelim {
-			return string(child.Text()) != "`"
+			return a.str(child) != "`"
 		}
 	}
 	return false
@@ -172,7 +172,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindShorthand:
 		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(a.str(n))})
 	case syntax.KindSmartQuote:
-		return a.b.Const(n.Span(), &value.SmartQuote{Double: string(n.Text()) == `"`})
+		return a.b.Const(n.Span(), &value.SmartQuote{Double: a.str(n) == `"`})
 	case syntax.KindLinebreak:
 		return a.b.Const(n.Span(), &value.Linebreak{})
 	case syntax.KindParbreak:
@@ -1900,7 +1900,7 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 			if !first {
 				sb.WriteByte('\n')
 			}
-			sb.Write(child.Text())
+			sb.WriteString(a.str(child))
 			first = false
 		}
 	}

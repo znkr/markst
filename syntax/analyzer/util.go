@@ -42,7 +42,7 @@ func (a *analyzer) internal(n syntax.Node, format string, args ...any) {
 	if n != nil {
 		loc := syntax.Locate(a.source, n.Span())
 		fmt.Fprintf(&sb, "\n  at node: kind=%s span=%s text=%q",
-			n.Kind().String(), loc, truncate(string(n.Text()), 60))
+			n.Kind().String(), loc, truncate(a.str(n), 60))
 	}
 	panic(sb.String())
 }

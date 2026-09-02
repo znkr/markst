@@ -16,6 +16,5 @@ func (p *parser) asErrorNode(node syntax.Node, format string, args ...any) *synt
 	return p.a.Error(
 		node.Span(),
 		fmt.Sprintf(format, args...),
-		node.Text(),
 	)
 }

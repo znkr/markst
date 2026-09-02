@@ -19,7 +19,7 @@ type nodeBuilder struct {
 func (b *nodeBuilder) leaf(kind syntax.Kind, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewLeaf(kind, syntax.Span{Start: start, End: b.offset}, []byte(literal))
+	return syntax.NewLeaf(kind, syntax.Span{Start: start, End: b.offset})
 }
 
 func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Node {
@@ -29,13 +29,13 @@ func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Nod
 func (b *nodeBuilder) err(msg string, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, []byte(literal))
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg)
 }
 
 func (b *nodeBuilder) errWithHints(msg string, literal string, hints []string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, []byte(literal), hints...)
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, hints...)
 }
 
 func TestScanner_MarkupMode(t *testing.T) {
@@ -1634,7 +1634,9 @@ func TestScanner_Seek(t *testing.T) {
 
 func TestScanner_Column(t *testing.T) {
 	code := "h\nello"
-	s := New([]byte(code))
+	src := []byte(code)
+	s := New(src)
+	text := func(n syntax.Node) string { return string(syntax.Text(src, n)) }
 
 	if c := s.Column(); c != 0 {
 		t.Errorf("initial Column() = %d, want 0", c)
@@ -1642,8 +1644,8 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan 'h'
 	kind, val := s.Next()
-	if kind != syntax.KindText || string(val.Text()) != "h" {
-		t.Fatalf("expected 'h', got %v %q", kind, val.Text())
+	if kind != syntax.KindText || text(val) != "h" {
+		t.Fatalf("expected 'h', got %v %q", kind, text(val))
 	}
 	if c := s.Column(); c != 1 {
 		t.Errorf("after 'h' Column() = %d, want 1", c)
@@ -1651,8 +1653,8 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan '\n'
 	kind, val = s.Next()
-	if kind != syntax.KindSpace || string(val.Text()) != "\n" {
-		t.Fatalf("expected '\\n', got %v %q", kind, val.Text())
+	if kind != syntax.KindSpace || text(val) != "\n" {
+		t.Fatalf("expected '\\n', got %v %q", kind, text(val))
 	}
 	if c := s.Column(); c != 0 {
 		t.Errorf("after '\\n' Column() = %d, want 0", c)
@@ -1661,8 +1663,8 @@ func TestScanner_Column(t *testing.T) {
 	// Scan 'e' (part of "ello" text)
 	// scanText scans the whole text block "ello".
 	kind, val = s.Next()
-	if kind != syntax.KindText || string(val.Text()) != "ello" {
-		t.Fatalf("expected 'ello', got %v %q", kind, val.Text())
+	if kind != syntax.KindText || text(val) != "ello" {
+		t.Fatalf("expected 'ello', got %v %q", kind, text(val))
 	}
 	// 'ello' length 4. Start at 0. 0+4 = 4. But EOF resets col to 0.
 	if c := s.Column(); c != 0 {

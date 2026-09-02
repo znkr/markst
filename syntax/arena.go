@@ -23,15 +23,15 @@ type Arena struct {
 // document is made of.
 const blockSize = 128
 
-// Leaf returns a terminal node with the given kind, span, and literal text.
-func (a *Arena) Leaf(kind Kind, span Span, literal []byte) *Leaf {
+// Leaf returns a terminal node with the given kind and span.
+func (a *Arena) Leaf(kind Kind, span Span) *Leaf {
 	if len(a.leaves) == cap(a.leaves) {
 		// A fresh block rather than a longer one: growing would copy the
 		// nodes already handed out, and the pointers to them point at the
 		// block they were cut from.
 		a.leaves = make([]Leaf, 0, blockSize)
 	}
-	a.leaves = append(a.leaves, Leaf{kind: kind, span: span, literal: literal})
+	a.leaves = append(a.leaves, Leaf{kind: kind, span: span})
 	return &a.leaves[len(a.leaves)-1]
 }
 
@@ -46,13 +46,13 @@ func (a *Arena) Inner(kind Kind, children []Node) *Inner {
 	return &a.inners[len(a.inners)-1]
 }
 
-// Error returns an error node with the given span, diagnostic message, original
-// literal text, and optional hints.
-func (a *Arena) Error(span Span, message string, literal []byte, hints ...string) *Error {
+// Error returns an error node with the given span, diagnostic message, and
+// optional hints.
+func (a *Arena) Error(span Span, message string, hints ...string) *Error {
 	if len(a.errors) == cap(a.errors) {
 		a.errors = make([]Error, 0, blockSize)
 	}
-	a.errors = append(a.errors, Error{span: span, message: message, hints: hints, literal: literal})
+	a.errors = append(a.errors, Error{span: span, message: message, hints: hints})
 	return &a.errors[len(a.errors)-1]
 }
 
@@ -84,7 +84,7 @@ func (a *Arena) CloneNodes(nodes []Node) []Node {
 func (a *Arena) Convert(node Node, kind Kind) Node {
 	switch v := node.(type) {
 	case *Leaf:
-		return a.Leaf(kind, v.span, v.literal)
+		return a.Leaf(kind, v.span)
 	case *Inner:
 		return a.Inner(kind, v.children)
 	case *Error:

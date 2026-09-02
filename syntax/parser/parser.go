@@ -98,6 +98,10 @@ func (m nlMode) stopAt(t token) bool {
 type parser struct {
 	s *scanner.Scanner
 
+	// src is the source being parsed, which is where a node's text comes from;
+	// see [parser.text].
+	src []byte
+
 	// a is the scanner's arena: the nodes the parser builds go in the same
 	// blocks as the tokens they are built over.
 	a *syntax.Arena
@@ -133,8 +137,9 @@ type token struct {
 func newParser(src []byte) *parser {
 	s := scanner.New(src)
 	p := &parser{
-		s: s,
-		a: s.Arena(),
+		s:   s,
+		src: src,
+		a:   s.Arena(),
 		// The working stack holds every node parsed but not yet wrapped, which
 		// at the top level is the whole document. Sizing it off the source
 		// spares it the doubling of growing there from nothing: the article
@@ -185,6 +190,9 @@ func (p *parser) next() {
 	}
 }
 
+// text returns the source n covers.
+func (p *parser) text(n syntax.Node) []byte { return syntax.Text(p.src, n) }
+
 func (p *parser) consume() {
 	p.nodes = append(p.nodes, p.cur.node)
 	p.next()
@@ -231,7 +239,6 @@ func (p *parser) expected(expected string) *syntax.Error {
 	n := p.a.Error(
 		syntax.Span{Start: span.End, End: span.End},
 		"expected "+expected,
-		nil,
 	)
 	p.nodes = slices.Insert(p.nodes, at, syntax.Node(n))
 	p.errAnchor = at
@@ -295,7 +302,7 @@ func (p *parser) expect(kind syntax.Kind) bool {
 		p.trimErrors()
 		n := p.cur
 		e := p.errorf("expected %s", kind.Name())
-		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", n.kind.Name(), n.node.Text()))
+		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", n.kind.Name(), p.text(n.node)))
 		return false
 	} else {
 		p.expected(kind.Name())
@@ -761,7 +768,7 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 		p.parseMathDelimited()
 
 	case syntax.KindRightBrace:
-		if string(p.cur.node.Text()) == "|]" {
+		if string(p.text(p.cur.node)) == "|]" {
 			p.consumeAs(syntax.KindMathShorthand)
 		} else {
 			p.consumeAs(syntax.KindMathText)
@@ -771,7 +778,7 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 		p.consumeAs(syntax.KindMathText)
 
 	case syntax.KindMathText:
-		continuable = isMathAlphabetic(p.cur.node.Text())
+		continuable = isMathAlphabetic(p.text(p.cur.node))
 		p.consume()
 
 	case syntax.KindLinebreak, syntax.KindMathAlignPoint, syntax.KindMathShorthand:
@@ -876,7 +883,7 @@ var mathDelimitedStops = syntax.SetOf(syntax.KindDollar, syntax.KindEnd, syntax.
 // to MathText or MathShorthand before being eaten.
 func (p *parser) parseMathDelimited() {
 	m := len(p.nodes)
-	if string(p.cur.node.Text()) == "[|" {
+	if string(p.text(p.cur.node)) == "[|" {
 		p.consumeAs(syntax.KindMathShorthand)
 	} else {
 		p.consumeAs(syntax.KindMathText)
@@ -885,7 +892,7 @@ func (p *parser) parseMathDelimited() {
 	p.parseMathExprs(mathDelimitedStops)
 	if p.at(syntax.KindRightBrace) || p.at(syntax.KindRightParen) {
 		p.wrap(mBody, syntax.KindMath)
-		if string(p.cur.node.Text()) == "|]" {
+		if string(p.text(p.cur.node)) == "|]" {
 			p.consumeAs(syntax.KindMathShorthand)
 		} else {
 			p.consumeAs(syntax.KindMathText)
@@ -913,7 +920,7 @@ func (p *parser) mathUnparen(m int) {
 		return
 	}
 	first, last := children[0], children[len(children)-1]
-	if string(first.Text()) == "(" && string(last.Text()) == ")" {
+	if string(p.text(first)) == "(" && string(p.text(last)) == ")" {
 		newChildren := p.a.CloneNodes(children)
 		newChildren[0] = p.a.Convert(first, syntax.KindLeftParen)
 		newChildren[len(newChildren)-1] = p.a.Convert(last, syntax.KindRightParen)
@@ -962,12 +969,12 @@ func (p *parser) parseMathArg(seen map[string]bool) {
 		argKind = syntax.KindNamed
 		p.cur.node = node
 		p.cur.kind = node.Kind()
-		text := string(node.Text())
+		text := string(p.text(node))
 		p.consume()
 		p.consumeAs(syntax.KindColon)
 		if seen[text] {
 			prev := p.nodes[m]
-			p.nodes[m] = p.a.Error(prev.Span(), fmt.Sprintf("duplicate argument: %s", text), prev.Text())
+			p.nodes[m] = p.a.Error(prev.Span(), fmt.Sprintf("duplicate argument: %s", text))
 		}
 		seen[text] = true
 	}
@@ -1412,7 +1419,7 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 	if p.atSet(syntax.Keywords) {
 		tok := p.cur
 		e := p.errorf("expected pattern, found %s", tok.kind.Name())
-		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", tok.kind.Name(), tok.node.Text()))
+		e.Hint(fmt.Sprintf("%s is not allowed as an identifier; try `%s_` instead", tok.kind.Name(), p.text(tok.node)))
 		return
 	} else if !p.atSet(syntax.PatternLeaf) {
 		p.expected("pattern")

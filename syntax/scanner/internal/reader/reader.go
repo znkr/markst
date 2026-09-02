@@ -211,12 +211,6 @@ func (b *Reader) From(start int) []byte {
 	return b.src[start:b.cur]
 }
 
-// Between returns the source between two offsets, for a token whose text is not
-// the run the reader has just read.
-func (b *Reader) Between(start, end int) []byte {
-	return b.src[start:end]
-}
-
 // Upto returns the substring from the beginning of the input to end.
 func (b *Reader) Upto(end int) []byte {
 	return b.src[0:end]

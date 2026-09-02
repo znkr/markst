@@ -8,6 +8,7 @@ import (
 	"znkr.io/diff/textdiff"
 
 	"znkr.io/markst/internal/testfile"
+	"znkr.io/markst/syntax"
 	"znkr.io/markst/syntax/internal/format"
 	"znkr.io/markst/syntax/parser"
 )
@@ -61,7 +62,7 @@ func TestTextRoundTripGolden(t *testing.T) {
 			for _, tc := range testfile.Read(t, file) {
 				t.Run(tc.Name, func(t *testing.T) {
 					node := parser.Parse([]byte(tc.Input))
-					got := node.Text()
+					got := syntax.Text(node.Src, node)
 					if string(got) != string(tc.Input) {
 						t.Errorf("Text() != Input:\n  input: %q\n  got:   %q", string(tc.Input), got)
 					}
@@ -94,7 +95,7 @@ func FuzzTextRoundTrip(f *testing.F) {
 			}
 		}()
 		node := parser.Parse([]byte(src))
-		got := string(node.Text())
+		got := string(node.Src)
 		if got != src {
 			t.Errorf("Text() != src:\n  src: %q\n  got: %q", src, got)
 		}
