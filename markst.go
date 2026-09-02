@@ -100,7 +100,7 @@ func (c *config) evalOpts() []eval.Option {
 // Compile turns markst source into a realized document, running the whole
 // pipeline over it: parse, analyze, evaluate, realize. Presenting the result is
 // a separate job: [znkr.io/markst/html] renders the document as HTML, and a
-// presenter targeting anything else walks it with [value.All] — see
+// presenter targeting anything else walks it with [value.Preorder] — see
 // [znkr.io/markst/smartquote] for the one part of that it cannot do on its own.
 //
 // Every heading in the returned document carries a [value.Label], so there is
@@ -208,6 +208,16 @@ func newLibrary(libname string, exports *value.Dict) *Library {
 // Whitespace does not count. A file of nothing but `let` bindings still has
 // blank lines between them, and those lower to parbreaks and spaces — warning
 // about those would fire on every library there is.
+// rendersSomething is every element except the three that carry nothing of
+// their own: a sequence is structure, and a parbreak or linebreak between two
+// `let` bindings separates nothing. Leaving them out of the mask stops them
+// being yielded, not descended into.
+var rendersSomething = value.AnyKind.Remove(
+	value.KindSequence,
+	value.KindParbreak,
+	value.KindLinebreak,
+)
+
 func isEmptyBody(body value.Value) bool {
 	if body == nil {
 		return true
@@ -216,17 +226,11 @@ func isEmptyBody(body value.Value) bool {
 	if c == nil {
 		return true
 	}
-	for n := range value.All(c) {
-		switch n := n.(type) {
-		case *value.Sequence, *value.Parbreak, *value.Linebreak:
-			// Structure and blank lines, carrying nothing of their own.
-		case *value.Text:
-			if strings.TrimSpace(n.Text) != "" {
-				return false
-			}
-		default:
-			return false
+	for cur := range value.Preorder(c, rendersSomething) {
+		if t, ok := cur.Node().(*value.Text); ok && strings.TrimSpace(t.Text) == "" {
+			continue
 		}
+		return false
 	}
 	return true
 }
@@ -243,9 +247,9 @@ func Query(doc *value.Document, label name.Name) (value.Value, bool) {
 	if doc == nil || doc.Body == nil {
 		return nil, false
 	}
-	for c := range value.All(doc.Body) {
-		m, ok := c.(*value.Metadata)
-		if !ok || m.Label == nil || m.Label.Name != label {
+	for c := range value.Preorder(doc.Body, value.SetOf(value.KindMetadata)) {
+		m := c.Node().(*value.Metadata)
+		if m.Label == nil || m.Label.Name != label {
 			continue
 		}
 		return m.Value, true

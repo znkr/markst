@@ -40,13 +40,11 @@ func customBindings() map[name.Name]value.Value {
 func findCustom(t *testing.T, doc *value.Document) *value.Custom {
 	t.Helper()
 	var found *value.Custom
-	for c := range value.All(doc) {
-		if custom, ok := c.(*value.Custom); ok {
-			if found != nil {
-				t.Fatalf("document has more than one Custom element")
-			}
-			found = custom
+	for c := range value.Preorder(doc, value.SetOf(value.KindCustom)) {
+		if found != nil {
+			t.Fatalf("document has more than one Custom element")
 		}
+		found = c.Node().(*value.Custom)
 	}
 	if found == nil {
 		t.Fatalf("document has no Custom element:\n%s", value.FormatContent(doc))
@@ -57,15 +55,12 @@ func findCustom(t *testing.T, doc *value.Document) *value.Custom {
 // inParagraph reports whether c ended up inside one of doc's paragraphs, which
 // is the whole of what block-ness decides for a leaf element.
 func inParagraph(doc *value.Document, c *value.Custom) bool {
-	for e := range value.All(doc) {
-		par, ok := e.(*value.Par)
-		if !ok {
+	for e := range value.Preorder(doc, value.SetOf(value.KindCustom)) {
+		if e.Node() != value.Content(c) {
 			continue
 		}
-		for sub := range value.All(par.Body) {
-			if sub == value.Content(c) {
-				return true
-			}
+		for range e.Enclosing(value.SetOf(value.KindPar)) {
+			return true
 		}
 	}
 	return false

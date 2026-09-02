@@ -28,9 +28,9 @@ func collect(c value.Content) []*value.Footnote {
 	}
 	var list []*value.Footnote
 	seen := make(map[*value.Footnote]bool)
-	for v := range value.All(c) {
-		fn, ok := v.(*value.Footnote)
-		if !ok || seen[fn] {
+	for v := range value.Preorder(c, value.SetOf(value.KindFootnote)) {
+		fn := v.Node().(*value.Footnote)
+		if seen[fn] {
 			continue
 		}
 		seen[fn] = true

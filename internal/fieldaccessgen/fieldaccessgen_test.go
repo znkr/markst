@@ -8,7 +8,7 @@ import (
 )
 
 func TestGenerate(t *testing.T) {
-	got, err := generate("../../value/content.go")
+	got, err := generate("../../value/content.go", "../../value/style.go", "../../value/state.go", "../../value/custom.go")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,10 @@ import "znkr.io/markst/name"
 `
 
 func main() {
-	out, err := generate("content.go")
+	// content.go is the file everything is generated from; the other three
+	// carry hand-written content types that need an element kind and nothing
+	// else. See [generate].
+	out, err := generate("content.go", "style.go", "state.go", "custom.go")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -77,30 +80,20 @@ func getFields(fset *token.FileSet, file *ast.File, typeName string) []FieldInfo
 	return fields
 }
 
-func generate(filename string) ([]byte, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, filename, nil, 0)
-	if err != nil {
-		return nil, fmt.Errorf("parsing input: %v", err)
-	}
-
-	// Find all types that have an aContent() method
-	var contentTypes []string
+// findContentTypes returns the names of the types in file that implement
+// [value.Content], which the aContent method identifies.
+func findContentTypes(file *ast.File) []string {
+	var types []string
 	for _, decl := range file.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
-		}
-		if funcDecl.Name.Name != "aContent" {
+		if !ok || funcDecl.Name.Name != "aContent" {
 			continue
 		}
 		if funcDecl.Recv == nil || len(funcDecl.Recv.List) == 0 {
 			continue
 		}
-
-		recvType := funcDecl.Recv.List[0].Type
 		var typeName string
-		switch t := recvType.(type) {
+		switch t := funcDecl.Recv.List[0].Type.(type) {
 		case *ast.Ident:
 			typeName = t.Name
 		case *ast.StarExpr:
@@ -108,19 +101,65 @@ func generate(filename string) ([]byte, error) {
 				typeName = ident.Name
 			}
 		}
-
 		if typeName != "" {
-			contentTypes = append(contentTypes, typeName)
+			types = append(types, typeName)
 		}
 	}
+	return types
+}
 
+// writeElemKinds emits the ElemKind enum over every content type there is. The
+// order is the sorted type list, so adding an element renumbers the ones after
+// it — nothing may persist a kind.
+func writeElemKinds(buf *bytes.Buffer, types []string) {
+	fmt.Fprintf(buf, "// ElemKind identifies a content element's type, one constant per element.\n")
+	fmt.Fprintf(buf, "// It is what a [KindSet] holds and what a walk filters on.\n")
+	fmt.Fprintf(buf, "type ElemKind uint8\n\n")
+	fmt.Fprintf(buf, "const (\n")
+	for i, t := range types {
+		if i == 0 {
+			fmt.Fprintf(buf, "\tKind%s ElemKind = iota\n", t)
+		} else {
+			fmt.Fprintf(buf, "\tKind%s\n", t)
+		}
+	}
+	fmt.Fprintf(buf, "\n\t// numElemKinds is the number of element kinds. A KindSet holds one bit\n")
+	fmt.Fprintf(buf, "\t// per kind, so it must not exceed 64; TestKindSetFits checks that.\n")
+	fmt.Fprintf(buf, "\tnumElemKinds\n)\n\n")
+}
+
+// generate emits the per-element code for the content types in filename, plus
+// the element-kind enum, which covers the content types in extra too: a kind
+// numbers every element there is, including the four whose other methods are
+// written by hand.
+func generate(filename string, extra ...string) ([]byte, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, nil, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parsing input: %v", err)
+	}
+
+	contentTypes := findContentTypes(file)
 	slices.Sort(contentTypes)
+
+	allTypes := slices.Clone(contentTypes)
+	for _, name := range extra {
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			return nil, fmt.Errorf("parsing input: %v", err)
+		}
+		allTypes = append(allTypes, findContentTypes(f)...)
+	}
+	slices.Sort(allTypes)
 
 	var buf bytes.Buffer
 	buf.WriteString(header)
+	writeElemKinds(&buf, allTypes)
 
 	for _, typeName := range contentTypes {
 		fields := getFields(fset, file, typeName)
+
+		fmt.Fprintf(&buf, "func (n *%s) Kind() ElemKind { return Kind%s }\n\n", typeName, typeName)
 
 		// Field method
 		fmt.Fprintf(&buf, "func (n *%s) Field(name name.Name) Value {\n", typeName)
@@ -295,31 +334,33 @@ func generate(filename string) ([]byte, error) {
 		}
 		fmt.Fprintf(&buf, "}\n\n")
 
-		// walk method: yields the node, then descends into its content fields
-		// in declaration order, which is document order. Recursing here rather than
-		// handing back a slice of children keeps the traversal allocation-free —
-		// the yield function is passed down untouched, so nothing is built along
-		// the way. See [All].
-		fmt.Fprintf(&buf, "func (n *%s) walk(yield func(Content) bool) bool {\n", typeName)
-		fmt.Fprintf(&buf, "\tif !yield(n) { return false }\n")
+		// inspect method: offers the node to the walker, then descends into its
+		// content fields in declaration order, which is document order. Recursing
+		// here rather than handing back a slice of children keeps the traversal
+		// allocation-free — the walker is passed down untouched, so nothing is
+		// built along the way. See [Preorder].
+		fmt.Fprintf(&buf, "func (n *%s) inspect(w *walker) bool {\n", typeName)
+		fmt.Fprintf(&buf, "\tw.push(n)\n")
+		fmt.Fprintf(&buf, "\tif w.kinds.Contains(Kind%s) && !w.visit() { return w.live() }\n", typeName)
 		for _, f := range fields {
 			switch f.Type {
 			case "Content":
 				// Nil-checked whether or not the field is required: a half-built
 				// node is not worth a panic in a walk.
-				fmt.Fprintf(&buf, "\tif n.%s != nil && !n.%s.walk(yield) { return false }\n", f.Name, f.Name)
+				fmt.Fprintf(&buf, "\tif n.%s != nil && !n.%s.inspect(w) { return false }\n", f.Name, f.Name)
 			case "[]Content", "[]*ListItem", "[]*EnumItem", "[]*TermItem":
 				fmt.Fprintf(&buf, "\tfor _, c := range n.%s {\n", f.Name)
-				fmt.Fprintf(&buf, "\t\tif !c.walk(yield) { return false }\n")
+				fmt.Fprintf(&buf, "\t\tif !c.inspect(w) { return false }\n")
 				fmt.Fprintf(&buf, "\t}\n")
 			case "[][]Content":
 				fmt.Fprintf(&buf, "\tfor _, row := range n.%s {\n", f.Name)
 				fmt.Fprintf(&buf, "\t\tfor _, c := range row {\n")
-				fmt.Fprintf(&buf, "\t\t\tif !c.walk(yield) { return false }\n")
+				fmt.Fprintf(&buf, "\t\t\tif !c.inspect(w) { return false }\n")
 				fmt.Fprintf(&buf, "\t\t}\n")
 				fmt.Fprintf(&buf, "\t}\n")
 			}
 		}
+		fmt.Fprintf(&buf, "\tw.pop()\n")
 		fmt.Fprintf(&buf, "\treturn true\n")
 		fmt.Fprintf(&buf, "}\n\n")
 	}

@@ -1,0 +1,96 @@
+#metadata("2026-03-14") <published>
+#metadata("Walking Trees Without Parents") <title>
+
+= Walking Trees Without Parents
+
+Most tree APIs hand you a node and leave you to find your way back up. That is
+fine while you are only reading _leaves_, and it stops being fine the moment a
+consumer needs to know *where* it is: which section a paragraph belongs to,
+whether the thing it is looking at sits inside a footnote, how deep the nesting
+around it goes.
+
+The usual answer is a parent pointer on every node. It is also the answer that
+makes every node bigger, every construction step slower, and every tree harder
+to share between documents.#footnote[A shared subtree cannot carry a parent
+pointer at all: it has more than one parent, and neither of them is wrong.]
+
+== What a walk already knows
+
+A depth-first walk knows the whole chain, for free, at every moment: it is
+sitting on the Go stack, one frame per open element. The only problem is that
+nothing hands it to the caller.
+
+- The chain is exact — it is the recursion itself.
+- It costs nothing to maintain beyond what the recursion already pays.
+- It is valid only while the walk is at that node, which is both the catch and
+  the reason it is cheap.
+
+That last point is the whole design. A cursor that is valid for the length of
+one loop body needs no invalidation story, no cache, and no immutability
+guarantee from the tree it walks over.
+
+== Filtering earns its keep
+
+#link("https://pkg.go.dev/golang.org/x/tools/go/ast/inspector")[The inspector
+package] makes the same observation about Go's syntax trees, and adds a second:
+a caller almost never wants every node. It wants headings, or metadata, or the
+one element type it knows how to render.
+
++ Say which kinds you want.
++ The walk hands you those.
++ Everything else is walked through, not handed over.
+
+#table(
+    columns: 3,
+    table.header[Consumer][Wants][Today],
+    [outline], [headings], [type switch per node],
+    [footnotes], [footnotes], [type switch per node],
+    [autolabel], [text, pruned at footnotes], [counts nodes to skip them],
+)
+
+=== The pruning case
+
+Counting a subtree's nodes so you can skip them one by one is the shape a walk
+takes when it cannot decline to descend. It is $O(n)$ work to avoid $O(n)$ work,
+and it reads exactly as badly as it sounds:
+
+```go
+case *value.Footnote:
+    for range value.All(c.Body) {
+        skip++
+    }
+```
+
+With pruning it is one line, and the subtree is never touched:
+
+```go
+case *value.Footnote:
+    c.SkipChildren()
+```
+
+== Numbers, eventually <navigation>
+
+An index over a flat array of push/pop events buys one more thing: skipping a
+subtree that provably contains nothing you asked for, in constant time. Whether
+that is worth building depends on the shape of real documents, which is a
+question only a benchmark answers.
+
+The relationship between what a walk touches and what it yields is roughly
+$ t = sum_(i=1)^n c_i quad "versus" quad y = sum_(i in K) c_i $
+where $K$ is the set of kinds the caller asked for. When $K$ is small and the
+document is large, the gap is the whole argument for an index.#footnote[And when
+$K$ is everything, an index is pure overhead — it is a second traversal to
+build, and the first one already gave the answer.]
+
+== What this leaves out
+
+/ Random access: A walk-scoped cursor cannot answer questions about siblings it
+  has not reached yet.
+/ Outliving the walk: The chain unwinds; a caller that needs to keep it takes a
+  copy.
+/ Positions: Realized content carries no spans, so there is no analogue of
+  finding the innermost node at a byte offset.
+
+None of those are needed by anything in this repository today, which is the
+honest reason they are not here — and @navigation is where the case for the one
+that might be gets made.

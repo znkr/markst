@@ -5,6 +5,66 @@ package value
 import "znkr.io/markst/internal/names"
 import "znkr.io/markst/name"
 
+// ElemKind identifies a content element's type, one constant per element.
+// It is what a [KindSet] holds and what a walk filters on.
+type ElemKind uint8
+
+const (
+	KindCustom ElemKind = iota
+	KindDocument
+	KindEmph
+	KindEnum
+	KindEnumItem
+	KindEquation
+	KindFootnote
+	KindHSpace
+	KindHTMLElem
+	KindHeading
+	KindImage
+	KindLinebreak
+	KindLink
+	KindList
+	KindListItem
+	KindMathAccent
+	KindMathAlignPoint
+	KindMathAttach
+	KindMathCancel
+	KindMathCases
+	KindMathFrac
+	KindMathLr
+	KindMathMat
+	KindMathMid
+	KindMathOp
+	KindMathPrimes
+	KindMathRoot
+	KindMathText
+	KindMathUnderline
+	KindMathVec
+	KindMetadata
+	KindPar
+	KindParbreak
+	KindRaw
+	KindRef
+	KindSequence
+	KindSmartQuote
+	KindStateUpdate
+	KindStrong
+	KindStyleUpdate
+	KindStyled
+	KindTable
+	KindTableHeader
+	KindTermItem
+	KindTerms
+	KindText
+	KindUnderline
+
+	// numElemKinds is the number of element kinds. A KindSet holds one bit
+	// per kind, so it must not exceed 64; TestKindSetFits checks that.
+	numElemKinds
+)
+
+func (n *Document) Kind() ElemKind { return KindDocument }
+
 func (n *Document) Field(name name.Name) Value {
 	switch name {
 	case names.Title:
@@ -57,15 +117,19 @@ func (n *Document) GetLabel() *Label {
 	return nil
 }
 
-func (n *Document) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Document) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindDocument) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Emph) Kind() ElemKind { return KindEmph }
 
 func (n *Emph) Field(name name.Name) Value {
 	switch name {
@@ -111,15 +175,19 @@ func (n *Emph) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Emph) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Emph) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindEmph) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Enum) Kind() ElemKind { return KindEnum }
 
 func (n *Enum) Field(name name.Name) Value {
 	switch name {
@@ -169,17 +237,21 @@ func (n *Enum) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Enum) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Enum) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindEnum) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *EnumItem) Kind() ElemKind { return KindEnumItem }
 
 func (n *EnumItem) Field(name name.Name) Value {
 	switch name {
@@ -235,15 +307,19 @@ func (n *EnumItem) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *EnumItem) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *EnumItem) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindEnumItem) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Equation) Kind() ElemKind { return KindEquation }
 
 func (n *Equation) Field(name name.Name) Value {
 	switch name {
@@ -294,15 +370,19 @@ func (n *Equation) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Equation) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Equation) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindEquation) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Footnote) Kind() ElemKind { return KindFootnote }
 
 func (n *Footnote) Field(name name.Name) Value {
 	switch name {
@@ -348,15 +428,19 @@ func (n *Footnote) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Footnote) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Footnote) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindFootnote) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *HSpace) Kind() ElemKind { return KindHSpace }
 
 func (n *HSpace) Field(name name.Name) Value {
 	switch name {
@@ -390,12 +474,16 @@ func (n *HSpace) GetLabel() *Label {
 	return nil
 }
 
-func (n *HSpace) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *HSpace) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindHSpace) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *HTMLElem) Kind() ElemKind { return KindHTMLElem }
 
 func (n *HTMLElem) Field(name name.Name) Value {
 	switch name {
@@ -466,15 +554,19 @@ func (n *HTMLElem) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *HTMLElem) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *HTMLElem) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindHTMLElem) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Heading) Kind() ElemKind { return KindHeading }
 
 func (n *Heading) Field(name name.Name) Value {
 	switch name {
@@ -525,15 +617,19 @@ func (n *Heading) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Heading) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Heading) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindHeading) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Image) Kind() ElemKind { return KindImage }
 
 func (n *Image) Field(name name.Name) Value {
 	switch name {
@@ -589,12 +685,16 @@ func (n *Image) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Image) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Image) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindImage) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Linebreak) Kind() ElemKind { return KindLinebreak }
 
 func (n *Linebreak) Field(name name.Name) Value {
 	return nil
@@ -616,12 +716,16 @@ func (n *Linebreak) GetLabel() *Label {
 	return nil
 }
 
-func (n *Linebreak) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Linebreak) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindLinebreak) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Link) Kind() ElemKind { return KindLink }
 
 func (n *Link) Field(name name.Name) Value {
 	switch name {
@@ -672,15 +776,19 @@ func (n *Link) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Link) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Link) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindLink) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *List) Kind() ElemKind { return KindList }
 
 func (n *List) Field(name name.Name) Value {
 	switch name {
@@ -730,17 +838,21 @@ func (n *List) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *List) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *List) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindList) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *ListItem) Kind() ElemKind { return KindListItem }
 
 func (n *ListItem) Field(name name.Name) Value {
 	switch name {
@@ -786,15 +898,19 @@ func (n *ListItem) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *ListItem) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *ListItem) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindListItem) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathAccent) Kind() ElemKind { return KindMathAccent }
 
 func (n *MathAccent) Field(name name.Name) Value {
 	switch name {
@@ -860,15 +976,19 @@ func (n *MathAccent) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathAccent) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathAccent) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathAccent) && !w.visit() {
+		return w.live()
+	}
+	if n.Base != nil && !n.Base.inspect(w) {
 		return false
 	}
-	if n.Base != nil && !n.Base.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathAlignPoint) Kind() ElemKind { return KindMathAlignPoint }
 
 func (n *MathAlignPoint) Field(name name.Name) Value {
 	switch name {
@@ -909,12 +1029,16 @@ func (n *MathAlignPoint) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathAlignPoint) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *MathAlignPoint) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathAlignPoint) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *MathAttach) Kind() ElemKind { return KindMathAttach }
 
 func (n *MathAttach) Field(name name.Name) Value {
 	switch name {
@@ -980,21 +1104,25 @@ func (n *MathAttach) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathAttach) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathAttach) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathAttach) && !w.visit() {
+		return w.live()
+	}
+	if n.Base != nil && !n.Base.inspect(w) {
 		return false
 	}
-	if n.Base != nil && !n.Base.walk(yield) {
+	if n.Top != nil && !n.Top.inspect(w) {
 		return false
 	}
-	if n.Top != nil && !n.Top.walk(yield) {
+	if n.Bottom != nil && !n.Bottom.inspect(w) {
 		return false
 	}
-	if n.Bottom != nil && !n.Bottom.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathCancel) Kind() ElemKind { return KindMathCancel }
 
 func (n *MathCancel) Field(name name.Name) Value {
 	switch name {
@@ -1050,15 +1178,19 @@ func (n *MathCancel) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathCancel) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathCancel) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathCancel) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathCases) Kind() ElemKind { return KindMathCases }
 
 func (n *MathCases) Field(name name.Name) Value {
 	switch name {
@@ -1108,17 +1240,21 @@ func (n *MathCases) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathCases) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *MathCases) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathCases) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *MathFrac) Kind() ElemKind { return KindMathFrac }
 
 func (n *MathFrac) Field(name name.Name) Value {
 	switch name {
@@ -1169,18 +1305,22 @@ func (n *MathFrac) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathFrac) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathFrac) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathFrac) && !w.visit() {
+		return w.live()
+	}
+	if n.Num != nil && !n.Num.inspect(w) {
 		return false
 	}
-	if n.Num != nil && !n.Num.walk(yield) {
+	if n.Denom != nil && !n.Denom.inspect(w) {
 		return false
 	}
-	if n.Denom != nil && !n.Denom.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathLr) Kind() ElemKind { return KindMathLr }
 
 func (n *MathLr) Field(name name.Name) Value {
 	switch name {
@@ -1236,15 +1376,19 @@ func (n *MathLr) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathLr) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathLr) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathLr) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathMat) Kind() ElemKind { return KindMathMat }
 
 func (n *MathMat) Field(name name.Name) Value {
 	switch name {
@@ -1298,19 +1442,23 @@ func (n *MathMat) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathMat) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *MathMat) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathMat) && !w.visit() {
+		return w.live()
 	}
 	for _, row := range n.Rows {
 		for _, c := range row {
-			if !c.walk(yield) {
+			if !c.inspect(w) {
 				return false
 			}
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *MathMid) Kind() ElemKind { return KindMathMid }
 
 func (n *MathMid) Field(name name.Name) Value {
 	switch name {
@@ -1356,15 +1504,19 @@ func (n *MathMid) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathMid) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathMid) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathMid) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathOp) Kind() ElemKind { return KindMathOp }
 
 func (n *MathOp) Field(name name.Name) Value {
 	switch name {
@@ -1415,15 +1567,19 @@ func (n *MathOp) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathOp) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathOp) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathOp) && !w.visit() {
+		return w.live()
+	}
+	if n.Text != nil && !n.Text.inspect(w) {
 		return false
 	}
-	if n.Text != nil && !n.Text.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathPrimes) Kind() ElemKind { return KindMathPrimes }
 
 func (n *MathPrimes) Field(name name.Name) Value {
 	switch name {
@@ -1474,15 +1630,19 @@ func (n *MathPrimes) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathPrimes) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathPrimes) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathPrimes) && !w.visit() {
+		return w.live()
+	}
+	if n.Base != nil && !n.Base.inspect(w) {
 		return false
 	}
-	if n.Base != nil && !n.Base.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathRoot) Kind() ElemKind { return KindMathRoot }
 
 func (n *MathRoot) Field(name name.Name) Value {
 	switch name {
@@ -1538,18 +1698,22 @@ func (n *MathRoot) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathRoot) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathRoot) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathRoot) && !w.visit() {
+		return w.live()
+	}
+	if n.Index != nil && !n.Index.inspect(w) {
 		return false
 	}
-	if n.Index != nil && !n.Index.walk(yield) {
+	if n.Radicand != nil && !n.Radicand.inspect(w) {
 		return false
 	}
-	if n.Radicand != nil && !n.Radicand.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathText) Kind() ElemKind { return KindMathText }
 
 func (n *MathText) Field(name name.Name) Value {
 	switch name {
@@ -1625,12 +1789,16 @@ func (n *MathText) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathText) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *MathText) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathText) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *MathUnderline) Kind() ElemKind { return KindMathUnderline }
 
 func (n *MathUnderline) Field(name name.Name) Value {
 	switch name {
@@ -1676,15 +1844,19 @@ func (n *MathUnderline) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathUnderline) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *MathUnderline) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathUnderline) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *MathVec) Kind() ElemKind { return KindMathVec }
 
 func (n *MathVec) Field(name name.Name) Value {
 	switch name {
@@ -1734,17 +1906,21 @@ func (n *MathVec) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *MathVec) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *MathVec) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMathVec) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *Metadata) Kind() ElemKind { return KindMetadata }
 
 func (n *Metadata) Field(name name.Name) Value {
 	switch name {
@@ -1790,12 +1966,16 @@ func (n *Metadata) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Metadata) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Metadata) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindMetadata) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Par) Kind() ElemKind { return KindPar }
 
 func (n *Par) Field(name name.Name) Value {
 	switch name {
@@ -1841,15 +2021,19 @@ func (n *Par) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Par) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Par) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindPar) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Parbreak) Kind() ElemKind { return KindParbreak }
 
 func (n *Parbreak) Field(name name.Name) Value {
 	return nil
@@ -1871,12 +2055,16 @@ func (n *Parbreak) GetLabel() *Label {
 	return nil
 }
 
-func (n *Parbreak) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Parbreak) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindParbreak) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Raw) Kind() ElemKind { return KindRaw }
 
 func (n *Raw) Field(name name.Name) Value {
 	switch name {
@@ -1925,12 +2113,16 @@ func (n *Raw) GetLabel() *Label {
 	return nil
 }
 
-func (n *Raw) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Raw) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindRaw) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Ref) Kind() ElemKind { return KindRef }
 
 func (n *Ref) Field(name name.Name) Value {
 	switch name {
@@ -1986,15 +2178,19 @@ func (n *Ref) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Ref) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Ref) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindRef) && !w.visit() {
+		return w.live()
+	}
+	if n.Supplement != nil && !n.Supplement.inspect(w) {
 		return false
 	}
-	if n.Supplement != nil && !n.Supplement.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Sequence) Kind() ElemKind { return KindSequence }
 
 func (n *Sequence) Field(name name.Name) Value {
 	switch name {
@@ -2044,17 +2240,21 @@ func (n *Sequence) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Sequence) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Sequence) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindSequence) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *SmartQuote) Kind() ElemKind { return KindSmartQuote }
 
 func (n *SmartQuote) Field(name name.Name) Value {
 	switch name {
@@ -2100,12 +2300,16 @@ func (n *SmartQuote) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *SmartQuote) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *SmartQuote) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindSmartQuote) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Strong) Kind() ElemKind { return KindStrong }
 
 func (n *Strong) Field(name name.Name) Value {
 	switch name {
@@ -2151,15 +2355,19 @@ func (n *Strong) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Strong) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Strong) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindStrong) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Table) Kind() ElemKind { return KindTable }
 
 func (n *Table) Field(name name.Name) Value {
 	switch name {
@@ -2214,17 +2422,21 @@ func (n *Table) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Table) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Table) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindTable) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *TableHeader) Kind() ElemKind { return KindTableHeader }
 
 func (n *TableHeader) Field(name name.Name) Value {
 	switch name {
@@ -2274,17 +2486,21 @@ func (n *TableHeader) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *TableHeader) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *TableHeader) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindTableHeader) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *TermItem) Kind() ElemKind { return KindTermItem }
 
 func (n *TermItem) Field(name name.Name) Value {
 	switch name {
@@ -2335,18 +2551,22 @@ func (n *TermItem) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *TermItem) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *TermItem) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindTermItem) && !w.visit() {
+		return w.live()
+	}
+	if n.Term != nil && !n.Term.inspect(w) {
 		return false
 	}
-	if n.Term != nil && !n.Term.walk(yield) {
+	if n.Description != nil && !n.Description.inspect(w) {
 		return false
 	}
-	if n.Description != nil && !n.Description.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }
+
+func (n *Terms) Kind() ElemKind { return KindTerms }
 
 func (n *Terms) Field(name name.Name) Value {
 	switch name {
@@ -2396,17 +2616,21 @@ func (n *Terms) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Terms) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Terms) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindTerms) && !w.visit() {
+		return w.live()
 	}
 	for _, c := range n.Children {
-		if !c.walk(yield) {
+		if !c.inspect(w) {
 			return false
 		}
 	}
+	w.pop()
 	return true
 }
+
+func (n *Text) Kind() ElemKind { return KindText }
 
 func (n *Text) Field(name name.Name) Value {
 	switch name {
@@ -2452,12 +2676,16 @@ func (n *Text) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Text) walk(yield func(Content) bool) bool {
-	if !yield(n) {
-		return false
+func (n *Text) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindText) && !w.visit() {
+		return w.live()
 	}
+	w.pop()
 	return true
 }
+
+func (n *Underline) Kind() ElemKind { return KindUnderline }
 
 func (n *Underline) Field(name name.Name) Value {
 	switch name {
@@ -2503,12 +2731,14 @@ func (n *Underline) GetLabel() *Label {
 	return n.Label
 }
 
-func (n *Underline) walk(yield func(Content) bool) bool {
-	if !yield(n) {
+func (n *Underline) inspect(w *walker) bool {
+	w.push(n)
+	if w.kinds.Contains(KindUnderline) && !w.visit() {
+		return w.live()
+	}
+	if n.Body != nil && !n.Body.inspect(w) {
 		return false
 	}
-	if n.Body != nil && !n.Body.walk(yield) {
-		return false
-	}
+	w.pop()
 	return true
 }

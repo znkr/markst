@@ -30,7 +30,8 @@ const (
 // nothing to say about — and emitting what [Quoter.Advance] gives back:
 //
 //	var q smartquote.Quoter
-//	for c := range walk(doc) {
+//	for cur := range value.Preorder(doc, value.AnyKind) {
+//		c := cur.Node()
 //		out(q.Advance(c))
 //		switch c := c.(type) {
 //		case *value.Text:

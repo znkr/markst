@@ -30,10 +30,15 @@ type Content interface {
 	// inline, and shares a paragraph with its neighbors.
 	IsBlock() bool
 
-	// walk yields this element and everything below it in document order,
-	// stopping early when yield says so. It is generated for every element in
-	// this file; see [All], the iterator built on it.
-	walk(yield func(Content) bool) bool
+	// Kind returns the element's kind, the constant that stands for its type
+	// in a [KindSet].
+	Kind() ElemKind
+
+	// inspect offers this element to a walk and descends into everything below
+	// it in document order, stopping early when the walk says so. It is
+	// generated for every element in this file; see [Preorder], the iterator
+	// built on it.
+	inspect(w *walker) bool
 
 	aContent()
 }

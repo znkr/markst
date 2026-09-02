@@ -20,9 +20,9 @@ import (
 // `#show <x>:` see — is what the source wrote, and settled long before this.
 func (s *session) assignHeadingLabels(body value.Content) {
 	ids := newIDPool(s.labels)
-	for c := range value.All(body) {
-		h, ok := c.(*value.Heading)
-		if !ok || h.Label != nil {
+	for c := range value.Preorder(body, value.SetOf(value.KindHeading)) {
+		h := c.Node().(*value.Heading)
+		if h.Label != nil {
 			continue
 		}
 		h.Label = &value.Label{Name: name.Make(ids.claim(slug(headingText(h)))), Auto: true}
@@ -95,32 +95,31 @@ func slug(text string) string {
 // dropping the apostrophe from the source line.
 func headingText(h *value.Heading) string {
 	var b strings.Builder
-	// Nodes still to be skipped because they belong to a footnote's body; see
-	// the *value.Footnote case.
-	skip := 0
-	for c := range value.All(h.Body) {
-		if skip > 0 {
-			skip--
-			continue
-		}
-		switch c := c.(type) {
+	for c := range value.Preorder(h.Body, headingTextKinds) {
+		switch n := c.Node().(type) {
 		case *value.Text:
-			b.WriteString(c.Text)
+			b.WriteString(n.Text)
 		case *value.Raw:
-			b.WriteString(c.Text)
+			b.WriteString(n.Text)
 		case *value.MathText:
-			b.WriteString(c.Text)
+			b.WriteString(n.Text)
 		case *value.Linebreak:
 			b.WriteByte(' ')
 		case *value.Footnote:
-			// A footnote's text is not part of the title it hangs off of. All
-			// walks depth-first in document order, so the body is exactly the
-			// nodes that come next, and counting them is enough to step over
-			// the subtree — All has no way to decline to descend.
-			for range value.All(c.Body) {
-				skip++
-			}
+			// A footnote's text is not part of the title it hangs off of.
+			c.SkipChildren()
 		}
 	}
 	return b.String()
 }
+
+// headingTextKinds is what headingText reads. Footnote carries no text of its
+// own and is in the set only so that the walk reaches it and can decline to
+// descend.
+var headingTextKinds = value.SetOf(
+	value.KindText,
+	value.KindRaw,
+	value.KindMathText,
+	value.KindLinebreak,
+	value.KindFootnote,
+)

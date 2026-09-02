@@ -28,11 +28,8 @@ func Outline(doc *value.Document) []*Section {
 	// path is the chain of sections currently open, outermost first. A heading
 	// belongs to the deepest one shallower than itself.
 	var path []*Section
-	for c := range value.All(doc.Body) {
-		h, ok := c.(*value.Heading)
-		if !ok {
-			continue
-		}
+	for c := range value.Preorder(doc.Body, value.SetOf(value.KindHeading)) {
+		h := c.Node().(*value.Heading)
 		for len(path) > 0 && path[len(path)-1].Heading.Depth >= h.Depth {
 			path = path[:len(path)-1]
 		}

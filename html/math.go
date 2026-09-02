@@ -281,16 +281,23 @@ func (e *Encoder) renderMathLr(c *value.MathLr) {
 // the math axis even when what it encloses is a single letter, which around `x`
 // is visibly too big. Only the constructs that are genuinely taller than a line
 // — a fraction, a root, a matrix — call for a delimiter that grows.
+// tallKinds are the constructs that grow taller than a line, which is what
+// makes a delimiter around them a stretchy one.
+var tallKinds = value.SetOf(
+	value.KindMathFrac,
+	value.KindMathRoot,
+	value.KindMathVec,
+	value.KindMathCases,
+	value.KindMathMat,
+)
+
 func tallMath(items ...value.Content) bool {
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
-		for n := range value.All(item) {
-			switch n.(type) {
-			case *value.MathFrac, *value.MathRoot, *value.MathVec, *value.MathCases, *value.MathMat:
-				return true
-			}
+		for range value.Preorder(item, tallKinds) {
+			return true
 		}
 	}
 	return false
@@ -611,10 +618,13 @@ func primes(count int) string {
 // mathTextContent collects the characters of a math body. An <mo> holds text
 // and nothing else, so an operator built from richer content contributes only
 // what it spells.
+// textKinds are the elements that carry characters of their own.
+var textKinds = value.SetOf(value.KindMathText, value.KindText, value.KindRaw)
+
 func mathTextContent(c value.Content) string {
 	var sb strings.Builder
-	for v := range value.All(c) {
-		switch v := v.(type) {
+	for v := range value.Preorder(c, textKinds) {
+		switch v := v.Node().(type) {
 		case *value.MathText:
 			sb.WriteString(v.Text)
 		case *value.Text:

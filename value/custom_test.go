@@ -1,6 +1,7 @@
 package value
 
 import (
+	"slices"
 	"testing"
 
 	"znkr.io/markst/name"
@@ -82,17 +83,8 @@ func TestCustomWalk(t *testing.T) {
 	// payload even when the payload is itself content.
 	c := &Custom{Elem: "x", Value: &Text{Text: "hidden"}}
 	body := &Sequence{Children: []Content{&Text{Text: "a"}, c}}
-	var got []string
-	for e := range All(body) {
-		got = append(got, e.Name())
-	}
 	want := []string{"sequence", "text", "x"}
-	if len(got) != len(want) {
-		t.Fatalf("All() visited %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("All() visited %v, want %v", got, want)
-		}
+	if got := elemNames(body, AnyKind); !slices.Equal(got, want) {
+		t.Errorf("Preorder() visited %v, want %v", got, want)
 	}
 }

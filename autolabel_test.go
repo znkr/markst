@@ -27,11 +27,8 @@ func headingLabels(t *testing.T, src string) []headingLabel {
 		t.Errorf("Compile() warnings = %v, want none", warnings)
 	}
 	var got []headingLabel
-	for c := range value.All(doc.Body) {
-		h, ok := c.(*value.Heading)
-		if !ok {
-			continue
-		}
+	for c := range value.Preorder(doc.Body, value.SetOf(value.KindHeading)) {
+		h := c.Node().(*value.Heading)
 		if h.Label == nil {
 			t.Errorf("heading %s has no label", value.FormatContent(h))
 			continue
