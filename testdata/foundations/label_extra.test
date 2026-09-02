@@ -1,0 +1,77 @@
+// Labels and the references that resolve against them, beyond what the ported
+// Typst suite covers.
+
+--- ref-forward ---
+// A reference names a label the document attaches further down: the whole
+// document is evaluated before any reference is answered.
+See @conclusion.
+
+= Conclusion <conclusion>
+│ #document[
+│   #par[See #ref(target: "conclusion").]
+│   #heading(level: 1)[Conclusion]
+│ ]
+
+--- ref-forward-in-a-function ---
+// The reference is written inside a function called before the label exists.
+#let see(target) = [see @intro]
+#see(<intro>)
+
+= Introduction <intro>
+│ #document[
+│   #par[see #ref(target: "intro")]
+│   #heading(level: 1)[Introduction]
+│ ]
+
+--- ref-missing ---
+// Error: 5-13 label `<nowhere>` does not exist in the document
+See @nowhere.
+
+= Conclusion <conclusion>
+
+--- ref-missing-in-a-loop ---
+// A reference reached many times is one reference: the missing label is
+// reported once, at the place it is written.
+#for i in range(3) [
+  // Error: 3-11 label `<nowhere>` does not exist in the document
+  @nowhere
+]
+
+--- ref-label-attached-by-a-show-rule ---
+// Show rules run during realization, after evaluation, so a label one attaches
+// is still in time to answer a reference.
+#show emph: it => [#it <shown>]
+
+See @shown.
+
+_emphasis_
+│ #document[
+│   #par[See #ref(target: "shown").]
+│   #par[#par[#emph[emphasis]]]
+│ ]
+
+--- ref-builtin-forward ---
+// #ref is the same reference `@x` builds, and is answered on the same terms.
+#ref(<conclusion>)
+
+= Conclusion <conclusion>
+│ #document[
+│   #par[#ref(target: "conclusion")]
+│   #heading(level: 1)[Conclusion]
+│ ]
+
+--- ref-builtin-missing ---
+// Error: 2-16 label `<nowhere>` does not exist in the document
+#ref(<nowhere>)
+
+= Conclusion <conclusion>
+
+--- ref-builtin-dynamic-label ---
+// The label is computed, so nothing before evaluation could have checked it.
+#ref(label("con" + "clusion"))
+
+= Conclusion <conclusion>
+│ #document[
+│   #par[#ref(target: "conclusion")]
+│   #heading(level: 1)[Conclusion]
+│ ]

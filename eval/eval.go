@@ -54,6 +54,7 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	// formed, list/enum/term items grouped, styles resolved, wrapped in a
 	// Document root.
 	doc = s.realizeDocument(cc)
+	s.checkRefs()
 	warn = s.warnings
 	err = s.errors
 	return
@@ -88,6 +89,7 @@ func EvalExports(mod *expr.Module, opts ...Option) (body value.Value, exports *v
 	if exports == nil {
 		exports = &value.Dict{}
 	}
+	s.checkRefs()
 	return body, exports, s.warnings, s.errors
 }
 
@@ -131,6 +133,14 @@ const maxCallDepth = 64
 // actually being compiled.
 type session struct {
 	labels map[name.Name]struct{}
+
+	// pendingRefs are the references whose target was not labelled yet at the
+	// point they were evaluated, in the order they were reached; seenRefs
+	// keeps a reference that runs many times — in a loop, or in a function
+	// called from several places — to one entry. They are answered once the
+	// document is complete; see [session.checkRefs].
+	pendingRefs []pendingRef
+	seenRefs    map[refKey]bool
 
 	// metadataLabels is the subset of labels attached to a [value.Metadata].
 	// A label may legitimately be shared by several elements — `#show <x>:`
@@ -364,6 +374,63 @@ func (fr *frame) errorf(span syntax.Span, format string, args ...any) *value.Err
 func (fr *frame) warn(span syntax.Span, msg string, hints ...string) {
 	ve := &value.Error{Span: span, Origin: fr.mod.Origin, Msg: msg, Hints: value.Hints(hints...), Trace: fr.s.trace(fr.mod)}
 	fr.s.recordWarning(ve)
+}
+
+// pendingRef is a reference waiting for its label, together with the error to
+// report if none ever arrives. The error is built where the reference was
+// evaluated, which is the only place its position and the call path that
+// reached it are still in hand.
+type pendingRef struct {
+	target name.Name
+	err    Error
+}
+
+// refKey identifies one reference in one source. Origin is keyed by name
+// rather than by value because a [syntax.Origin] holds a [syntax.Source], which
+// need not be comparable.
+type refKey struct {
+	target name.Name
+	span   syntax.Span
+	origin string
+}
+
+// RecordRef records a reference to a label the document has not attached yet,
+// to be answered by [session.checkRefs] once it is complete. It implements
+// [value.RefRecorder], which is how the `ref` builtin reports the references it
+// builds; `@x` markup reaches it through [frame.evalInst].
+func (fr *frame) RecordRef(target name.Name, span syntax.Span) {
+	if _, ok := fr.s.labels[target]; ok {
+		return
+	}
+	key := refKey{target: target, span: span, origin: fr.mod.Origin.Name}
+	if fr.s.seenRefs[key] {
+		return
+	}
+	if fr.s.seenRefs == nil {
+		fr.s.seenRefs = make(map[refKey]bool)
+	}
+	fr.s.seenRefs[key] = true
+	fr.s.pendingRefs = append(fr.s.pendingRefs, pendingRef{
+		target: target,
+		err: &value.Error{
+			Span:   span,
+			Origin: fr.mod.Origin,
+			Msg:    fmt.Sprintf("label `<%s>` does not exist in the document", target.String()),
+			Trace:  fr.s.trace(fr.mod),
+		},
+	})
+}
+
+// checkRefs reports every reference whose label the document never defined. It
+// runs after realization rather than after evaluation: a show rule runs as part
+// of realization and can attach labels of its own, so the set of names a
+// reference may resolve against is not settled until then.
+func (s *session) checkRefs() {
+	for _, p := range s.pendingRefs {
+		if _, ok := s.labels[p.target]; !ok {
+			s.recordError(p.err)
+		}
+	}
 }
 
 // attachLabel binds lbl to c, registering it in the session's label set
@@ -753,10 +820,10 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.Link:
 		fr.vals[r] = &value.Link{Dest: i.Dest, Body: contentOf(fr.get(i.Body))}
 	case *expr.RefMarkup:
-		if _, ok := fr.s.labels[i.Target]; !ok {
-			fr.vals[r] = fr.errorf(fr.span(r), "label `<%s>` does not exist in the document", i.Target.String())
-			return
-		}
+		// A reference the document has not labelled yet is not an error here:
+		// `@conclusion` in the introduction names a heading further down. The
+		// question is asked again once the whole document has been evaluated.
+		fr.RecordRef(i.Target, fr.span(r))
 		v := &value.Ref{Target: i.Target}
 		if i.Supplement != expr.NoRef {
 			v.Supplement = contentOf(fr.get(i.Supplement))
@@ -1695,7 +1762,7 @@ func (fr *frame) evalMathFallback(c *expr.Call) value.Value {
 // written in, but not the evaluation that created it — records what it does on
 // the document being compiled now.
 func (fr *frame) callContext(span syntax.Span) value.FunctionCallContext {
-	return value.FunctionCallContext{Span: span, Now: fr.s.now, Runtime: fr.s}
+	return value.FunctionCallContext{Span: span, Now: fr.s.now, Runtime: fr.s, Refs: fr}
 }
 
 // pushCall records a call in progress on the session stack and returns the

@@ -128,6 +128,9 @@ func (c *config) evalOpts() []eval.Option {
 // heading a reader sees — marked [value.Label.Auto] and made unique against
 // every label the document already uses. Only the labels the source wrote are
 // part of the document's namespace: `@ref` does not resolve a generated one.
+// A reference resolves against the whole document rather than the part of it
+// written above the reference, so `@conclusion` in an introduction names the
+// section it expects to.
 //
 // Warnings are returned separately from err, because they describe a document
 // that compiled: a label used twice, content discarded where it can have no

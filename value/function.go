@@ -353,6 +353,25 @@ type FunctionCallContext struct {
 	// callback forwards the whole context (see the builtin package's
 	// applyCallback), so the callback lands in the same runtime as its caller.
 	Runtime any
+
+	// Refs is where a builtin that builds a [Ref] says which label the
+	// document has to define. A reference cannot be answered where it is
+	// built — the label it names may be attached further down — so the
+	// evaluation collects them and asks once the document is complete.
+	//
+	// It is set by the evaluator on every call it makes. It is nil for a call
+	// made outside an evaluation, and for the show-rule transforms realization
+	// calls directly — where a builtin building a reference cannot arise,
+	// since a transform is handed content and `ref` takes a label.
+	Refs RefRecorder
+}
+
+// RefRecorder collects the references built during an evaluation, to be
+// answered against the document's labels once it is complete. See
+// [FunctionCallContext.Refs].
+type RefRecorder interface {
+	// RecordRef records a reference to target, built at span.
+	RecordRef(target name.Name, span syntax.Span)
 }
 
 // Apply calls the function with the given arguments. It merges WithArgs,

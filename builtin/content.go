@@ -293,8 +293,14 @@ var Ref = value.NewElement[*value.Ref](value.Function{
 	F: refImpl,
 })
 
-func refImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
-	return &value.Ref{Target: args[0].(*value.Label).Name}, nil
+func refImpl(call *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
+	target := args[0].(*value.Label).Name
+	// The label may not be attached yet, so the reference is recorded rather
+	// than answered; see [value.FunctionCallContext.Refs].
+	if call.Refs != nil {
+		call.Refs.RecordRef(target, call.Span)
+	}
+	return &value.Ref{Target: target}, nil
 }
 
 // List is a bullet list; it builds a [value.List]. Content children are wrapped

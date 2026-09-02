@@ -55,7 +55,12 @@
 
 --- element-ref ---
 #ref(<intro>)
-│ #document[#par[#ref(target: "intro")]]
+
+= Intro <intro>
+│ #document[
+│   #par[#ref(target: "intro")]
+│   #heading(level: 1)[Intro]
+│ ]
 
 --- element-list ---
 #list([apples], [oranges])

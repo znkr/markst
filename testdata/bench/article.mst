@@ -7,7 +7,7 @@ Most tree APIs hand you a node and leave you to find your way back up. That is
 fine while you are only reading _leaves_, and it stops being fine the moment a
 consumer needs to know *where* it is: which section a paragraph belongs to,
 whether the thing it is looking at sits inside a footnote, how deep the nesting
-around it goes.
+around it goes. See @navigation for what that costs.
 
 The usual answer is a parent pointer on every node. It is also the answer that
 makes every node bigger, every construction step slower, and every tree harder
@@ -92,5 +92,4 @@ build, and the first one already gave the answer.]
   finding the innermost node at a byte offset.
 
 None of those are needed by anything in this repository today, which is the
-honest reason they are not here — and @navigation is where the case for the one
-that might be gets made.
+honest reason they are not here.
