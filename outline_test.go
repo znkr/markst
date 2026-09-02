@@ -2,10 +2,12 @@ package markst_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"znkr.io/markst"
+	"znkr.io/markst/value"
 )
 
 func TestOutline(t *testing.T) {
@@ -65,6 +67,15 @@ func TestOutline(t *testing.T) {
 			if got := b.String(); got != tc.want {
 				t.Errorf("Outline() =\n%q\nwant\n%q", got, tc.want)
 			}
+
+			// An index of the document is the same outline, read off the
+			// record instead of the document.
+			idx := value.NewIndex(doc)
+			var indexed strings.Builder
+			writeOutline(&indexed, markst.Outline(&idx), 0)
+			if got := indexed.String(); got != tc.want {
+				t.Errorf("Outline(index) =\n%q\nwant\n%q", got, tc.want)
+			}
 		})
 	}
 }
@@ -79,5 +90,48 @@ func writeOutline(b *strings.Builder, sections []*markst.Section, depth int) {
 func TestOutlineNilDocument(t *testing.T) {
 	if got := markst.Outline(nil); got != nil {
 		t.Errorf("Outline(nil) = %v, want nil", got)
+	}
+	var doc *value.Document
+	if got := markst.Outline(doc); got != nil {
+		t.Errorf("Outline((*value.Document)(nil)) = %v, want nil", got)
+	}
+	var idx value.Index
+	if got := markst.Outline(&idx); got != nil {
+		t.Errorf("Outline(&value.Index{}) = %v, want nil", got)
+	}
+}
+
+// TestCompileWithIndex checks the option end to end: the index Compile fills
+// walks the document it was compiled from.
+func TestCompileWithIndex(t *testing.T) {
+	var idx value.Index
+	doc, _, err := markst.Compile([]byte("= One\n\nSome text.\n\n== Two\n"), markst.WithIndex(&idx))
+	if err != nil {
+		t.Fatalf("Compile() = %v", err)
+	}
+	if idx.Root() != value.Content(doc) {
+		t.Errorf("index is rooted at %v, want the compiled document", idx.Root())
+	}
+	var want, got []string
+	for c := range value.Preorder(doc, value.AnyKind) {
+		want = append(want, c.Node().Name())
+	}
+	for c := range idx.Preorder(value.AnyKind) {
+		got = append(got, c.Node().Name())
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("the index walks %v, want %v", got, want)
+	}
+}
+
+// TestCompileWithIndexOnFailure checks that a failed compilation leaves the
+// caller's index alone rather than filling it with half a document.
+func TestCompileWithIndexOnFailure(t *testing.T) {
+	var idx value.Index
+	if _, _, err := markst.Compile([]byte("#let x = "), markst.WithIndex(&idx)); err == nil {
+		t.Fatal("Compile() of a broken document succeeded")
+	}
+	if idx.Len() != 0 {
+		t.Errorf("index holds %d elements after a failed compile, want 0", idx.Len())
 	}
 }

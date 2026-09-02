@@ -18,17 +18,24 @@ import (
 // Hand the result to [WithFootnotes] to render a piece of a document whose
 // citations keep the numbers they have in the whole.
 func Footnotes(c value.Content) []*value.Footnote {
-	return collect(c)
+	return collect(nil, c)
 }
 
-// collect returns the distinct footnotes in c, in document order.
-func collect(c value.Content) []*value.Footnote {
+// collect returns the distinct footnotes in c, in document order. It reads them
+// off x when the caller supplied one, which for a document that has few
+// footnotes is most of what an index is for: the subtrees without any are
+// stepped over rather than searched.
+func collect(x *value.Index, c value.Content) []*value.Footnote {
 	if c == nil {
 		return nil
 	}
+	found := value.Preorder(c, footnoteKind)
+	if x != nil {
+		found = x.Preorder(footnoteKind)
+	}
 	var list []*value.Footnote
 	seen := make(map[*value.Footnote]bool)
-	for v := range value.Preorder(c, value.SetOf(value.KindFootnote)) {
+	for v := range found {
 		fn := v.Node().(*value.Footnote)
 		if seen[fn] {
 			continue
@@ -38,6 +45,8 @@ func collect(c value.Content) []*value.Footnote {
 	}
 	return list
 }
+
+var footnoteKind = value.SetOf(value.KindFootnote)
 
 // notes is a numbered run of footnotes, looked up by the footnote itself and by
 // the label an @ref cites it with.

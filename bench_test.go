@@ -36,6 +36,15 @@ func benchDocument(b *testing.B) *value.Document {
 	return doc
 }
 
+func benchIndex(b *testing.B) *value.Index {
+	b.Helper()
+	var idx value.Index
+	if _, _, err := markst.Compile(benchSource(b), markst.WithIndex(&idx)); err != nil {
+		b.Fatal(err)
+	}
+	return &idx
+}
+
 func BenchmarkParse(b *testing.B) {
 	src := benchSource(b)
 	b.SetBytes(int64(len(src)))
@@ -100,12 +109,72 @@ func BenchmarkQuery(b *testing.B) {
 	}
 }
 
+func BenchmarkQueryIndexed(b *testing.B) {
+	idx := benchIndex(b)
+	label := name.Make("published")
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, ok := markst.Query(idx, label); !ok {
+			b.Fatal("Query() found nothing")
+		}
+	}
+}
+
 func BenchmarkOutline(b *testing.B) {
 	doc := benchDocument(b)
 	b.ReportAllocs()
 	for b.Loop() {
 		if len(markst.Outline(doc)) == 0 {
 			b.Fatal("Outline() found nothing")
+		}
+	}
+}
+
+// BenchmarkCompileWithIndex is what asking for an index adds to a compile, and
+// the three benchmarks after it are what spending one saves.
+func BenchmarkCompileWithIndex(b *testing.B) {
+	src := benchSource(b)
+	var idx value.Index
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, _, err := markst.Compile(src, markst.WithIndex(&idx)); err != nil {
+			b.Fatalf("Compile() = %v", err)
+		}
+	}
+}
+
+func BenchmarkOutlineIndexed(b *testing.B) {
+	idx := benchIndex(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		if len(markst.Outline(idx)) == 0 {
+			b.Fatal("Outline() found nothing")
+		}
+	}
+}
+
+func BenchmarkRenderIndexed(b *testing.B) {
+	doc := benchDocument(b)
+	idx := benchIndex(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := html.Render(io.Discard, doc, html.WithIndex(idx)); err != nil {
+			b.Fatalf("Render() = %v", err)
+		}
+	}
+}
+
+func BenchmarkFootnotesIndexed(b *testing.B) {
+	idx := benchIndex(b)
+	b.ReportAllocs()
+	for b.Loop() {
+		n := 0
+		for range idx.Preorder(value.SetOf(value.KindFootnote)) {
+			n++
+		}
+		if n == 0 {
+			b.Fatal("found no footnotes")
 		}
 	}
 }

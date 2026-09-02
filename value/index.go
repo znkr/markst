@@ -2,6 +2,15 @@ package value
 
 import "iter"
 
+// Tree is a content tree to walk: a [Document], or an [Index] built over one.
+// A function takes a Tree rather than a [Content] when the caller may already
+// have an index to spend — the two walk the same elements in the same order, so
+// which one is passed changes only what the walk costs.
+type Tree interface {
+	// Preorder walks the tree; see [Preorder] and [Index.Preorder].
+	Preorder(kinds KindSet) iter.Seq[Cursor]
+}
+
 // Index is a content tree recorded flat, in document order: one entry per
 // element, holding the element, how deep it sits, where its subtree ends, and
 // the union of the kinds that subtree holds.

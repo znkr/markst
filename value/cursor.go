@@ -160,6 +160,16 @@ func (c Cursor) at(i int) Content {
 	return c.w.stack[i]
 }
 
+// Preorder walks the document: the document element itself, then everything in
+// its body, in document order. It is [Preorder] over n, and it makes a document
+// a [Tree], so that a function walking one can take an [Index] of it instead.
+func (n *Document) Preorder(kinds KindSet) iter.Seq[Cursor] {
+	if n == nil {
+		return func(func(Cursor) bool) {}
+	}
+	return Preorder(n, kinds)
+}
+
 // The hand-written content nodes ([StateUpdate], [StyleUpdate], [Styled],
 // [Custom]) opt out of the generator, so they carry their own kind and descent.
 // All but Styled are leaves; a Styled wraps the content it scopes over.

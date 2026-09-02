@@ -111,3 +111,25 @@ func TestCompileError(t *testing.T) {
 		t.Errorf("Compile() error = %q, want one about the missing argument", msg)
 	}
 }
+
+// TestQueryFromIndex checks that a query answers the same off an index as off
+// the document it was built from.
+func TestQueryFromIndex(t *testing.T) {
+	src := "#metadata(\"2024-02-29\") <published>\n\n= Title\n\n#metadata((tags: (\"go\",))) <front>\n"
+	var idx value.Index
+	doc, warns, err := markst.Compile([]byte(src), markst.WithIndex(&idx))
+	if err != nil {
+		t.Fatalf("Compile() = %v", err)
+	}
+	if len(warns) > 0 {
+		t.Errorf("Compile() warnings = %v, want none", warns)
+	}
+	for _, label := range []string{"published", "front", "missing"} {
+		n := name.Make(label)
+		want, wantOK := markst.Query(doc, n)
+		got, gotOK := markst.Query(&idx, n)
+		if gotOK != wantOK || (wantOK && !value.Equal(got, want)) {
+			t.Errorf("Query(index, %s) = %v, %v, want %v, %v", label, got, gotOK, want, wantOK)
+		}
+	}
+}

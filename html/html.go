@@ -65,6 +65,7 @@ type config struct {
 	labelURL       func(name.Name) (string, error)
 	footnotes      []*value.Footnote
 	noFootnoteList bool
+	index          *value.Index
 }
 
 // Element renders one content element. It reports whether it handled c; when
@@ -120,6 +121,20 @@ func WithFootnotes(notes []*value.Footnote) Option {
 	return func(c *config) { c.footnotes = notes }
 }
 
+// WithIndex hands the renderer a [value.Index] of the content being rendered,
+// which it reads the footnotes off instead of walking that content to find
+// them. Build one with [znkr.io/markst.WithIndex] and pass the same index to
+// every render of that document.
+//
+// The index must be of the content passed to [Render]: it decides which
+// footnotes are in what is being rendered, so an index of the whole document
+// would number a fragment's citations as if the whole document were there. To
+// render a piece of a document, fix the numbering with [WithFootnotes] instead.
+// The index is ignored when that option is set.
+func WithIndex(x *value.Index) Option {
+	return func(c *config) { c.index = x }
+}
+
 func newConfig(opts []Option) *config {
 	c := &config{headingLevel: 1}
 	for _, opt := range opts {
@@ -153,7 +168,7 @@ func Render(w io.Writer, c value.Content, opts ...Option) error {
 
 	notes := cfg.footnotes
 	if notes == nil {
-		notes = collect(c)
+		notes = collect(cfg.index, c)
 	}
 
 	e := &Encoder{w: sw, cfg: cfg, notes: index(notes)}

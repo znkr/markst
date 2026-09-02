@@ -8,8 +8,12 @@ type Section struct {
 	Children []*Section
 }
 
-// Outline returns doc's headings as a tree, nested by depth — a table of
+// Outline returns a document's headings as a tree, nested by depth — a table of
 // contents, in whatever form the caller renders one.
+//
+// Pass the [value.Document] that [Compile] returned, or a [value.Index] of one
+// ([WithIndex]) to read the headings off the index rather than walking the
+// document for them.
 //
 // Every heading carries a [value.Label], so there is always an anchor to link
 // a section by; [value.Label.Auto] tells a generated one from a label the
@@ -19,8 +23,8 @@ type Section struct {
 // inventing one to sit in: `=` followed by `===` gives a section holding a
 // section, and nothing in between. A document that opens at `==` has that
 // heading at the top level, because there is no `=` for it to belong to.
-func Outline(doc *value.Document) []*Section {
-	if doc == nil || doc.Body == nil {
+func Outline(t value.Tree) []*Section {
+	if t == nil {
 		return nil
 	}
 
@@ -28,7 +32,7 @@ func Outline(doc *value.Document) []*Section {
 	// path is the chain of sections currently open, outermost first. A heading
 	// belongs to the deepest one shallower than itself.
 	var path []*Section
-	for c := range value.Preorder(doc.Body, value.SetOf(value.KindHeading)) {
+	for c := range t.Preorder(value.SetOf(value.KindHeading)) {
 		h := c.Node().(*value.Heading)
 		for len(path) > 0 && path[len(path)-1].Heading.Depth >= h.Depth {
 			path = path[:len(path)-1]

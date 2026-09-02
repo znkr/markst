@@ -311,3 +311,24 @@ func TestWithFootnotesKeepsDocumentNumbers(t *testing.T) {
 		t.Errorf("Render() = %q, want %q", got, want)
 	}
 }
+
+// TestRenderWithIndex checks that handing the renderer an index changes what a
+// render costs and nothing else: the same HTML, footnotes included.
+func TestRenderWithIndex(t *testing.T) {
+	doc, _, err := markst.Compile([]byte("A note#footnote[first].\n\n= H\n\nAnother#footnote[second].\n"))
+	if err != nil {
+		t.Fatalf("Compile() = %v", err)
+	}
+
+	var walked, indexed strings.Builder
+	if err := html.Render(&walked, doc); err != nil {
+		t.Fatalf("Render() = %v", err)
+	}
+	idx := value.NewIndex(doc)
+	if err := html.Render(&indexed, doc, html.WithIndex(&idx)); err != nil {
+		t.Fatalf("Render(WithIndex) = %v", err)
+	}
+	if walked.String() != indexed.String() {
+		t.Errorf("Render(WithIndex) wrote\n%s\nwant\n%s", indexed.String(), walked.String())
+	}
+}

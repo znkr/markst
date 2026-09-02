@@ -18,6 +18,7 @@ type config struct {
 	name     string
 	bindings map[name.Name]value.Value
 	now      time.Time
+	index    *value.Index
 }
 
 // WithName sets the display name diagnostics about this source are reported
@@ -58,6 +59,24 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 			c.bind(n, v)
 		}
 	}
+}
+
+// WithIndex fills x with a [value.Index] of the document that was compiled —
+// the flat record of its content that walking it repeatedly is worth paying
+// for. Pass it on to [Outline], or to [znkr.io/markst/html.WithIndex], instead
+// of walking the document again:
+//
+//	var idx value.Index
+//	doc, warns, err := markst.Compile(src, markst.WithIndex(&idx))
+//	toc := markst.Outline(&idx)
+//	err = html.Render(w, doc, html.WithIndex(&idx))
+//
+// The index is built after the document is realized, so it records the document
+// the caller receives. It is the caller's to keep, and it goes stale the moment
+// that document's content is added to, removed from or replaced — see
+// [value.Index]. Nothing is written to x when compilation failed.
+func WithIndex(x *value.Index) Option {
+	return func(c *config) { c.index = x }
 }
 
 // WithNow fixes the instant the document is rendered at — what
@@ -132,6 +151,9 @@ func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) 
 	warns := diagnose(Warning, warnings)
 	if len(errs) > 0 {
 		return doc, warns, DiagnosticList(diagnose(Error, errs))
+	}
+	if c.index != nil {
+		c.index.Init(doc)
 	}
 	return doc, warns, nil
 }
@@ -235,19 +257,24 @@ func isEmptyBody(body value.Value) bool {
 	return true
 }
 
-// Query returns the value carried by the [value.Metadata] element in doc
-// labelled label — the way a document hands data to the program presenting it:
+// Query returns the value carried by the [value.Metadata] element labelled
+// label — the way a document hands data to the program presenting it:
 //
 //	#metadata("2024-02-29") <published>
+//
+// Pass the [value.Document] that [Compile] returned, or a [value.Index] of one
+// ([WithIndex]), which is worth having when a host reads several fields: each
+// query walks the document again, and an index skips everything that carries no
+// metadata.
 //
 // Metadata without a label is never returned: the label is what identifies it.
 // A label shared by two metadata elements is reported as a warning by
 // [Compile]; Query answers with the first in document order.
-func Query(doc *value.Document, label name.Name) (value.Value, bool) {
-	if doc == nil || doc.Body == nil {
+func Query(t value.Tree, label name.Name) (value.Value, bool) {
+	if t == nil {
 		return nil, false
 	}
-	for c := range value.Preorder(doc.Body, value.SetOf(value.KindMetadata)) {
+	for c := range t.Preorder(value.SetOf(value.KindMetadata)) {
 		m := c.Node().(*value.Metadata)
 		if m.Label == nil || m.Label.Name != label {
 			continue
