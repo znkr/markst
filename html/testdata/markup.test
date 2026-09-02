@@ -1,0 +1,41 @@
+// The inline markup wrappers and the headings around them.
+
+--- strong ---
+a *bold* word
+│ <p>a <strong>bold</strong> word</p>
+
+--- emph ---
+a _slanted_ word
+│ <p>a <em>slanted</em> word</p>
+
+--- underline ---
+#underline[underlined]
+│ <p><u>underlined</u></p>
+
+--- nested-markup ---
+*bold with _emphasis_ inside*
+│ <p><strong>bold with <em>emphasis</em> inside</strong></p>
+
+--- headings ---
+= One
+
+== Two
+
+=== Three
+│ <h1 id="one">One</h1>
+│ <h2 id="two">Two</h2>
+│ <h3 id="three">Three</h3>
+
+--- heading-with-markup ---
+= A *bold* title
+│ <h1 id="a-bold-title">A <strong>bold</strong> title</h1>
+
+--- heading-depth-past-six ---
+// HTML stops at h6, so a document nested deeper keeps its structure and loses
+// only the distinction the last level would have made.
+======= Seven
+│ <h6 id="seven">Seven</h6>
+
+--- markup-in-heading ---
+== Mixing #underline[styles] and _emphasis_
+│ <h2 id="mixing-styles-and-emphasis">Mixing <u>styles</u> and <em>emphasis</em></h2>

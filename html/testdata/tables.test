@@ -1,0 +1,88 @@
+// Tables. Cells are given in row-major order and cut into rows of `columns`.
+
+--- table-single-column ---
+#table([a], [b])
+│ <table>
+│ <tbody>
+│ <tr><td>a</td></tr>
+│ <tr><td>b</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-two-columns ---
+#table(columns: 2, [a], [b], [c], [d])
+│ <table>
+│ <tbody>
+│ <tr><td>a</td><td>b</td></tr>
+│ <tr><td>c</td><td>d</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-with-header ---
+#table(columns: 2, table.header([Name], [Age]), [Ada], [36])
+│ <table>
+│ <thead>
+│ <tr><th>Name</th><th>Age</th></tr>
+│ </thead>
+│ <tbody>
+│ <tr><td>Ada</td><td>36</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-header-in-the-middle ---
+// A header written in the middle stays where it is and keeps its th cells.
+#table(columns: 2, [a], [b], table.header([c], [d]), [e], [f])
+│ <table>
+│ <tbody>
+│ <tr><td>a</td><td>b</td></tr>
+│ <tr><th>c</th><th>d</th></tr>
+│ <tr><td>e</td><td>f</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-short-last-row ---
+#table(columns: 3, [a], [b], [c], [d])
+│ <table>
+│ <tbody>
+│ <tr><td>a</td><td>b</td><td>c</td></tr>
+│ <tr><td>d</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-cell-with-two-paragraphs ---
+#table([#[One.
+
+Two.]])
+│ <table>
+│ <tbody>
+│ <tr><td><p>One.</p>
+│ <p>Two.</p>
+│ </td></tr>
+│ </tbody>
+│ </table>
+
+--- table-header-only ---
+// Nothing to put in a tbody, so it isn't opened.
+#table(columns: 2, table.header([A], [B]))
+│ <table>
+│ <thead>
+│ <tr><th>A</th><th>B</th></tr>
+│ </thead>
+│ </table>
+
+--- table-labelled ---
+#table(columns: 1, [a]) <t>
+│ <table id="t">
+│ <tbody>
+│ <tr><td>a</td></tr>
+│ </tbody>
+│ </table>
+
+--- table-cell-with-inline-markup ---
+// Same rule as a list item: one paragraph in a cell is just the cell.
+#table(columns: 1, [a _b_ c])
+│ <table>
+│ <tbody>
+│ <tr><td>a <em>b</em> c</td></tr>
+│ </tbody>
+│ </table>

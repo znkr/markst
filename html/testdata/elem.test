@@ -1,0 +1,73 @@
+// html.elem: the markup a document writes itself.
+
+--- elem-inline ---
+#html.elem("span", [inside])
+│ <p><span>inside</span></p>
+
+--- elem-block ---
+#html.elem("div", [Inside.])
+│ <div><p>Inside.</p>
+│ </div>
+
+--- elem-with-attrs ---
+#html.elem("div", [x], attrs: (class: "note", "data-kind": "tip"))
+│ <div class="note" data-kind="tip"><p>x</p>
+│ </div>
+
+--- elem-void ---
+#html.elem("hr")
+│ <hr>
+
+--- elem-attribute-value-is-escaped ---
+#html.elem("span", [x], attrs: (title: "a \"quoted\" & <angled> value"))
+│ <p><span title="a &quot;quoted&quot; &amp; &lt;angled&gt; value">x</span></p>
+
+--- elem-phrasing-body-forms-no-paragraph ---
+#html.elem("p", [Hello])
+│ <p>Hello</p>
+
+--- elem-flow-body-forms-paragraphs ---
+#html.elem("div", [One.
+
+Two.])
+│ <div><p>One.</p>
+│ <p>Two.</p>
+│ </div>
+
+--- elem-label-becomes-id ---
+#html.elem("div", [x]) <box>
+│ <div id="box"><p>x</p>
+│ </div>
+
+--- elem-explicit-id-wins ---
+#html.elem("div", [x], attrs: (id: "mine")) <box>
+│ <div id="mine"><p>x</p>
+│ </div>
+
+--- elem-forced-inline ---
+#html.elem("div", [x], block: false)
+│ <p><div>x</div></p>
+
+--- elem-void-inline ---
+Before #html.elem("br") after.
+│ <p>Before <br> after.</p>
+
+--- elem-flow-container-gathers-a-paragraph ---
+// Inside a flow container a bare inline run is gathered into a paragraph, the
+// way it would be anywhere else in the document.
+#html.elem("header", {html.elem("h1")[T]; html.elem("span")[sub]})
+│ <header><h1>T</h1>
+│ <p><span>sub</span></p>
+│ </header>
+
+--- elem-block-keeps-an-inline-element-out-of-the-paragraph ---
+// `block:` is how a document says the element is a sibling of the blocks
+// around it rather than part of a paragraph.
+#html.elem("header", {html.elem("h1")[T]; html.elem("span", block: true)[sub]})
+│ <header><h1>T</h1>
+│ <span>sub</span>
+│ </header>
+
+--- elem-inline-joins-the-paragraph ---
+Before #html.elem("span", attrs: (class: "x"))[inside] after.
+│ <p>Before <span class="x">inside</span> after.</p>

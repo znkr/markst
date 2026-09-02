@@ -1,0 +1,36 @@
+// Smart quotes, resolved from the content around them.
+
+--- double-quotes ---
+He said "hello" and left.
+│ <p>He said “hello” and left.</p>
+
+--- single-quotes ---
+She said 'hello' and left.
+│ <p>She said ‘hello’ and left.</p>
+
+--- apostrophe ---
+The dog's bone.
+│ <p>The dog’s bone.</p>
+
+--- nested-quotes ---
+"He said 'hello' to me."
+│ <p>“He said ‘hello’ to me.”</p>
+
+--- primes ---
+The board is 5'11" long.
+│ <p>The board is 5′11″ long.</p>
+
+--- quotes-do-not-cross-a-paragraph ---
+An "unclosed quotation
+
+and a new paragraph.
+│ <p>An “unclosed quotation</p>
+│ <p>and a new paragraph.</p>
+
+--- quotes-do-not-cross-a-list-item ---
+- An "unclosed quotation
+- and the next item
+│ <ul>
+│ <li>An “unclosed quotation</li>
+│ <li>and the next item</li>
+│ </ul>

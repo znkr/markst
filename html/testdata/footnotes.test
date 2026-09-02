@@ -1,0 +1,78 @@
+// Footnote citations and the list of endnotes they point at.
+
+--- footnote ---
+Text.#footnote[A note.]
+│ <p>Text.<sup id="fnref:1"><a href="#fn:1">1</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1">A note. <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>
+
+--- footnote-two ---
+One.#footnote[First note.] Two.#footnote[Second note.]
+│ <p>One.<sup id="fnref:1"><a href="#fn:1">1</a></sup> Two.<sup id="fnref:2"><a href="#fn:2">2</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1">First note. <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ <li id="fn:2">Second note. <a href="#fnref:2" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>
+
+--- footnote-with-two-paragraphs ---
+// A footnote body is a block context, so paragraphs form in it.
+Text.#footnote[One paragraph.
+
+And another.]
+│ <p>Text.<sup id="fnref:1"><a href="#fn:1">1</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1"><p>One paragraph.</p>
+│ <p>And another.</p>
+│ <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>
+
+--- footnote-with-markup ---
+Text.#footnote[A *bold* note.]
+│ <p>Text.<sup id="fnref:1"><a href="#fn:1">1</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1">A <strong>bold</strong> note. <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>
+
+--- footnote-cited-twice ---
+// A reference to a footnote repeats its number rather than making a new one.
+Text.#footnote[A note.] <note>
+
+Again.@note
+│ <p>Text.<sup id="fnref:1"><a href="#fn:1">1</a></sup></p>
+│ <p>Again.<sup><a href="#fn:1">1</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1">A note. <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>
+
+--- footnote-with-list ---
+Text.#footnote[
+- apples
+- pears
+]
+│ <p>Text.<sup id="fnref:1"><a href="#fn:1">1</a></sup></p>
+│ <div class="footnotes" role="doc-endnotes">
+│ <hr>
+│ <ol>
+│ <li id="fn:1"><ul>
+│ <li>apples</li>
+│ <li>pears</li>
+│ </ul>
+│ <a href="#fnref:1" role="doc-backlink">&#8617;</a></li>
+│ </ol>
+│ </div>

@@ -1,0 +1,36 @@
+// A label is how the rest of the document points at an element, which in HTML
+// is the id.
+
+--- labelled-paragraph ---
+A paragraph. <intro>
+│ <p><span id="intro">A paragraph.</span></p>
+
+--- labelled-heading ---
+= Title <title>
+│ <h1 id="title">Title</h1>
+
+--- heading-label-is-generated ---
+// Every heading carries a label: one derived from its text when the source
+// wrote none, so that there is always an anchor to link a section by.
+= Getting Started
+│ <h1 id="getting-started">Getting Started</h1>
+
+--- heading-label-deduplicated ---
+= Same
+
+= Same
+│ <h1 id="same">Same</h1>
+│ <h1 id="same-1">Same</h1>
+
+--- labelled-list ---
+- apples
+- pears
+<fruit>
+│ <ul>
+│ <li>apples</li>
+│ <li id="fruit">pears</li>
+│ </ul>
+
+--- labelled-strong ---
+A *bold* word. <p>
+│ <p>A <strong>bold</strong> <span id="p">word.</span></p>

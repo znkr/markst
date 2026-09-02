@@ -1,0 +1,40 @@
+// Links, images, and cross-references.
+
+--- link ---
+#link("https://example.com")[Example]
+│ <p><a href="https://example.com">Example</a></p>
+
+--- link-with-markup ---
+#link("https://example.com")[an *emphatic* link]
+│ <p><a href="https://example.com">an <strong>emphatic</strong> link</a></p>
+
+--- image ---
+#image("cat.png")
+│ <p><img src="cat.png" alt=""></p>
+
+--- image-with-alt ---
+#image("cat.png", alt: "A sleeping cat")
+│ <p><img src="cat.png" alt="A sleeping cat"></p>
+
+--- image-inline ---
+Look at #image("cat.png") — cute.
+│ <p>Look at <img src="cat.png" alt=""> — cute.</p>
+
+--- ref ---
+= Intro <intro>
+
+See @intro.
+│ <h1 id="intro">Intro</h1>
+│ <p>See <a href="#intro">intro</a>.</p>
+
+--- ref-with-supplement ---
+= Intro <intro>
+
+See @intro[the *first* section].
+│ <h1 id="intro">Intro</h1>
+│ <p>See <a href="#intro">the <strong>first</strong> section</a>.</p>
+
+--- link-destination-is-not-rewritten ---
+// The destination is escaped and otherwise written as the document wrote it.
+#link("?a=1&b=2")[query]
+│ <p><a href="?a=1&amp;b=2">query</a></p>

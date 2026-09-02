@@ -1,0 +1,113 @@
+// Math is rendered as MathML, which browsers lay out themselves.
+
+--- equation-inline ---
+The value $x$ is small.
+│ <p>The value <math><mi>x</mi></math> is small.</p>
+
+--- equation-block ---
+$ x + y = z $
+│ <math display="block"><mrow><mi>x</mi><mo>+</mo><mi>y</mi><mo>=</mo><mi>z</mi></mrow></math>
+
+--- fraction ---
+$ x/2 $
+│ <math display="block"><mfrac><mi>x</mi><mn>2</mn></mfrac></math>
+
+--- attachments ---
+$ a_1^2 $
+│ <math display="block"><msubsup><mi>a</mi><mn>1</mn><mn>2</mn></msubsup></math>
+
+--- root ---
+$ sqrt(x) $
+│ <math display="block"><msqrt><mi>x</mi></msqrt></math>
+
+--- root-with-index ---
+$ root(3, x) $
+│ <math display="block"><mroot><mi>x</mi><mn>3</mn></mroot></math>
+
+--- primes ---
+$ f'(x) $
+│ <math display="block"><mrow><msup><mi>f</mi><mo>′</mo></msup><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow></math>
+
+--- operator ---
+$ sin(x) $
+│ <math display="block"><mrow><mo lspace="0.1667em" rspace="0.1667em">sin</mo><mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow></math>
+
+--- operator-with-limits ---
+$ lim_(n -> oo) a_n $
+│ <math display="block"><mrow><munder><mo lspace="0.1667em" rspace="0.1667em">lim</mo><mrow><mi>n</mi><mo>→</mo><mo>∞</mo></mrow></munder><msub><mi>a</mi><mi>n</mi></msub></mrow></math>
+
+--- delimited ---
+$ (a + b) $
+│ <math display="block"><mrow><mo stretchy="false">(</mo><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy="false">)</mo></mrow></math>
+
+--- vector ---
+$ vec(a, b) $
+│ <math display="block"><mrow><mo stretchy="true">(</mo><mtable columnalign="center"><mtr><mtd><mi>a</mi></mtd></mtr><mtr><mtd><mi>b</mi></mtd></mtr></mtable><mo stretchy="true">)</mo></mrow></math>
+
+--- cases ---
+$ cases(a, b) $
+│ <math display="block"><mrow><mo stretchy="true">{</mo><mtable columnalign="left"><mtr><mtd><mi>a</mi></mtd></mtr><mtr><mtd><mi>b</mi></mtd></mtr></mtable></mrow></math>
+
+--- matrix ---
+$ mat(a, b; c, d) $
+│ <math display="block"><mrow><mo stretchy="true">(</mo><mtable columnalign="center"><mtr><mtd><mi>a</mi></mtd><mtd><mi>b</mi></mtd></mtr><mtr><mtd><mi>c</mi></mtd><mtd><mi>d</mi></mtd></mtr></mtable><mo stretchy="true">)</mo></mrow></math>
+
+--- aligned-rows ---
+$ x &= y \
+  z &= w $
+│ <math display="block"><mtable columnalign="right left"><mtr><mtd><mi>x</mi></mtd><mtd><mrow><mo>=</mo><mi>y</mi></mrow></mtd></mtr><mtr><mtd><mi>z</mi></mtd><mtd><mrow><mo>=</mo><mi>w</mi></mrow></mtd></mtr></mtable></math>
+
+--- rows-without-alignment ---
+$ x = y \
+  z = w $
+│ <math display="block"><mtable columnalign="center"><mtr><mtd><mrow><mi>x</mi><mo>=</mo><mi>y</mi></mrow></mtd></mtr><mtr><mtd><mrow><mi>z</mi><mo>=</mo><mi>w</mi></mrow></mtd></mtr></mtable></math>
+
+--- accent ---
+$ hat(x) $
+│ <math display="block"><mover accent="true"><mi>x</mi><mo>̂</mo></mover></math>
+
+--- underline ---
+$ underline(x) $
+│ <math display="block"><munder accentunder="true"><mi>x</mi><mo stretchy="true">̲</mo></munder></math>
+
+--- cancel ---
+$ cancel(x) $
+│ <math display="block"><mrow style="text-decoration:line-through"><mi>x</mi></mrow></math>
+
+--- styled-text ---
+$ bold(x) + sans(y) $
+│ <math display="block"><mrow><mi>𝒙</mi><mo>+</mo><mi>𝘺</mi></mrow></math>
+
+--- numbers-and-names ---
+$ 12 + x + "text" $
+│ <math display="block"><mrow><mn>12</mn><mo>+</mo><mi>x</mi><mo>+</mo><mi>text</mi></mrow></math>
+
+--- labelled-equation ---
+$ x = y $ <eq>
+│ <math display="block" id="eq"><mrow><mi>x</mi><mo>=</mo><mi>y</mi></mrow></math>
+
+--- delimited-around-a-fraction ---
+// Delimiters grow only around content that is taller than a line of symbols.
+// A fraction is; see delimited, where `(a + b)` is not.
+$ (x/2) $
+│ <math display="block"><mrow><mo stretchy="true">(</mo><mfrac><mi>x</mi><mn>2</mn></mfrac><mo stretchy="true">)</mo></mrow></math>
+
+--- delimited-around-a-superscript ---
+// A script is barely taller than the letter it sits on, and a delimiter that
+// grew for it would be visibly too big.
+$ (v^beta) $
+│ <math display="block"><mrow><mo stretchy="false">(</mo><msup><mi>v</mi><mi>β</mi></msup><mo stretchy="false">)</mo></mrow></math>
+
+--- delimited-nested-around-a-fraction ---
+// The inner group has the fraction, so both grow.
+$ ((x/2)) $
+│ <math display="block"><mrow><mo stretchy="true">(</mo><mrow><mo stretchy="true">(</mo><mfrac><mi>x</mi><mn>2</mn></mfrac><mo stretchy="true">)</mo></mrow><mo stretchy="true">)</mo></mrow></math>
+
+--- delimited-with-a-mid ---
+// A mid follows the group it sits in.
+$ { x mid(|) x > 0 } $
+│ <math display="block"><mrow><mo stretchy="false">{</mo><mrow><mi>x</mi><mo stretchy="false">|</mo><mi>x</mi><mo>&gt;</mo><mn>0</mn></mrow><mo stretchy="false">}</mo></mrow></math>
+
+--- delimited-with-a-mid-around-a-fraction ---
+$ { x mid(|) x > 1/2 } $
+│ <math display="block"><mrow><mo stretchy="true">{</mo><mrow><mi>x</mi><mo stretchy="true">|</mo><mi>x</mi><mo>&gt;</mo><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow><mo stretchy="true">}</mo></mrow></math>

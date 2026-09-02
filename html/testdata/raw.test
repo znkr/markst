@@ -1,0 +1,30 @@
+// Raw text, inline and as a block. A language becomes a class on the code
+// element, which is where the highlighters that run in a browser look for it.
+
+--- raw-inline ---
+Call `printf` for that.
+│ <p>Call <code>printf</code> for that.</p>
+
+--- raw-block ---
+```
+line one
+line two
+```
+│ <pre><code>line one
+│ line two</code></pre>
+
+--- raw-block-with-language ---
+```go
+func main() {}
+```
+│ <pre><code class="language-go">func main() {}</code></pre>
+
+--- raw-escapes-its-text ---
+`a < b && c > d`
+│ <p><code>a &lt; b &amp;&amp; c &gt; d</code></p>
+
+--- raw-block-escapes-its-text ---
+```html
+<p class="x">&amp;</p>
+```
+│ <pre><code class="language-html">&lt;p class="x"&gt;&amp;amp;&lt;/p&gt;</code></pre>

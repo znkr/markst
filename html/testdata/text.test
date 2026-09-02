@@ -1,0 +1,40 @@
+// Text, the breaks between it, and the characters in it that would otherwise
+// be markup.
+
+--- paragraphs ---
+First paragraph.
+
+Second paragraph.
+│ <p>First paragraph.</p>
+│ <p>Second paragraph.</p>
+
+--- linebreak ---
+One line \
+and the next.
+│ <p>One line<br>and the next.</p>
+
+--- escaping-in-text ---
+// The three characters that would otherwise start markup are escaped; a quote
+// is left alone, because in text it reads as itself.
+a \< b \& c \> d "e"
+│ <p>a &lt; b &amp; c &gt; d “e”</p>
+
+--- horizontal-space ---
+Left#h(1em)right.
+│ <p>Left<span style="display:inline-block;width:1em"></span>right.</p>
+
+--- horizontal-space-points ---
+Left#h(6pt)right.
+│ <p>Left<span style="display:inline-block;width:6pt"></span>right.</p>
+
+--- horizontal-space-mixed ---
+Left#h(6pt + 1em)right.
+│ <p>Left<span style="display:inline-block;width:calc(6pt + 1em)"></span>right.</p>
+
+--- text-with-explicit-spacing ---
+#text("  spaced  out  ")
+│ <p>spaced  out</p>
+
+--- nonbreaking-and-unicode ---
+naïve — résumé … ✓
+│ <p>naïve — résumé … ✓</p>

@@ -1,0 +1,86 @@
+// Lists, enumerations, and term lists.
+
+--- list ---
+- apples
+- pears
+│ <ul>
+│ <li>apples</li>
+│ <li>pears</li>
+│ </ul>
+
+--- list-nested ---
+- apples
+  - green
+  - red
+- pears
+│ <ul>
+│ <li>apples<ul>
+│ <li>green</li>
+│ <li>red</li>
+│ </ul>
+│ </li>
+│ <li>pears</li>
+│ </ul>
+
+--- list-item-with-two-paragraphs ---
+// One paragraph in an item reads as a plain item; several need marking off.
+- #[First.
+
+  Second.]
+- Plain.
+│ <ul>
+│ <li><p>First.</p>
+│ <p>Second.</p>
+│ </li>
+│ <li>Plain.</li>
+│ </ul>
+
+--- enum ---
++ first
++ second
+│ <ol>
+│ <li>first</li>
+│ <li>second</li>
+│ </ol>
+
+--- enum-explicit-numbers ---
+3. third
+4. fourth
+│ <ol>
+│ <li value="3">third</li>
+│ <li value="4">fourth</li>
+│ </ol>
+
+--- terms ---
+/ apples: red
+/ pears: green
+│ <dl>
+│ <dt>apples</dt>
+│ <dd>red</dd>
+│ <dt>pears</dt>
+│ <dd>green</dd>
+│ </dl>
+
+--- terms-with-markup ---
+/ *apples*: a _fruit_
+│ <dl>
+│ <dt><strong>apples</strong></dt>
+│ <dd>a <em>fruit</em></dd>
+│ </dl>
+
+--- enum-explicit-start-continues ---
+// A number the document wrote itself; <ol> carries on from it.
+3. three
++ four
+│ <ol>
+│ <li value="3">three</li>
+│ <li>four</li>
+│ </ol>
+
+--- list-item-with-inline-markup ---
+- one with _emph_ inline
+- two
+│ <ul>
+│ <li>one with <em>emph</em> inline</li>
+│ <li>two</li>
+│ </ul>

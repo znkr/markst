@@ -98,13 +98,13 @@ func (c *config) evalOpts() []eval.Option {
 }
 
 // Compile turns markst source into a realized document, running the whole
-// pipeline over it: parse, analyze, evaluate, realize. Turning the result into
-// output — HTML, or anything else — is the presenter's job; see
-// [znkr.io/markst/smartquote] for the one part of that a presenter cannot do
-// on its own.
+// pipeline over it: parse, analyze, evaluate, realize. Presenting the result is
+// a separate job: [znkr.io/markst/html] renders the document as HTML, and a
+// presenter targeting anything else walks it with [value.All] — see
+// [znkr.io/markst/smartquote] for the one part of that it cannot do on its own.
 //
 // Every heading in the returned document carries a [value.Label], so there is
-// always an anchor to link a section by. A heading the source left unlabelled
+// always an anchor to link a section by; [Outline] gives them as a tree. A heading the source left unlabelled
 // gets one derived from its text — after show rules, so it describes the
 // heading a reader sees — marked [value.Label.Auto] and made unique against
 // every label the document already uses. Only the labels the source wrote are
