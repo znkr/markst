@@ -11,16 +11,17 @@ import (
 
 // assignHeadingLabels labels every heading the source left unlabelled, deriving
 // the label from the heading's own text, so that a presenter always has an
-// anchor to link a section by. It runs once over a realized document body, in
+// anchor to link a section by. It runs once over a realized document, in
 // document order; see [session.realizeDocument] for why it runs after
-// realization rather than during it.
+// realization rather than during it, and why it takes a [value.Tree] rather
+// than the document itself.
 //
 // The labels it hands out are marked [value.Label.Auto] and are deliberately
 // not registered on the session: the document's namespace — what `@ref` and
 // `#show <x>:` see — is what the source wrote, and settled long before this.
-func (s *session) assignHeadingLabels(body value.Content) {
+func (s *session) assignHeadingLabels(t value.Tree) {
 	ids := newIDPool(s.labels)
-	for c := range value.Preorder(body, value.SetOf(value.KindHeading)) {
+	for c := range t.Preorder(value.SetOf(value.KindHeading)) {
 		h := c.Node().(*value.Heading)
 		if h.Label != nil {
 			continue

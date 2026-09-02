@@ -124,14 +124,15 @@ func TestCompileWithIndex(t *testing.T) {
 	}
 }
 
-// TestCompileWithIndexOnFailure checks that a failed compilation leaves the
-// caller's index alone rather than filling it with half a document.
+// TestCompileWithIndexOnFailure checks that the index describes what Compile
+// returned, which after a failure is the document it got to rather than none.
 func TestCompileWithIndexOnFailure(t *testing.T) {
 	var idx value.Index
-	if _, _, err := markst.Compile([]byte("#let x = "), markst.WithIndex(&idx)); err == nil {
+	doc, _, err := markst.Compile([]byte("#let x = "), markst.WithIndex(&idx))
+	if err == nil {
 		t.Fatal("Compile() of a broken document succeeded")
 	}
-	if idx.Len() != 0 {
-		t.Errorf("index holds %d elements after a failed compile, want 0", idx.Len())
+	if idx.Root() != value.Content(doc) {
+		t.Errorf("index is rooted at %v, want the document Compile returned", idx.Root())
 	}
 }

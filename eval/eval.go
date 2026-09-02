@@ -28,6 +28,13 @@ func WithNow(t time.Time) Option {
 	return func(s *session) { s.now = t }
 }
 
+// WithIndex fills x with a [value.Index] of the realized document. The index is
+// built by the walk realization needs anyway — the one that labels headings —
+// so asking for it costs the records rather than a traversal of its own.
+func WithIndex(x *value.Index) Option {
+	return func(s *session) { s.index = x }
+}
+
 // Eval evaluates an SSA [Module] and returns the resulting document
 // [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
 // are returned separately. Free names in the module have already been
@@ -133,6 +140,11 @@ const maxCallDepth = 64
 // actually being compiled.
 type session struct {
 	labels map[name.Name]struct{}
+
+	// index is where [WithIndex] wants an index of the realized document, and
+	// nil when the caller asked for none. It is filled by
+	// [session.realizeDocument], which then labels headings off it.
+	index *value.Index
 
 	// pendingRefs are the references whose target was not labelled yet at the
 	// point they were evaluated, in the order they were reached; seenRefs

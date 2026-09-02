@@ -11,7 +11,7 @@ import (
 // benchBody builds a realized body of the shape assignHeadingLabels is run over:
 // headings whose titles carry the markup a heading usually does, footnotes among
 // them, and paragraphs between.
-func benchBody(sections int) value.Content {
+func benchBody(sections int) *value.Document {
 	var children []value.Content
 	for i := range sections {
 		children = append(children,
@@ -29,20 +29,40 @@ func benchBody(sections int) value.Content {
 			}}},
 		)
 	}
-	return &value.Sequence{Children: children}
+	return &value.Document{Body: &value.Sequence{Children: children}}
 }
 
 // BenchmarkAssignHeadingLabels covers the walk that labels every unlabelled
 // heading: one pass for the headings, and one over each heading's own body for
 // its text, pruned at footnotes.
 func BenchmarkAssignHeadingLabels(b *testing.B) {
-	body := benchBody(32)
+	doc := benchBody(32)
 	b.ReportAllocs()
 	for b.Loop() {
-		for c := range value.Preorder(body, value.SetOf(value.KindHeading)) {
-			c.Node().(*value.Heading).Label = nil
-		}
+		unlabel(doc)
 		s := &session{labels: map[name.Name]struct{}{}}
-		s.assignHeadingLabels(body)
+		s.assignHeadingLabels(doc)
+	}
+}
+
+// BenchmarkAssignHeadingLabelsIndexed is the same pass read off an index, which
+// is what a caller who asked for one gets: the index is built by then, and the
+// headings are found without walking the document again.
+func BenchmarkAssignHeadingLabelsIndexed(b *testing.B) {
+	doc := benchBody(32)
+	idx := value.NewIndex(doc)
+	b.ReportAllocs()
+	for b.Loop() {
+		unlabel(doc)
+		s := &session{labels: map[name.Name]struct{}{}}
+		s.assignHeadingLabels(&idx)
+	}
+}
+
+// unlabel strips the labels of a previous run, so each iteration does the same
+// work as the first.
+func unlabel(doc *value.Document) {
+	for c := range value.Preorder(doc, value.SetOf(value.KindHeading)) {
+		c.Node().(*value.Heading).Label = nil
 	}
 }

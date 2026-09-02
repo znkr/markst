@@ -71,10 +71,16 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 //	toc := markst.Outline(&idx)
 //	err = html.Render(w, doc, html.WithIndex(&idx))
 //
-// The index is built after the document is realized, so it records the document
-// the caller receives. It is the caller's to keep, and it goes stale the moment
-// that document's content is added to, removed from or replaced — see
-// [value.Index]. Nothing is written to x when compilation failed.
+// The index is built by the walk realization needs anyway, so asking for one
+// costs its records rather than a traversal of the document. It records the
+// document Compile returns — including the document a failed compile returns
+// alongside its diagnostics, so x is written either way, and a caller keeping
+// an index across compilations gets it replaced rather than left alone.
+//
+// It is the caller's to keep, and it goes stale the moment that document's
+// content is added to, removed from or replaced; see [value.Index].
+// [CompileLibrary] ignores it: a library is compiled for the bindings it
+// defines, and there is no document for an index to be of.
 func WithIndex(x *value.Index) Option {
 	return func(c *config) { c.index = x }
 }
@@ -110,10 +116,11 @@ func (c *config) analyzerOpts() []analyzer.Option {
 }
 
 func (c *config) evalOpts() []eval.Option {
-	if c.now.IsZero() {
-		return nil
+	var opts []eval.Option
+	if !c.now.IsZero() {
+		opts = append(opts, eval.WithNow(c.now))
 	}
-	return []eval.Option{eval.WithNow(c.now)}
+	return opts
 }
 
 // Compile turns markst source into a realized document, running the whole
@@ -150,13 +157,16 @@ func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) 
 	c := newConfig(opts)
 	root := parser.Parse(src)
 	mod := analyzer.Analyze(root, c.analyzerOpts()...)
-	doc, warnings, errs := eval.Eval(mod, c.evalOpts()...)
+
+	evalOpts := c.evalOpts()
+	if c.index != nil {
+		evalOpts = append(evalOpts, eval.WithIndex(c.index))
+	}
+
+	doc, warnings, errs := eval.Eval(mod, evalOpts...)
 	warns := diagnose(Warning, warnings)
 	if len(errs) > 0 {
 		return doc, warns, DiagnosticList(diagnose(Error, errs))
-	}
-	if c.index != nil {
-		c.index.Init(doc)
 	}
 	return doc, warns, nil
 }

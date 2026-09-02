@@ -22,14 +22,26 @@ func (s *session) realizeDocument(c value.Content) *value.Document {
 	// Realize first: the body is where the `set document` rules live, so
 	// s.doc isn't populated until it has been walked.
 	body := s.realizeBody(topChildren(c), nil)
+	doc := s.doc
+	doc.Body = body
+	d := &doc
+
 	// Heading labels come after, not during: a show rule runs as part of the
 	// pass above and can both reword a heading and attach labels of its own,
 	// so neither the text a label is derived from nor the set of names already
 	// taken is settled until the pass has finished.
-	s.assignHeadingLabels(body)
-	doc := s.doc
-	doc.Body = body
-	return &doc
+	//
+	// A caller who asked for an index gets it built here, off the same pass:
+	// the index records structure only, so building it before the labels are
+	// handed out records the same document, and labelling then reads the
+	// headings off the index rather than walking the document a second time.
+	var tree value.Tree = d
+	if s.index != nil {
+		s.index.Init(d)
+		tree = s.index
+	}
+	s.assignHeadingLabels(tree)
+	return d
 }
 
 // topChildren returns c's children when it is an (unlabeled) sequence, else c
