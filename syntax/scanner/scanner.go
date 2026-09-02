@@ -36,6 +36,11 @@ import (
 type Scanner struct {
 	r *reader.Reader
 
+	// a allocates the nodes this scanner produces, and the ones the parser
+	// builds over them: a syntax tree's nodes live and die together, so they
+	// come out of one arena. Reachable through [Scanner.Arena].
+	a syntax.Arena
+
 	// state
 	mode    syntax.Mode
 	newline bool
@@ -56,6 +61,10 @@ type protoerr struct {
 func New(src []byte) *Scanner {
 	return &Scanner{r: reader.New(src)}
 }
+
+// Arena returns the arena the scanner allocates its nodes in, so that a caller
+// building nodes over them — the parser — can put them in the same blocks.
+func (s *Scanner) Arena() *syntax.Arena { return &s.a }
 
 // Mode returns the current lexical mode.
 func (s *Scanner) Mode() syntax.Mode {
@@ -122,12 +131,12 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	if err := s.err; err != nil {
 		s.err = nil
 		s.node = nil
-		return syntax.KindError, syntax.NewError(span, err.message, string(text), err.hints...)
+		return syntax.KindError, s.a.Error(span, err.message, string(text), err.hints...)
 	} else if node := s.node; node != nil {
 		s.node = nil
 		return kind, node
 	} else {
-		return kind, syntax.NewLeaf(kind, span, string(text))
+		return kind, s.a.Leaf(kind, span, string(text))
 	}
 }
 
@@ -282,10 +291,10 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	// or scanInlineRaw to process.
 	if backticks == 2 {
 		span := s.spanFrom(start)
-		return syntax.KindRaw, syntax.NewInner(syntax.KindRaw, []syntax.Node{
-			syntax.NewLeaf(syntax.KindRawDelim, syntax.Span{Start: span.Start, End: span.Start + 1}, "`"),
-			syntax.NewLeaf(syntax.KindRawDelim, syntax.Span{Start: span.End - 1, End: span.End}, "`"),
-		})
+		delims := s.a.Nodes(2)
+		delims[0] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.Start, End: span.Start + 1}, "`")
+		delims[1] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.End - 1, End: span.End}, "`")
+		return syntax.KindRaw, s.a.Inner(syntax.KindRaw, delims)
 	}
 
 	// Find the end of the raw text.
@@ -293,7 +302,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	for found < backticks {
 		switch s.r.Next() {
 		case reader.EOF:
-			return syntax.KindError, syntax.NewError(s.spanFrom(start), "unclosed raw text", string(s.r.From(start)))
+			return syntax.KindError, s.a.Error(s.spanFrom(start), "unclosed raw text", string(s.r.From(start)))
 		case '`':
 			found++
 		default:
@@ -305,7 +314,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	var nodes []syntax.Node
 	prevStart := start
 	push := func(kind syntax.Kind) {
-		nodes = append(nodes, syntax.NewLeaf(kind, s.spanFrom(prevStart), string(s.r.From(prevStart))))
+		nodes = append(nodes, s.a.Leaf(kind, s.spanFrom(prevStart), string(s.r.From(prevStart))))
 		prevStart = s.r.Offset()
 	}
 
@@ -323,7 +332,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	s.r.Seek(end)
 	push(syntax.KindRawDelim)
 
-	return syntax.KindRaw, syntax.NewInner(syntax.KindRaw, nodes)
+	return syntax.KindRaw, s.a.Inner(syntax.KindRaw, s.a.CloneNodes(nodes))
 }
 
 // scanBlockyRaw parses a language tag, has smart behavior for trimming whitespace in the start/end
@@ -736,17 +745,19 @@ func (s *Scanner) scanMath(start int, ch rune) syntax.Kind {
 // s.node) if the identifier is followed by one or more `.field` accesses.
 func (s *Scanner) scanMathIdentOrField(start int) syntax.Kind {
 	kind := syntax.KindMathIdent
-	var node syntax.Node = syntax.NewLeaf(kind, s.spanFrom(start), string(s.r.From(start)))
+	var node syntax.Node = s.a.Leaf(kind, s.spanFrom(start), string(s.r.From(start)))
 	for {
 		identStart, ok := s.maybeDotIdent()
 		if !ok {
 			break
 		}
 		identEnd := s.r.Offset()
-		dot := syntax.NewLeaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, ".")
-		ident := syntax.NewLeaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, string(s.r.From(identStart)))
+		dot := s.a.Leaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, ".")
+		ident := s.a.Leaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, string(s.r.From(identStart)))
 		kind = syntax.KindFieldAccess
-		node = syntax.NewInner(kind, []syntax.Node{node, dot, ident})
+		parts := s.a.Nodes(3)
+		parts[0], parts[1], parts[2] = node, dot, ident
+		node = s.a.Inner(kind, parts)
 	}
 	if kind == syntax.KindFieldAccess {
 		s.node = node
@@ -797,9 +808,9 @@ func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
 		if s.r.Peek() == ':' && !s.r.ContinuesWith(":=") && !s.r.ContinuesWith("::=") {
 			text := s.r.From(start)
 			if !bytes.Equal(text, []byte("_")) {
-				return syntax.NewLeaf(syntax.KindIdent, s.spanFrom(start), string(text))
+				return s.a.Leaf(syntax.KindIdent, s.spanFrom(start), string(text))
 			}
-			return syntax.NewError(s.spanFrom(start), "expected identifier, found underscore", string(text))
+			return s.a.Error(s.spanFrom(start), "expected identifier, found underscore", string(text))
 		}
 	}
 	s.r.Seek(cursor)
@@ -817,7 +828,7 @@ func (s *Scanner) MaybeMathSpreadArg(start int) syntax.Node {
 		// Don't infer a spread before trivia/end, a dot (`...` shorthand), or an
 		// argument terminator (spreads nothing).
 		if ch := s.r.Peek(); !s.spaceOrEnd() && ch != '.' && ch != ',' && ch != ';' && ch != ')' && ch != '$' {
-			return syntax.NewLeaf(syntax.KindDots, s.spanFrom(start), string(s.r.From(start)))
+			return s.a.Leaf(syntax.KindDots, s.spanFrom(start), string(s.r.From(start)))
 		}
 	}
 	s.r.Seek(cursor)

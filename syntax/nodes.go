@@ -71,17 +71,22 @@ var _ Node = (*Inner)(nil)
 // recurse into both the first and the last child, which costs 2^depth for a
 // deeply nested tree.
 func NewInner(kind Kind, children []Node) *Inner {
-	var span Span
-	if len(children) > 0 {
-		span = Span{
-			Start: children[0].Span().Start,
-			End:   children[len(children)-1].Span().End,
-		}
-	}
 	return &Inner{
 		kind:     kind,
-		span:     span,
+		span:     spanOf(children),
 		children: children,
+	}
+}
+
+// spanOf is the span an inner node covers: from the start of its first child to
+// the end of its last.
+func spanOf(children []Node) Span {
+	if len(children) == 0 {
+		return Span{}
+	}
+	return Span{
+		Start: children[0].Span().Start,
+		End:   children[len(children)-1].Span().End,
 	}
 }
 func (v *Inner) Kind() Kind { return v.kind }

@@ -97,6 +97,10 @@ func (m nlMode) stopAt(t token) bool {
 type parser struct {
 	s *scanner.Scanner
 
+	// a is the scanner's arena: the nodes the parser builds go in the same
+	// blocks as the tokens they are built over.
+	a *syntax.Arena
+
 	// state
 	cur            token
 	nodes          []syntax.Node
@@ -126,8 +130,16 @@ type token struct {
 }
 
 func newParser(src []byte) *parser {
+	s := scanner.New(src)
 	p := &parser{
-		s:         scanner.New(src),
+		s: s,
+		a: s.Arena(),
+		// The working stack holds every node parsed but not yet wrapped, which
+		// at the top level is the whole document. Sizing it off the source
+		// spares it the doubling of growing there from nothing: the article
+		// the benchmarks parse peaks at one entry per 23 source bytes, and
+		// one per 16 leaves room without much waste.
+		nodes:     make([]syntax.Node, 0, min(len(src)/16+16, 4096)),
 		memos:     make(map[int]memo),
 		errAnchor: noAnchor,
 	}
@@ -215,7 +227,7 @@ func (p *parser) expected(expected string) *syntax.Error {
 	if at > 0 {
 		span = p.nodes[at-1].Span()
 	}
-	n := syntax.NewError(
+	n := p.a.Error(
 		syntax.Span{Start: span.End, End: span.End},
 		"expected "+expected,
 		"",
@@ -246,7 +258,7 @@ func (p *parser) errorMarker(m int) int {
 // problematic token so parsing can continue past it. Use this when the current
 // token itself is the error and should be absorbed into the tree.
 func (p *parser) errorf(format string, args ...any) *syntax.Error {
-	err := asErrorNode(p.cur.node, format, args...)
+	err := p.asErrorNode(p.cur.node, format, args...)
 	p.nodes = append(p.nodes, syntax.Node(err))
 	p.next()
 	p.errAnchor = len(p.nodes) - p.cur.trivia - 1
@@ -257,7 +269,7 @@ func (p *parser) consumeAs(kind syntax.Kind) {
 	if p.at(syntax.KindError) {
 		panic("cannot convert error node")
 	}
-	p.cur.node = syntax.ConvertNode(p.cur.node, kind)
+	p.cur.node = p.a.Convert(p.cur.node, kind)
 	p.consume()
 }
 
@@ -297,7 +309,7 @@ func (p *parser) expect(kind syntax.Kind) bool {
 // identifier was allowed). The error inherits the span of the replaced node.
 func (p *parser) expectedAt(i int, expected string) *syntax.Error {
 	cur := p.nodes[i]
-	n := asErrorNode(cur, "expected %s, found %s", expected, cur.Kind().Name())
+	n := p.asErrorNode(cur, "expected %s, found %s", expected, cur.Kind().Name())
 	p.nodes[i] = syntax.Node(n)
 	return n
 }
@@ -341,7 +353,7 @@ func (p *parser) expectClosing(open int, expected syntax.Kind) *syntax.Error {
 		// Already have an error at this position.
 		return nil
 	}
-	n := asErrorNode(p.nodes[open], "unclosed delimiter")
+	n := p.asErrorNode(p.nodes[open], "unclosed delimiter")
 	p.nodes[open] = n
 	return n
 }
@@ -354,9 +366,9 @@ func (p *parser) flushTrivia() {
 func (p *parser) wrap(start int, kind syntax.Kind) {
 	to := len(p.nodes) - p.cur.trivia
 	from := min(start, to)
-	children := slices.Clone(p.nodes[from:to])
+	children := p.a.CloneNodes(p.nodes[from:to])
 	p.nodes = slices.Delete(p.nodes, from, to)
-	p.nodes = slices.Insert(p.nodes, from, syntax.Node(syntax.NewInner(kind, children)))
+	p.nodes = slices.Insert(p.nodes, from, syntax.Node(p.a.Inner(kind, children)))
 }
 
 func (p *parser) withMode(mode syntax.Mode, nlmode nlMode, fn func()) {
@@ -901,10 +913,10 @@ func (p *parser) mathUnparen(m int) {
 	}
 	first, last := children[0], children[len(children)-1]
 	if first.Text() == "(" && last.Text() == ")" {
-		newChildren := slices.Clone(children)
-		newChildren[0] = syntax.ConvertNode(first, syntax.KindLeftParen)
-		newChildren[len(newChildren)-1] = syntax.ConvertNode(last, syntax.KindRightParen)
-		p.nodes[m] = syntax.NewInner(syntax.KindMath, newChildren)
+		newChildren := p.a.CloneNodes(children)
+		newChildren[0] = p.a.Convert(first, syntax.KindLeftParen)
+		newChildren[len(newChildren)-1] = p.a.Convert(last, syntax.KindRightParen)
+		p.nodes[m] = p.a.Inner(syntax.KindMath, newChildren)
 	}
 }
 
@@ -954,7 +966,7 @@ func (p *parser) parseMathArg(seen map[string]bool) {
 		p.consumeAs(syntax.KindColon)
 		if seen[text] {
 			prev := p.nodes[m]
-			p.nodes[m] = syntax.NewError(prev.Span(), fmt.Sprintf("duplicate argument: %s", text), prev.Text())
+			p.nodes[m] = p.a.Error(prev.Span(), fmt.Sprintf("duplicate argument: %s", text), prev.Text())
 		}
 		seen[text] = true
 	}
