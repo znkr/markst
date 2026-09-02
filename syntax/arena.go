@@ -24,7 +24,7 @@ type Arena struct {
 const blockSize = 128
 
 // Leaf returns a terminal node with the given kind, span, and literal text.
-func (a *Arena) Leaf(kind Kind, span Span, literal string) *Leaf {
+func (a *Arena) Leaf(kind Kind, span Span, literal []byte) *Leaf {
 	if len(a.leaves) == cap(a.leaves) {
 		// A fresh block rather than a longer one: growing would copy the
 		// nodes already handed out, and the pointers to them point at the
@@ -48,7 +48,7 @@ func (a *Arena) Inner(kind Kind, children []Node) *Inner {
 
 // Error returns an error node with the given span, diagnostic message, original
 // literal text, and optional hints.
-func (a *Arena) Error(span Span, message string, literal string, hints ...string) *Error {
+func (a *Arena) Error(span Span, message string, literal []byte, hints ...string) *Error {
 	if len(a.errors) == cap(a.errors) {
 		a.errors = make([]Error, 0, blockSize)
 	}

@@ -34,7 +34,7 @@ func format(sb *strings.Builder, n syntax.Node, indent string) {
 			format(sb, child, indent+"  ")
 		}
 	case *syntax.Error:
-		if n.Text() != "" {
+		if len(n.Text()) > 0 {
 			fmt.Fprintf(sb, "%s%s: %q\n", indent, kind, n.Text())
 		} else {
 			fmt.Fprintf(sb, "%s%s\n", indent, kind)

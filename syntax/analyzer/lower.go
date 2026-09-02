@@ -143,7 +143,7 @@ func rawIsBlock(n syntax.Node) bool {
 	}
 	for _, child := range inner.Children() {
 		if child.Kind() == syntax.KindRawDelim {
-			return child.Text() != "`"
+			return string(child.Text()) != "`"
 		}
 	}
 	return false
@@ -157,7 +157,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	switch n.Kind() {
 	// Markup leaves
 	case syntax.KindText:
-		return a.b.Const(n.Span(), &value.Text{Text: n.Text()})
+		return a.b.Const(n.Span(), &value.Text{Text: a.str(n)})
 	case syntax.KindSpace:
 		// A markup whitespace run is worth exactly one space: two blank lines
 		// scan as a parbreak instead, so there is nothing longer to preserve.
@@ -166,13 +166,13 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 		// In math, an escape like `\(` denotes a symbol character (matching
 		// Typst, where it can stand in as a delimiter); in markup it is text.
 		if a.mathDepth > 0 {
-			return a.b.Const(n.Span(), &value.Symbol{Variants: symbols.Variants{{Value: unescape(n.Text())}}})
+			return a.b.Const(n.Span(), &value.Symbol{Variants: symbols.Variants{{Value: unescape(a.str(n))}}})
 		}
-		return a.b.Const(n.Span(), &value.Text{Text: unescape(n.Text())})
+		return a.b.Const(n.Span(), &value.Text{Text: unescape(a.str(n))})
 	case syntax.KindShorthand:
-		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(n.Text())})
+		return a.b.Const(n.Span(), &value.Text{Text: unshorthand(a.str(n))})
 	case syntax.KindSmartQuote:
-		return a.b.Const(n.Span(), &value.SmartQuote{Double: n.Text() == `"`})
+		return a.b.Const(n.Span(), &value.SmartQuote{Double: string(n.Text()) == `"`})
 	case syntax.KindLinebreak:
 		return a.b.Const(n.Span(), &value.Linebreak{})
 	case syntax.KindParbreak:
@@ -195,7 +195,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindEmph:
 		return a.lowerEmph(n)
 	case syntax.KindLink:
-		lit := n.Text()
+		lit := a.str(n)
 		body := a.b.Const(n.Span(), &value.Text{Text: lit})
 		return a.b.Link(n.Span(), lit, body)
 	case syntax.KindRef:
@@ -286,7 +286,7 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindMathIdent:
 		return a.lowerMathIdent(n)
 	case syntax.KindMathShorthand:
-		return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(n.Text())})
+		return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(a.str(n))})
 	case syntax.KindMathAlignPoint:
 		return a.b.Const(n.Span(), &value.MathAlignPoint{})
 	case syntax.KindMathAttach:
@@ -700,7 +700,7 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 		return a.b.Const(span, value.None{})
 	case syntax.KindFieldAccess:
 		if baseNode, ok := lvalueBase(leftNode); ok {
-			source := name.Make(baseNode.Text())
+			source := name.Make(a.str(baseNode))
 			if a.isCapturedVar(source) {
 				return a.emitError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified")
 			}
@@ -716,7 +716,7 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 		return a.b.Const(span, value.None{})
 	case syntax.KindFuncCall:
 		if baseNode, ok := lvalueBase(leftNode); ok {
-			source := name.Make(baseNode.Text())
+			source := name.Make(a.str(baseNode))
 			if a.isCapturedVar(source) {
 				return a.emitError(baseNode.Span(), "variables from outside the function are read-only and cannot be modified")
 			}
@@ -815,7 +815,7 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 			entry := a.inner(child, syntax.KindKeyed)
 			var keyStr string
 			if entry.at(syntax.KindStr) {
-				if leaf, ok := peekLeafText(entry); ok {
+				if leaf, ok := a.peekLeafText(entry); ok {
 					keyStr = unquote(leaf)
 				}
 			}
@@ -847,12 +847,12 @@ func (a *analyzer) lowerDict(n syntax.Node) expr.Ref {
 // peekLeafText returns the text of the current node if it is a *syntax.Leaf.
 // Used to peek at string-literal keys for compile-time duplicate detection
 // without consuming the node.
-func peekLeafText(ns *nodes) (string, bool) {
+func (a *analyzer) peekLeafText(ns *nodes) (string, bool) {
 	if ns.pos >= len(ns.items) {
 		return "", false
 	}
 	if leaf, ok := ns.items[ns.pos].(*syntax.Leaf); ok {
-		return leaf.Text(), true
+		return a.str(leaf), true
 	}
 	return "", false
 }
@@ -884,7 +884,7 @@ func (a *analyzer) lowerCallee(calleeNode syntax.Node) expr.Ref {
 	ns.take(syntax.KindDot)
 	fieldNode := ns.node()
 	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
-	return a.b.MethodField(calleeNode.Span(), fieldNode.Span(), a.lowerExpr(targetNode), method, targetNode.Text(), false)
+	return a.b.MethodField(calleeNode.Span(), fieldNode.Span(), a.lowerExpr(targetNode), method, a.str(targetNode), false)
 }
 
 // Function calls //////////////////////////////////////////////////////////////
@@ -979,7 +979,7 @@ func (a *analyzer) lowerMethodCall(callNode, faNode, argsNode syntax.Node) (expr
 	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
 
 	targetRef, recv := a.lowerReceiver(targetNode)
-	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text(), false)
+	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, a.str(targetNode), false)
 	callee := expr.Callee{Ref: calleeRef, Span: faNode.Span()}
 	args, blocks := a.lowerArgs(argsNode)
 
@@ -1052,7 +1052,7 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 	if ns.at(syntax.KindClosure) {
 		closureNode := ns.node()
 		// Extract the closure's name (function-shorthand `let f(x) = body`).
-		recName, ok := closureSourceName(closureNode)
+		recName, ok := a.closureSourceName(closureNode)
 		if !ok {
 			// Emit the legacy "expected identifier or parameters" error at
 			// the would-be-name node's span. The closure node's first child
@@ -1495,7 +1495,7 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 	switch n0 := ns.node(); n0.Kind() {
 	case syntax.KindIdent:
 		if ns.at(syntax.KindParams) {
-			closureName = name.Make(n0.Text())
+			closureName = name.Make(a.str(n0))
 			paramsNode = ns.node()
 		} else {
 			// Single-arg form: `x => body`. Treat ident as a positional param
@@ -1757,14 +1757,14 @@ func (a *analyzer) lowerBlockOrExpr(n syntax.Node) expr.Ref {
 
 // closureSourceName peeks at the children of a KindClosure node and returns
 // the function name if this is the named form (`name(params) = body`).
-func closureSourceName(n syntax.Node) (name.Name, bool) {
+func (a *analyzer) closureSourceName(n syntax.Node) (name.Name, bool) {
 	inner, ok := n.(*syntax.Inner)
 	if !ok {
 		return name.Invalid, false
 	}
 	children := inner.Children()
 	if len(children) >= 2 && children[0].Kind() == syntax.KindIdent && children[1].Kind() == syntax.KindParams {
-		return name.Make(children[0].Text()), true
+		return name.Make(a.str(children[0])), true
 	}
 	return name.Invalid, false
 }
@@ -1900,7 +1900,7 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 			if !first {
 				sb.WriteByte('\n')
 			}
-			sb.WriteString(child.Text())
+			sb.Write(child.Text())
 			first = false
 		}
 	}

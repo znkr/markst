@@ -10,7 +10,7 @@ func TestArenaAcrossBlocks(t *testing.T) {
 	inners := make([]*Inner, n)
 	for i := range n {
 		span := Span{Start: uint32(i), End: uint32(i + 1)}
-		leaves[i] = a.Leaf(KindText, span, "x")
+		leaves[i] = a.Leaf(KindText, span, []byte("x"))
 		kids := a.Nodes(1)
 		kids[0] = leaves[i]
 		inners[i] = a.Inner(KindMarkup, kids)
@@ -33,12 +33,12 @@ func TestArenaNodesAreSeparate(t *testing.T) {
 	var a Arena
 	first := a.Nodes(2)
 	second := a.Nodes(2)
-	first[0], first[1] = a.Leaf(KindText, Span{}, "a"), a.Leaf(KindText, Span{}, "b")
-	second[0], second[1] = a.Leaf(KindText, Span{}, "c"), a.Leaf(KindText, Span{}, "d")
-	if got := append(first, a.Leaf(KindText, Span{}, "e")); got[2].Text() != "e" {
+	first[0], first[1] = a.Leaf(KindText, Span{}, []byte("a")), a.Leaf(KindText, Span{}, []byte("b"))
+	second[0], second[1] = a.Leaf(KindText, Span{}, []byte("c")), a.Leaf(KindText, Span{}, []byte("d"))
+	if got := append(first, a.Leaf(KindText, Span{}, []byte("e"))); string(got[2].Text()) != "e" {
 		t.Fatalf("appending to a children slice wrote %q", got[2].Text())
 	}
-	if second[0].Text() != "c" || second[1].Text() != "d" {
+	if string(second[0].Text()) != "c" || string(second[1].Text()) != "d" {
 		t.Errorf("appending to one children slice overwrote another: %q, %q",
 			second[0].Text(), second[1].Text())
 	}
@@ -46,8 +46,8 @@ func TestArenaNodesAreSeparate(t *testing.T) {
 
 func TestArenaError(t *testing.T) {
 	var a Arena
-	e := a.Error(Span{Start: 1, End: 2}, "bad", "x", "try harder")
-	if e.Kind() != KindError || e.Message() != "bad" || e.Text() != "x" {
+	e := a.Error(Span{Start: 1, End: 2}, "bad", []byte("x"), "try harder")
+	if e.Kind() != KindError || e.Message() != "bad" || string(e.Text()) != "x" {
 		t.Errorf("Error() = %v %q %q", e.Kind(), e.Message(), e.Text())
 	}
 	e.Hint("and again")
@@ -58,8 +58,8 @@ func TestArenaError(t *testing.T) {
 
 func TestArenaConvert(t *testing.T) {
 	var a Arena
-	leaf := a.Leaf(KindText, Span{Start: 1, End: 2}, "x")
-	if got := a.Convert(leaf, KindIdent); got.Kind() != KindIdent || got.Span() != leaf.Span() || got.Text() != "x" {
+	leaf := a.Leaf(KindText, Span{Start: 1, End: 2}, []byte("x"))
+	if got := a.Convert(leaf, KindIdent); got.Kind() != KindIdent || got.Span() != leaf.Span() || string(got.Text()) != "x" {
 		t.Errorf("Convert(leaf) = %v %v %q", got.Kind(), got.Span(), got.Text())
 	}
 	kids := a.Nodes(1)
@@ -73,17 +73,18 @@ func TestArenaConvert(t *testing.T) {
 			t.Error("Convert() of an error node did not panic")
 		}
 	}()
-	a.Convert(a.Error(Span{}, "bad", ""), KindText)
+	a.Convert(a.Error(Span{}, "bad", nil), KindText)
 }
 
 // TestArenaBlocks pins what a block buys: a run of nodes costs one allocation
 // per block of them, not one each.
 func TestArenaBlocks(t *testing.T) {
 	const n = 4 * blockSize
+	text := []byte("x")
 	allocs := testing.AllocsPerRun(10, func() {
 		var a Arena
 		for range n {
-			a.Leaf(KindText, Span{}, "x")
+			a.Leaf(KindText, Span{}, text)
 		}
 	})
 	if want := float64(n / blockSize); allocs != want {

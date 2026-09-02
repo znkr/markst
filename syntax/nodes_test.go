@@ -4,7 +4,7 @@ import "testing"
 
 func TestInnerSpan(t *testing.T) {
 	leaf := func(start, end uint32, text string) Node {
-		return NewLeaf(KindText, Span{Start: start, End: end}, text)
+		return NewLeaf(KindText, Span{Start: start, End: end}, []byte(text))
 	}
 
 	tests := []struct {
@@ -44,7 +44,7 @@ func TestInnerSpan(t *testing.T) {
 // take half a minute. If that regresses, this test does not fail, it hangs.
 func TestInnerSpanDeeplyNested(t *testing.T) {
 	const depth = 64
-	var n Node = NewLeaf(KindText, Span{Start: 0, End: depth}, "")
+	var n Node = NewLeaf(KindText, Span{Start: 0, End: depth}, nil)
 	for range depth {
 		n = NewInner(KindMarkup, []Node{n})
 	}

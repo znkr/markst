@@ -42,7 +42,7 @@ func (a *analyzer) internal(n syntax.Node, format string, args ...any) {
 	if n != nil {
 		loc := syntax.Locate(a.source, n.Span())
 		fmt.Fprintf(&sb, "\n  at node: kind=%s span=%s text=%q",
-			n.Kind().String(), loc, truncate(n.Text(), 60))
+			n.Kind().String(), loc, truncate(string(n.Text()), 60))
 	}
 	panic(sb.String())
 }
@@ -60,6 +60,14 @@ func (a *analyzer) expect(kind syntax.Kind, n syntax.Node) bool {
 	}
 	a.internal(n, "expected %s, but got %s", kind.String(), n.Kind().String())
 	return false // unreachable
+}
+
+// str returns n's text as a string, which costs nothing: a node's text is the
+// source it spans, so this is a slice of the source string the analyzer already
+// holds. See [analyzer.text].
+func (a *analyzer) str(n syntax.Node) string {
+	span := n.Span()
+	return a.text[span.Start:span.End]
 }
 
 // expected emits a synthetic "expected X" error at the cursor's position
@@ -211,7 +219,7 @@ func (ns *nodes) take(kind syntax.Kind) (string, bool) {
 		return "", false
 	}
 	ns.advance()
-	return n.(*syntax.Leaf).Text(), true
+	return ns.a.str(n), true
 }
 
 // node returns the current node and advances.
@@ -300,7 +308,7 @@ func (ns *nodes) inside(open, close syntax.Kind) iter.Seq[syntax.Node] {
 // Any other kind mismatch is drift and escalates to [internal].
 func (a *analyzer) leaf(n syntax.Node, kind syntax.Kind) string {
 	if n.Kind() == kind {
-		return n.(*syntax.Leaf).Text()
+		return a.str(n)
 	}
 	if err, ok := n.(*syntax.Error); ok {
 		a.emitSyntaxError(err)

@@ -19,7 +19,7 @@ type nodeBuilder struct {
 func (b *nodeBuilder) leaf(kind syntax.Kind, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewLeaf(kind, syntax.Span{Start: start, End: b.offset}, literal)
+	return syntax.NewLeaf(kind, syntax.Span{Start: start, End: b.offset}, []byte(literal))
 }
 
 func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Node {
@@ -29,13 +29,13 @@ func (b *nodeBuilder) inner(kind syntax.Kind, children []syntax.Node) syntax.Nod
 func (b *nodeBuilder) err(msg string, literal string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, literal)
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, []byte(literal))
 }
 
 func (b *nodeBuilder) errWithHints(msg string, literal string, hints []string) syntax.Node {
 	start := b.offset
 	b.offset += uint32(len(literal))
-	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, literal, hints...)
+	return syntax.NewError(syntax.Span{Start: start, End: b.offset}, msg, []byte(literal), hints...)
 }
 
 func TestScanner_MarkupMode(t *testing.T) {
@@ -1642,7 +1642,7 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan 'h'
 	kind, val := s.Next()
-	if kind != syntax.KindText || val.Text() != "h" {
+	if kind != syntax.KindText || string(val.Text()) != "h" {
 		t.Fatalf("expected 'h', got %v %q", kind, val.Text())
 	}
 	if c := s.Column(); c != 1 {
@@ -1651,7 +1651,7 @@ func TestScanner_Column(t *testing.T) {
 
 	// Scan '\n'
 	kind, val = s.Next()
-	if kind != syntax.KindSpace || val.Text() != "\n" {
+	if kind != syntax.KindSpace || string(val.Text()) != "\n" {
 		t.Fatalf("expected '\\n', got %v %q", kind, val.Text())
 	}
 	if c := s.Column(); c != 0 {
@@ -1661,7 +1661,7 @@ func TestScanner_Column(t *testing.T) {
 	// Scan 'e' (part of "ello" text)
 	// scanText scans the whole text block "ello".
 	kind, val = s.Next()
-	if kind != syntax.KindText || val.Text() != "ello" {
+	if kind != syntax.KindText || string(val.Text()) != "ello" {
 		t.Fatalf("expected 'ello', got %v %q", kind, val.Text())
 	}
 	// 'ello' length 4. Start at 0. 0+4 = 4. But EOF resets col to 0.

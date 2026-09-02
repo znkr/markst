@@ -39,7 +39,7 @@ type Hint struct {
 // (empty if they match). Mismatches are shown as a unified diff of the source
 // with error annotations as inline comments.
 func Diff(root syntax.RootNode, got []Error) string {
-	src := root.Text()
+	src := string(root.Text())
 	gotAnnotated := annotateSource(root.Source, src, got)
 	return textdiff.Unified(src, gotAnnotated)
 }

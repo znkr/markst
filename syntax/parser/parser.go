@@ -52,6 +52,7 @@ func Parse(src []byte) syntax.RootNode {
 		panic("expected single root node")
 	}
 	return syntax.RootNode{
+		Src:    src,
 		Source: p.s.Source(),
 		Inner:  p.nodes[0].(*syntax.Inner),
 	}
@@ -230,7 +231,7 @@ func (p *parser) expected(expected string) *syntax.Error {
 	n := p.a.Error(
 		syntax.Span{Start: span.End, End: span.End},
 		"expected "+expected,
-		"",
+		nil,
 	)
 	p.nodes = slices.Insert(p.nodes, at, syntax.Node(n))
 	p.errAnchor = at
@@ -760,7 +761,7 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 		p.parseMathDelimited()
 
 	case syntax.KindRightBrace:
-		if p.cur.node.Text() == "|]" {
+		if string(p.cur.node.Text()) == "|]" {
 			p.consumeAs(syntax.KindMathShorthand)
 		} else {
 			p.consumeAs(syntax.KindMathText)
@@ -856,11 +857,11 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 
 // isMathAlphabetic reports whether text counts as alphabetic in math, which
 // causes it to group with parens as an implicit function call.
-func isMathAlphabetic(text string) bool {
-	if text == "" {
+func isMathAlphabetic(text []byte) bool {
+	if len(text) == 0 {
 		return false
 	}
-	for _, r := range text {
+	for _, r := range string(text) {
 		if !unicode.IsLetter(r) {
 			return false
 		}
@@ -875,7 +876,7 @@ var mathDelimitedStops = syntax.SetOf(syntax.KindDollar, syntax.KindEnd, syntax.
 // to MathText or MathShorthand before being eaten.
 func (p *parser) parseMathDelimited() {
 	m := len(p.nodes)
-	if p.cur.node.Text() == "[|" {
+	if string(p.cur.node.Text()) == "[|" {
 		p.consumeAs(syntax.KindMathShorthand)
 	} else {
 		p.consumeAs(syntax.KindMathText)
@@ -884,7 +885,7 @@ func (p *parser) parseMathDelimited() {
 	p.parseMathExprs(mathDelimitedStops)
 	if p.at(syntax.KindRightBrace) || p.at(syntax.KindRightParen) {
 		p.wrap(mBody, syntax.KindMath)
-		if p.cur.node.Text() == "|]" {
+		if string(p.cur.node.Text()) == "|]" {
 			p.consumeAs(syntax.KindMathShorthand)
 		} else {
 			p.consumeAs(syntax.KindMathText)
@@ -912,7 +913,7 @@ func (p *parser) mathUnparen(m int) {
 		return
 	}
 	first, last := children[0], children[len(children)-1]
-	if first.Text() == "(" && last.Text() == ")" {
+	if string(first.Text()) == "(" && string(last.Text()) == ")" {
 		newChildren := p.a.CloneNodes(children)
 		newChildren[0] = p.a.Convert(first, syntax.KindLeftParen)
 		newChildren[len(newChildren)-1] = p.a.Convert(last, syntax.KindRightParen)
@@ -961,7 +962,7 @@ func (p *parser) parseMathArg(seen map[string]bool) {
 		argKind = syntax.KindNamed
 		p.cur.node = node
 		p.cur.kind = node.Kind()
-		text := node.Text()
+		text := string(node.Text())
 		p.consume()
 		p.consumeAs(syntax.KindColon)
 		if seen[text] {

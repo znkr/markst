@@ -9,16 +9,16 @@ import (
 
 func TestFormat(t *testing.T) {
 	node := syntax.NewInner(syntax.KindMarkup, []syntax.Node{
-		syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 0, End: 5}, "hello"),
+		syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 0, End: 5}, []byte("hello")),
 		syntax.NewInner(syntax.KindStrong, []syntax.Node{
-			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 5, End: 6}, "*"),
-			syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 6, End: 11}, "world"),
-			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 11, End: 12}, "*"),
+			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 5, End: 6}, []byte("*")),
+			syntax.NewLeaf(syntax.KindText, syntax.Span{Start: 6, End: 11}, []byte("world")),
+			syntax.NewLeaf(syntax.KindStar, syntax.Span{Start: 11, End: 12}, []byte("*")),
 		}),
 		syntax.NewError(
 			syntax.Span{Start: 12, End: 19},
 			"something went wrong",
-			"literal",
+			[]byte("literal"),
 			"try again",
 		),
 	})

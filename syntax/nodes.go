@@ -1,13 +1,16 @@
 package syntax
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // Node is the interface implemented by all nodes in the untyped syntax tree.
 // Every node carries a [Kind] that determines its role, a [Span] locating it
 // in the source text, and the original source text via [Text].
+//
+// Text is bytes rather than a string, and for a [Leaf] it is a slice of the
+// source rather than a copy of it: scanning a document produces one node per
+// token, and a copy each would be an allocation each. A caller that needs a
+// string converts one where it needs one — which for the analyzer is once, for
+// the whole source, with every node's text a slice of that.
 //
 // There are three concrete implementations:
 //   - [Leaf]: a terminal token (e.g. an identifier, keyword, or operator).
@@ -17,7 +20,7 @@ import (
 type Node interface {
 	Kind() Kind
 	Span() Span
-	Text() string
+	Text() []byte
 	aNode()
 }
 
@@ -25,6 +28,10 @@ type Node interface {
 // [Inner] node (always of [KindMarkup]) and carries the [Source] needed to
 // convert byte offsets to line/column positions.
 type RootNode struct {
+	// Src is the source the tree was parsed from. Every node's text is a slice
+	// of it, so a caller holding this can turn any span into text without
+	// going back to the node.
+	Src    []byte
 	Source Source
 	*Inner
 }
@@ -35,14 +42,14 @@ type RootNode struct {
 type Leaf struct {
 	kind    Kind
 	span    Span
-	literal string
+	literal []byte
 }
 
 var _ Node = (*Leaf)(nil)
 
 // NewLeaf creates a new terminal node with the given kind, span, and literal
 // text.
-func NewLeaf(kind Kind, span Span, literal string) *Leaf {
+func NewLeaf(kind Kind, span Span, literal []byte) *Leaf {
 	return &Leaf{
 		kind:    kind,
 		span:    span,
@@ -51,7 +58,7 @@ func NewLeaf(kind Kind, span Span, literal string) *Leaf {
 }
 func (v *Leaf) Kind() Kind   { return v.kind }
 func (v *Leaf) Span() Span   { return v.span }
-func (v *Leaf) Text() string { return v.literal }
+func (v *Leaf) Text() []byte { return v.literal }
 func (v *Leaf) aNode()       {}
 
 // Inner is a non-terminal node in the syntax tree, containing an ordered
@@ -91,12 +98,15 @@ func spanOf(children []Node) Span {
 }
 func (v *Inner) Kind() Kind { return v.kind }
 func (v *Inner) Span() Span { return v.span }
-func (v *Inner) Text() string {
-	var sb strings.Builder
+
+// Text returns the source the node covers, assembled from its children. Unlike
+// a [Leaf]'s, it is built on each call rather than being a slice of the source.
+func (v *Inner) Text() []byte {
+	var b []byte
 	for _, child := range v.children {
-		sb.WriteString(child.Text())
+		b = append(b, child.Text()...)
 	}
-	return sb.String()
+	return b
 }
 func (v *Inner) Children() []Node { return v.children }
 func (v *Inner) aNode()           {}
@@ -112,7 +122,7 @@ type Error struct {
 	span    Span
 	message string
 	hints   []string
-	literal string
+	literal []byte
 }
 
 var _ Node = (*Error)(nil)
@@ -120,7 +130,7 @@ var _ error = (*Error)(nil)
 
 // NewError creates a new error node with the given span, diagnostic message,
 // original literal text, and optional hints.
-func NewError(span Span, message string, literal string, hints ...string) *Error {
+func NewError(span Span, message string, literal []byte, hints ...string) *Error {
 	return &Error{
 		span:    span,
 		message: message,
@@ -131,7 +141,7 @@ func NewError(span Span, message string, literal string, hints ...string) *Error
 
 func (n *Error) Span() Span       { return n.span }
 func (n *Error) Kind() Kind       { return KindError }
-func (n *Error) Text() string     { return n.literal }
+func (n *Error) Text() []byte     { return n.literal }
 func (n *Error) Message() string  { return n.message }
 func (n *Error) Hint(hint string) { n.hints = append(n.hints, hint) }
 func (n *Error) Hints() []string  { return n.hints }

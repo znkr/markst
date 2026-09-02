@@ -162,7 +162,7 @@ func WithExports() Option {
 // instructions and surfaced by [eval.Eval] at run time. The returned module
 // is always non-nil.
 func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
-	a := &analyzer{source: n.Source}
+	a := &analyzer{source: n.Source, text: string(n.Src)}
 	bindings := make(map[name.Name]binding, len(builtin.Universe))
 	for name, val := range builtin.Universe {
 		bindings[name] = valueBinding{val: val}
@@ -229,9 +229,17 @@ func (a *analyzer) exportDict(top *scope, span syntax.Span) expr.Ref {
 
 type analyzer struct {
 	source syntax.Source
-	scope  *scope
-	b      *expr.Builder
-	mb     *expr.ModuleBuilder
+
+	// text is the source as a string, converted once. The syntax tree carries
+	// bytes — scanning allocates nothing for a token's text that way — and the
+	// analyzer is where strings start to matter: a name to intern, a literal to
+	// hold in a value. Every node's text is exactly the source it spans, so
+	// [analyzer.str] hands those out as slices of this one string rather than a
+	// copy per node.
+	text  string
+	scope *scope
+	b     *expr.Builder
+	mb    *expr.ModuleBuilder
 
 	// parseErrors accumulates every syntax error lowered via [emitSyntaxError].
 	parseErrors []*value.Error

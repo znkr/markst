@@ -131,12 +131,12 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	if err := s.err; err != nil {
 		s.err = nil
 		s.node = nil
-		return syntax.KindError, s.a.Error(span, err.message, string(text), err.hints...)
+		return syntax.KindError, s.a.Error(span, err.message, text, err.hints...)
 	} else if node := s.node; node != nil {
 		s.node = nil
 		return kind, node
 	} else {
-		return kind, s.a.Leaf(kind, span, string(text))
+		return kind, s.a.Leaf(kind, span, text)
 	}
 }
 
@@ -292,8 +292,8 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	if backticks == 2 {
 		span := s.spanFrom(start)
 		delims := s.a.Nodes(2)
-		delims[0] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.Start, End: span.Start + 1}, "`")
-		delims[1] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.End - 1, End: span.End}, "`")
+		delims[0] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.Start, End: span.Start + 1}, s.r.Between(int(span.Start), int(span.Start)+1))
+		delims[1] = s.a.Leaf(syntax.KindRawDelim, syntax.Span{Start: span.End - 1, End: span.End}, s.r.Between(int(span.End)-1, int(span.End)))
 		return syntax.KindRaw, s.a.Inner(syntax.KindRaw, delims)
 	}
 
@@ -302,7 +302,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	for found < backticks {
 		switch s.r.Next() {
 		case reader.EOF:
-			return syntax.KindError, s.a.Error(s.spanFrom(start), "unclosed raw text", string(s.r.From(start)))
+			return syntax.KindError, s.a.Error(s.spanFrom(start), "unclosed raw text", s.r.From(start))
 		case '`':
 			found++
 		default:
@@ -314,7 +314,7 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 	var nodes []syntax.Node
 	prevStart := start
 	push := func(kind syntax.Kind) {
-		nodes = append(nodes, s.a.Leaf(kind, s.spanFrom(prevStart), string(s.r.From(prevStart))))
+		nodes = append(nodes, s.a.Leaf(kind, s.spanFrom(prevStart), s.r.From(prevStart)))
 		prevStart = s.r.Offset()
 	}
 
@@ -745,15 +745,15 @@ func (s *Scanner) scanMath(start int, ch rune) syntax.Kind {
 // s.node) if the identifier is followed by one or more `.field` accesses.
 func (s *Scanner) scanMathIdentOrField(start int) syntax.Kind {
 	kind := syntax.KindMathIdent
-	var node syntax.Node = s.a.Leaf(kind, s.spanFrom(start), string(s.r.From(start)))
+	var node syntax.Node = s.a.Leaf(kind, s.spanFrom(start), s.r.From(start))
 	for {
 		identStart, ok := s.maybeDotIdent()
 		if !ok {
 			break
 		}
 		identEnd := s.r.Offset()
-		dot := s.a.Leaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, ".")
-		ident := s.a.Leaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, string(s.r.From(identStart)))
+		dot := s.a.Leaf(syntax.KindDot, syntax.Span{Start: uint32(identStart - 1), End: uint32(identStart)}, s.r.Between(identStart-1, identStart))
+		ident := s.a.Leaf(syntax.KindIdent, syntax.Span{Start: uint32(identStart), End: uint32(identEnd)}, s.r.Between(identStart, identEnd))
 		kind = syntax.KindFieldAccess
 		parts := s.a.Nodes(3)
 		parts[0], parts[1], parts[2] = node, dot, ident
@@ -808,9 +808,9 @@ func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
 		if s.r.Peek() == ':' && !s.r.ContinuesWith(":=") && !s.r.ContinuesWith("::=") {
 			text := s.r.From(start)
 			if !bytes.Equal(text, []byte("_")) {
-				return s.a.Leaf(syntax.KindIdent, s.spanFrom(start), string(text))
+				return s.a.Leaf(syntax.KindIdent, s.spanFrom(start), text)
 			}
-			return s.a.Error(s.spanFrom(start), "expected identifier, found underscore", string(text))
+			return s.a.Error(s.spanFrom(start), "expected identifier, found underscore", text)
 		}
 	}
 	s.r.Seek(cursor)
@@ -828,7 +828,7 @@ func (s *Scanner) MaybeMathSpreadArg(start int) syntax.Node {
 		// Don't infer a spread before trivia/end, a dot (`...` shorthand), or an
 		// argument terminator (spreads nothing).
 		if ch := s.r.Peek(); !s.spaceOrEnd() && ch != '.' && ch != ',' && ch != ';' && ch != ')' && ch != '$' {
-			return s.a.Leaf(syntax.KindDots, s.spanFrom(start), string(s.r.From(start)))
+			return s.a.Leaf(syntax.KindDots, s.spanFrom(start), s.r.From(start))
 		}
 	}
 	s.r.Seek(cursor)

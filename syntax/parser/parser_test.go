@@ -62,7 +62,7 @@ func TestTextRoundTripGolden(t *testing.T) {
 				t.Run(tc.Name, func(t *testing.T) {
 					node := parser.Parse([]byte(tc.Input))
 					got := node.Text()
-					if got != string(tc.Input) {
+					if string(got) != string(tc.Input) {
 						t.Errorf("Text() != Input:\n  input: %q\n  got:   %q", string(tc.Input), got)
 					}
 				})
@@ -94,7 +94,7 @@ func FuzzTextRoundTrip(f *testing.F) {
 			}
 		}()
 		node := parser.Parse([]byte(src))
-		got := node.Text()
+		got := string(node.Text())
 		if got != src {
 			t.Errorf("Text() != src:\n  src: %q\n  got: %q", src, got)
 		}

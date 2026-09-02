@@ -141,7 +141,7 @@ func (a *analyzer) lowerMathAttach(n syntax.Node) expr.Ref {
 				top = a.lowerMathOperand(ns)
 			}
 		case syntax.KindMathPrimes:
-			base = a.b.MathPrimes(op.Span(), base, primeCount(op.Text()))
+			base = a.b.MathPrimes(op.Span(), base, primeCount(a.str(op)))
 		default:
 			a.unexpected(op)
 		}
@@ -185,7 +185,7 @@ func (a *analyzer) lowerMathDelimited(n syntax.Node) expr.Ref {
 // lowerMathDelim lowers a delimiter token (MathText or MathShorthand) to a
 // MathText content value, mapping shorthand delimiters (`[|`, `|]`) to glyphs.
 func (a *analyzer) lowerMathDelim(n syntax.Node) expr.Ref {
-	return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(n.Text())})
+	return a.b.Const(n.Span(), &value.MathText{Text: mathShorthand(a.str(n))})
 }
 
 func (a *analyzer) lowerMathCall(n syntax.Node) expr.Ref {
@@ -223,7 +223,7 @@ func (a *analyzer) mathCalleeIsFunc(calleeNode syntax.Node) bool {
 	if calleeNode.Kind() != syntax.KindMathIdent {
 		return false
 	}
-	b, ok := a.lookupMath(name.Make(calleeNode.Text()))
+	b, ok := a.lookupMath(name.Make(a.str(calleeNode)))
 	if !ok {
 		return false
 	}
@@ -254,7 +254,7 @@ func (a *analyzer) mathCellWord(calleeNode syntax.Node) (string, bool) {
 	if calleeNode.Kind() != syntax.KindMathIdent {
 		return "", false
 	}
-	b, ok := a.lookupMath(name.Make(calleeNode.Text()))
+	b, ok := a.lookupMath(name.Make(a.str(calleeNode)))
 	if !ok {
 		return "", false
 	}
@@ -339,11 +339,11 @@ func (a *analyzer) lowerMathMethodCall(callNode, faNode, argsNode syntax.Node) e
 	method := name.Make(a.leaf(fieldNode, syntax.KindIdent))
 
 	targetRef := a.lowerExpr(targetNode)
-	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, targetNode.Text(), true)
+	calleeRef := a.b.MethodField(faNode.Span(), fieldNode.Span(), targetRef, method, a.str(targetNode), true)
 	callee := expr.Callee{Ref: calleeRef, Span: faNode.Span()}
 	args, fallback := a.lowerMathArgs(argsNode, faNode)
 
-	mut := &expr.MutCheck{RecvSpan: callNode.Span(), Math: true, MathCall: callNode.Text()}
+	mut := &expr.MutCheck{RecvSpan: callNode.Span(), Math: true, MathCall: a.str(callNode)}
 	return a.b.MathCall(callNode.Span(), callee, args, mut, fallback)
 }
 
@@ -397,7 +397,7 @@ func (a *analyzer) lowerMathArgs(n syntax.Node, calleeNode syntax.Node) ([]expr.
 				emitRow()
 				continue
 			case syntax.KindSpread:
-				fallback.BadArgs = append(fallback.BadArgs, badMathArg(child, calleeNode, "spread"))
+				fallback.BadArgs = append(fallback.BadArgs, a.badMathArg(child, calleeNode, "spread"))
 				ref := a.lowerSpread(child)
 				if twoD {
 					// A spread inside a row list contributes its elements to the
@@ -425,7 +425,7 @@ func (a *analyzer) lowerMathArgs(n syntax.Node, calleeNode syntax.Node) ([]expr.
 					}
 					continue
 				}
-				fallback.BadArgs = append(fallback.BadArgs, badMathArg(child, calleeNode, "named"))
+				fallback.BadArgs = append(fallback.BadArgs, a.badMathArg(child, calleeNode, "named"))
 				key := name.Make(a.leaf(keyNode, syntax.KindIdent))
 				if _, dup := seen[key.String()]; dup {
 					a.emitError(keyNode.Span(), "duplicate argument: "+key.String())
@@ -445,16 +445,16 @@ func (a *analyzer) lowerMathArgs(n syntax.Node, calleeNode syntax.Node) ([]expr.
 // "named" or "spread") of a math call whose callee is not a function. Such an
 // argument means nothing in the juxtaposition form the call falls back to, so
 // the hint says how to write it as plain text instead.
-func badMathArg(arg, calleeNode syntax.Node, kind string) expr.MathBadArg {
-	hint := "to render the dots as text, add a space: `" + strings.Replace(arg.Text(), "..", ".. ", 1) + "`"
+func (a *analyzer) badMathArg(arg, calleeNode syntax.Node, kind string) expr.MathBadArg {
+	hint := "to render the dots as text, add a space: `" + strings.Replace(a.str(arg), "..", ".. ", 1) + "`"
 	if kind == "named" {
-		hint = "to render the colon as text, escape it: `" + strings.Replace(arg.Text(), ":", `\:`, 1) + "`"
+		hint = "to render the colon as text, escape it: `" + strings.Replace(a.str(arg), ":", `\:`, 1) + "`"
 	}
 	return expr.MathBadArg{
 		Span: arg.Span(),
 		Msg:  kind + "-argument syntax can only be used with functions",
 		Hints: []value.Hint{
-			{Span: calleeNode.Span(), Msg: "`" + calleeNode.Text() + "` is not a function"},
+			{Span: calleeNode.Span(), Msg: "`" + a.str(calleeNode) + "` is not a function"},
 			{Span: syntax.NoSpan, Msg: hint},
 		},
 	}
