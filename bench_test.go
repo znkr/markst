@@ -9,8 +9,10 @@ import (
 	"znkr.io/markst/eval"
 	"znkr.io/markst/html"
 	"znkr.io/markst/name"
+	"znkr.io/markst/syntax"
 	"znkr.io/markst/syntax/analyzer"
 	"znkr.io/markst/syntax/parser"
+	"znkr.io/markst/syntax/scanner"
 	"znkr.io/markst/value"
 )
 
@@ -43,6 +45,25 @@ func benchIndex(b *testing.B) *value.Index {
 		b.Fatal(err)
 	}
 	return &idx
+}
+
+// BenchmarkScan is the tokenizer alone, over the same source [BenchmarkParse]
+// parses: what the parser spends before it builds a single node. The parser
+// drives the scanner's mode, so a markup-mode scan of the whole file is an
+// approximation — close enough to say what share of parsing is lexing.
+func BenchmarkScan(b *testing.B) {
+	src := benchSource(b)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		s := scanner.New(src)
+		for {
+			kind, _ := s.Next()
+			if kind == syntax.KindEnd {
+				break
+			}
+		}
+	}
 }
 
 func BenchmarkParse(b *testing.B) {
