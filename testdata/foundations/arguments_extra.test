@@ -1,0 +1,15 @@
+// Tests for arguments beyond the ported suite.
+
+--- arguments-method-called-without-a-receiver ---
+// `arguments.at` reached through the type is an ordinary function, and the
+// receiver is then an argument like any other. Passing only the key used to
+// leave `self` unfilled and hand the builtin a nil: a parameter no argument
+// matched is missing, not defaulted.
+// Error: 2-17 missing argument: self
+#arguments.at(0)
+│ #document[]
+
+--- arguments-method-called-with-a-wrong-receiver ---
+// Error: 15-16 expected arguments, found integer
+#arguments.at(0, 1)
+│ #document[]

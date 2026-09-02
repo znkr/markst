@@ -233,7 +233,13 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			if coerced, ok := callableAsFunction(preSink[slot].Type, arg); ok {
 				merged.Positional[i] = coerced
 				for j := lo; j < slot; j++ {
-					mapping[preSinkSlots[j]] = -1
+					// Only an optional parameter is filled from its default by
+					// being passed over. A required one that nothing matched
+					// stays -2, so Apply reports the missing argument instead
+					// of handing the builtin a nil.
+					if preSink[j].Default != nil {
+						mapping[preSinkSlots[j]] = -1
+					}
 				}
 				mapping[preSinkSlots[slot]] = i
 				if preSink[slot].Default == nil {
