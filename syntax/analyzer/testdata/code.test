@@ -640,15 +640,17 @@
 │ fn $top:
 │   b0:
 │     v0 = join_begin
+│     v1 = error_mark
 │     jump b1(v0)
-│   b1(v1):
-│     branch none, b2, b3
+│   b1(v2):
+│     branch none, b2, b3(v2)
 │   b2:
-│     v2 = join_add v1, none
-│     jump b1(v2)
-│   b3:
-│     v3 = join_result v1
-│     return v3
+│     v3 = join_add v2, none
+│     v4 = error_since v1
+│     branch v4, b3(v3), b1(v3) [backedge]
+│   b3(v5):
+│     v6 = join_result v5
+│     return v6
 
 --- for-loop ---
 #let items
@@ -657,17 +659,19 @@
 │   b0:
 │     v0 = iter_open none
 │     v1 = join_begin
+│     v2 = error_mark
 │     jump b1(v1)
-│   b1(v4):
-│     v2 = iter_has_next v0
-│     branch v2, b2, b3
+│   b1(v5):
+│     v3 = iter_has_next v0
+│     branch v3, b2, b3(v5)
 │   b2:
-│     v3 = iter_advance v0
-│     v5 = join_add v4, v3
-│     jump b1(v5)
-│   b3:
-│     v6 = join_result v4
-│     return v6
+│     v4 = iter_advance v0
+│     v6 = join_add v5, v4
+│     v7 = error_since v2
+│     branch v7, b3(v6), b1(v6) [backedge]
+│   b3(v8):
+│     v9 = join_result v8
+│     return v9
 
 --- for-loop-with-pattern ---
 #let dict
@@ -676,56 +680,63 @@
 │   b0:
 │     v0 = iter_open none
 │     v1 = join_begin
+│     v2 = error_mark
 │     jump b1(v1)
-│   b1(v7):
-│     v2 = iter_has_next v0
-│     branch v2, b2, b3
+│   b1(v8):
+│     v3 = iter_has_next v0
+│     branch v3, b2, b3(v8)
 │   b2:
-│     v3 = iter_advance v0
-│     v4 = destruct_array v3, before=2, after=0
-│     v5 = array_elem v4[0]
-│     v6 = array_elem v4[1]
-│     v8 = join_add v7, v5
-│     jump b1(v8)
-│   b3:
-│     v9 = join_result v7
-│     return v9
+│     v4 = iter_advance v0
+│     v5 = destruct_array v4, before=2, after=0
+│     v6 = array_elem v5[0]
+│     v7 = array_elem v5[1]
+│     v9 = join_add v8, v6
+│     v10 = error_since v2
+│     branch v10, b3(v9), b1(v9) [backedge]
+│   b3(v11):
+│     v12 = join_result v11
+│     return v12
 
 --- break ---
 #{ while true { break } }
 │ fn $top:
 │   b0:
 │     v0 = join_begin
+│     v1 = error_mark
 │     jump b1(v0)
-│   b1(v1):
-│     branch true, b2, b3(v1)
+│   b1(v2):
+│     branch true, b2, b3(v2)
 │   b2:
-│     v2 = join_add v1, none
-│     jump b3(v2)
-│   b3(v4):
-│     v5 = join_result v4
-│     return v5
+│     v3 = join_add v2, none
+│     jump b3(v3)
+│   b3(v6):
+│     v7 = join_result v6
+│     return v7
 │   b4:
-│     v3 = join_add <noref>, none
-│     jump b1(v3)
+│     v4 = join_add <noref>, none
+│     v5 = error_since v1
+│     branch v5, b3(v4), b1(v4) [backedge]
 
 --- continue ---
 #{ while true { continue } }
 │ fn $top:
 │   b0:
 │     v0 = join_begin
+│     v1 = error_mark
 │     jump b1(v0)
-│   b1(v1):
-│     branch true, b2, b3
+│   b1(v2):
+│     branch true, b2, b3(v2)
 │   b2:
-│     v2 = join_add v1, none
-│     jump b1(v2)
-│   b3:
-│     v4 = join_result v1
-│     return v4
+│     v3 = join_add v2, none
+│     v4 = error_since v1
+│     branch v4, b3(v3), b1(v3) [backedge]
+│   b3(v7):
+│     v8 = join_result v7
+│     return v8
 │   b4:
-│     v3 = join_add <noref>, none
-│     jump b1(v3)
+│     v5 = join_add <noref>, none
+│     v6 = error_since v1
+│     branch v6, b3(v5), b1(v5) [backedge]
 
 --- break-join-nested-block ---
 // Break inside a nested block flushes the loop body's items and the nested
@@ -736,21 +747,23 @@
 │     v0 = const text " "
 │     v1 = const text " "
 │     v2 = join_begin
+│     v3 = error_mark
 │     jump b1(v2)
-│   b1(v5):
-│     branch true, b2, b3(v5)
+│   b1(v6):
+│     branch true, b2, b3(v6)
 │   b2:
-│     v3 = code_join [2]
-│     v4 = code_join [1, v3]
-│     v6 = join_add v5, v4
-│     jump b3(v6)
-│   b3(v8):
-│     v9 = join_result v8
-│     v10 = content_result [v0, v1, v9]
-│     return v10
+│     v4 = code_join [2]
+│     v5 = code_join [1, v4]
+│     v7 = join_add v6, v5
+│     jump b3(v7)
+│   b3(v10):
+│     v11 = join_result v10
+│     v12 = content_result [v0, v1, v11]
+│     return v12
 │   b4:
-│     v7 = join_add <noref>, v4
-│     jump b1(v7)
+│     v8 = join_add <noref>, v5
+│     v9 = error_since v3
+│     branch v9, b3(v8), b1(v8) [backedge]
 
 --- break-join-content-block ---
 // Same fold in content mode: the markup item and the nested code block's value
@@ -763,24 +776,26 @@
 │     v2 = call <function range>(1)
 │     v3 = iter_open v2
 │     v4 = join_begin
+│     v5 = error_mark
 │     jump b1(v4)
-│   b1(v10):
-│     v5 = iter_has_next v3
-│     branch v5, b2, b3(v10)
+│   b1(v11):
+│     v6 = iter_has_next v3
+│     branch v6, b2, b3(v11)
 │   b2:
-│     v6 = iter_advance v3
-│     v7 = const text "a"
-│     v8 = code_join [1]
-│     v9 = content_result [v7, v8]
-│     v11 = join_add v10, v9
-│     jump b3(v11)
-│   b3(v13):
-│     v14 = join_result v13
-│     v15 = content_result [v0, v1, v14]
-│     return v15
+│     v7 = iter_advance v3
+│     v8 = const text "a"
+│     v9 = code_join [1]
+│     v10 = content_result [v8, v9]
+│     v12 = join_add v11, v10
+│     jump b3(v12)
+│   b3(v15):
+│     v16 = join_result v15
+│     v17 = content_result [v0, v1, v16]
+│     return v17
 │   b4:
-│     v12 = join_add <noref>, v9
-│     jump b1(v12)
+│     v13 = join_add <noref>, v10
+│     v14 = error_since v5
+│     branch v14, b3(v13), b1(v13) [backedge]
 
 --- return-with-value ---
 #{ let f() = { return 1 } }

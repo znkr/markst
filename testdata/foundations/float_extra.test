@@ -1,0 +1,11 @@
+--- float-trailing-dot-is-field-access ---
+// `123.E` is an integer followed by a field access, not a float. The upstream
+// case that pairs it with float literals the scanner rejects expects no
+// diagnostic for it, since a source with a syntax error is never evaluated.
+// What the field access does evaluate to is checked here instead.
+// Error: 2-7 type integer has no field `E`
+#123.E
+// Error: 2-5 type integer has no field `e`
+#0.e
+// Error: 2-5 type integer has no field `E`
+#1.E+020

@@ -46,7 +46,7 @@ const articleLib = `#let article(title: none, published: none, summary: none) = 
 // returning the library and any warnings.
 func compileLibrary(t *testing.T, name string, src string) (*markst.Library, []markst.Diagnostic) {
 	t.Helper()
-	lib, warns, err := markst.CompileLibrary(name, []byte(src))
+	lib, warns, err := markst.CompileLibrary(t.Context(), name, []byte(src))
 	if err != nil {
 		t.Fatalf("CompileLibrary(%q) = %v", name, err)
 	}
@@ -56,7 +56,7 @@ func compileLibrary(t *testing.T, name string, src string) (*markst.Library, []m
 // compile compiles src and fails the test if it did not compile.
 func compile(t *testing.T, src string, opts ...markst.Option) *value.Document {
 	t.Helper()
-	doc, warns, err := markst.Compile([]byte(src), opts...)
+	doc, warns, err := markst.Compile(t.Context(), []byte(src), opts...)
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -69,7 +69,7 @@ func compile(t *testing.T, src string, opts ...markst.Option) *value.Document {
 // diagnostics compiles src expecting failure and returns the error list.
 func diagnostics(t *testing.T, src string, opts ...markst.Option) markst.DiagnosticList {
 	t.Helper()
-	_, _, err := markst.Compile([]byte(src), opts...)
+	_, _, err := markst.Compile(t.Context(), []byte(src), opts...)
 	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
 		t.Fatalf("Compile() error is %T (%v), want markst.DiagnosticList", err, err)
@@ -138,7 +138,7 @@ func TestLibrarySetRuleAppliesToDocument(t *testing.T) {
 // and once from the document is a reuse the *document's* session must catch.
 func TestLibraryLabelsBelongToDocument(t *testing.T) {
 	lib, _ := compileLibrary(t, "lib.mst", articleLib)
-	_, warns, err := markst.Compile(
+	_, warns, err := markst.Compile(t.Context(),
 		[]byte(`#article(title: "Routing", published: "2024-07-06")
 
 #metadata("again") <doc-meta>
@@ -285,7 +285,7 @@ func TestLibraryPrecedence(t *testing.T) {
 // which is the same mechanism applied one level down.
 func TestLibraryComposition(t *testing.T) {
 	base, _ := compileLibrary(t, "base.mst", `#let greeting() = "hello"`)
-	derived, _, err := markst.CompileLibrary("derived.mst",
+	derived, _, err := markst.CompileLibrary(t.Context(), "derived.mst",
 		[]byte(`#let greet(who) = greeting() + ", " + who`),
 		markst.WithLibrary(base))
 	if err != nil {
@@ -352,7 +352,7 @@ This text has nowhere to go.
 // TestLibraryCompileError checks that a library that does not compile is not
 // handed back as if it had.
 func TestLibraryCompileError(t *testing.T) {
-	lib, _, err := markst.CompileLibrary("lib.mst", []byte("#let f() = nope\n#f()\n"))
+	lib, _, err := markst.CompileLibrary(t.Context(), "lib.mst", []byte("#let f() = nope\n#f()\n"))
 	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
 		t.Fatalf("CompileLibrary() error is %T (%v), want markst.DiagnosticList", err, err)

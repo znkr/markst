@@ -32,7 +32,7 @@ import (
 // compile compiles src, failing the test on any diagnostic.
 func compile(t *testing.T, src string, opts ...markst.Option) *value.Document {
 	t.Helper()
-	doc, diags, err := markst.Compile([]byte(src), append(opts, markst.WithName("test.mst"))...)
+	doc, diags, err := markst.Compile(t.Context(), []byte(src), append(opts, markst.WithName("test.mst"))...)
 	if err != nil {
 		t.Fatalf("compiling:\n%s", formatDiags(err.(markst.DiagnosticList)))
 	}
@@ -329,7 +329,7 @@ func TestWithFootnotesKeepsDocumentNumbers(t *testing.T) {
 // TestRenderWithIndex checks that handing the renderer an index changes what a
 // render costs and nothing else: the same HTML, footnotes included.
 func TestRenderWithIndex(t *testing.T) {
-	doc, _, err := markst.Compile([]byte("A note#footnote[first].\n\n= H\n\nAnother#footnote[second].\n"))
+	doc, _, err := markst.Compile(t.Context(), []byte("A note#footnote[first].\n\n= H\n\nAnother#footnote[second].\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}

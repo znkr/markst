@@ -33,7 +33,7 @@ var update = flag.Bool("update", false, "update golden files")
 // has to say about the source is a mistake in the test, not an expectation.
 func render(t *testing.T, src string, opts ...html.Option) string {
 	t.Helper()
-	doc, diags, err := markst.Compile([]byte(src), markst.WithName("test.mst"))
+	doc, diags, err := markst.Compile(t.Context(), []byte(src), markst.WithName("test.mst"))
 	if err != nil {
 		t.Fatalf("compiling:\n%s", formatDiags(err.(markst.DiagnosticList)))
 	}

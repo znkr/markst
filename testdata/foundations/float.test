@@ -141,11 +141,8 @@
 #123.456e+789
 #000.000E-000
 #.9e0
-// Error: 2-7 type integer has no field `E`
 #123.E // this is a field access, so is fine syntactically
-// Error: 2-5 type integer has no field `e`
 #0.e
-// Error: 2-5 type integer has no field `E`
 #1.E+020
 // Error: 2-10 invalid floating point number: 123.456e
 #123.456e

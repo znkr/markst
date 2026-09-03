@@ -55,7 +55,8 @@ func IsPure(instr Instruction) bool {
 		*ListItem, *EnumItem, *TermItem,
 		*Equation, *MathAttach, *MathFrac, *MathRoot, *MathPrimes, *MathDelimited,
 		*ContentResult, *CodeJoin,
-		*JoinBegin, *JoinResult:
+		*JoinBegin, *JoinResult,
+		*ErrorMark, *ErrorSince:
 		return true
 	}
 	return false
@@ -100,15 +101,26 @@ type Terminator interface {
 	// Span returns the source this terminator came from.
 	Span() syntax.Span
 
+	// Backedge reports whether this terminator closes a loop.
+	Backedge() bool
+
 	aTerminator()
 }
 
 type term struct {
-	span syntax.Span
+	span     syntax.Span
+	backedge bool
 }
 
 func (t *term) Span() syntax.Span { return t.span }
 func (t *term) aTerminator()      {}
+
+// Backedge reports whether this terminator closes a loop. A back edge is the
+// only place a function repeats work without bound, so it is where the
+// evaluator checks whether the run has been cancelled.
+func (t *term) Backedge() bool { return t.backedge }
+
+func (t *term) setBackedge() { t.backedge = true }
 
 // Jump passes control to Target, binding Args to Target's [BlockParam]s in
 // order. There is always exactly one arg per param.
@@ -776,6 +788,27 @@ func (r *Error) RemapOperands(f func(Ref) Ref) {
 		r.From = f(r.From)
 	}
 }
+
+// ErrorMark reads the counter the run bumps for every error it records, the
+// deduplicated ones included. A loop takes one before its header and compares
+// against it with [ErrorSince] on every back edge, which is how a loop whose
+// body fails stops instead of running to its ordinary end. The count is opaque:
+// nothing but [ErrorSince] interprets it.
+type ErrorMark struct {
+	instr
+}
+
+func (*ErrorMark) Operands(dst []Ref) []Ref      { return dst }
+func (*ErrorMark) RemapOperands(_ func(Ref) Ref) {}
+
+// ErrorSince reports whether any error has been recorded since Mark was taken.
+type ErrorSince struct {
+	instr
+	Mark Ref
+}
+
+func (e *ErrorSince) Operands(dst []Ref) []Ref      { return append(dst, e.Mark) }
+func (e *ErrorSince) RemapOperands(f func(Ref) Ref) { e.Mark = f(e.Mark) }
 
 // AttachLabel puts a label on the content Content produces, and records it in
 // the document's label set so a [RefMarkup] can resolve it. Labeling content

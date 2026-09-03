@@ -36,7 +36,7 @@ Body text with #metadata(42) <inline> in the middle of it.
 `
 
 func TestQuery(t *testing.T) {
-	doc, warnings, err := markst.Compile([]byte(frontMatter))
+	doc, warnings, err := markst.Compile(t.Context(), []byte(frontMatter))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestQuery(t *testing.T) {
 // TestQueryDocumentOrder pins the answer Query gives when a label is reused:
 // the first in document order, and a warning saying so.
 func TestQueryDocumentOrder(t *testing.T) {
-	doc, warnings, err := markst.Compile([]byte("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n"))
+	doc, warnings, err := markst.Compile(t.Context(), []byte("#metadata(1) <dup>\n#metadata(2) <dup>\n= Hello\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -103,7 +103,7 @@ func TestQueryDocumentOrder(t *testing.T) {
 // document that failed and one that merely has something to say: a warning
 // must not come back as err, or callers would reject documents that are fine.
 func TestCompileWarningIsNotFailure(t *testing.T) {
-	doc, warnings, err := markst.Compile([]byte("= Hello <a> <b>\n"))
+	doc, warnings, err := markst.Compile(t.Context(), []byte("= Hello <a> <b>\n"))
 	if err != nil {
 		t.Fatalf("Compile() = %v, want no error", err)
 	}
@@ -117,7 +117,7 @@ func TestCompileWarningIsNotFailure(t *testing.T) {
 
 // TestCompileError checks the other half of that split.
 func TestCompileError(t *testing.T) {
-	_, _, err := markst.Compile([]byte("#metadata()\n"))
+	_, _, err := markst.Compile(t.Context(), []byte("#metadata()\n"))
 	if err == nil {
 		t.Fatal("Compile() = nil, want an error for the missing argument")
 	}
@@ -131,7 +131,7 @@ func TestCompileError(t *testing.T) {
 func TestQueryFromIndex(t *testing.T) {
 	src := "#metadata(\"2024-02-29\") <published>\n\n= Title\n\n#metadata((tags: (\"go\",))) <front>\n"
 	var idx value.Index
-	doc, warns, err := markst.Compile([]byte(src), markst.WithIndex(&idx))
+	doc, warns, err := markst.Compile(t.Context(), []byte(src), markst.WithIndex(&idx))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}

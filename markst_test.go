@@ -106,12 +106,12 @@ func TestMarkst(t *testing.T) {
 
 					root := parser.Parse([]byte(tc.Input))
 					mod = analyzer.Analyze(root, analyzer.WithBindings(bindings))
-					contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
+					contents, diags, _ := eval.Eval(t.Context(), mod, eval.WithNow(testNow))
 
-					if diff := errcmp.Diff(root, evalErrors(warnings, errors)); diff != "" {
+					if diff := errcmp.Diff(root, evalErrors(diags)); diff != "" {
 						t.Errorf("error mismatch (-want +got):\n%s", diff)
 					}
-					if errors != nil {
+					if diags.Errors != nil {
 						return
 					}
 
@@ -173,12 +173,12 @@ func TestApproximationsPreserveOutput(t *testing.T) {
 	render := func(src string, opts ...analyzer.Option) string {
 		root := parser.Parse([]byte(src))
 		mod := analyzer.Analyze(root, append([]analyzer.Option{analyzer.WithBindings(bindings)}, opts...)...)
-		contents, warnings, errors := eval.Eval(mod, eval.WithNow(testNow))
+		contents, diags, _ := eval.Eval(t.Context(), mod, eval.WithNow(testNow))
 		var sb strings.Builder
 		if contents != nil {
 			sb.WriteString(value.FormatContent(contents))
 		}
-		for _, d := range evalErrors(warnings, errors) {
+		for _, d := range evalErrors(diags) {
 			fmt.Fprintf(&sb, "\n%v", d)
 		}
 		return sb.String()
@@ -241,9 +241,9 @@ func highlightSource(input string, span syntax.Span) string {
 	return b.String()
 }
 
-func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
+func evalErrors(d eval.Diagnostics) []errcmp.Error {
 	var ret []errcmp.Error
-	for _, w := range warnings {
+	for _, w := range d.Warnings {
 		ret = append(ret, errcmp.Error{
 			Span:    w.Span,
 			Type:    "Warning",
@@ -251,7 +251,7 @@ func evalErrors(warnings []eval.Error, errors []eval.Error) []errcmp.Error {
 			Hints:   errcmpHints(w.Hints),
 		})
 	}
-	for _, e := range errors {
+	for _, e := range d.Errors {
 		ret = append(ret, errcmp.Error{
 			Span:    e.Span,
 			Type:    "Error",

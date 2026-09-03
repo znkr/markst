@@ -21,6 +21,8 @@
 package markst
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -83,7 +85,7 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 // document again:
 //
 //	var idx value.Index
-//	doc, warns, err := markst.Compile(src, markst.WithIndex(&idx))
+//	doc, warns, err := markst.Compile(ctx, src, markst.WithIndex(&idx))
 //	toc := markst.Outline(&idx)
 //	err = html.Render(w, doc, html.WithIndex(&idx))
 //
@@ -157,7 +159,14 @@ func (c *config) evalOpts() []eval.Option {
 // bytes. This matters with [WithLibrary]: a failure inside a library function
 // is reported against the library's own text, together with the call site that
 // reached it. [FormatDiagnostics] renders them.
-func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) {
+//
+// Cancelling ctx stops the compile and returns an error wrapping the context's
+// cause rather than a [DiagnosticList], since a compile that did not finish has
+// no diagnostics to report on the document. The warnings recorded before it
+// stopped are still returned, and the document is nil. A document controls how
+// long its own evaluation runs — a loop can be written that never ends — so a
+// host compiling a source it did not write should pass a deadline.
+func Compile(ctx context.Context, src []byte, opts ...Option) (*value.Document, []Diagnostic, error) {
 	c := newConfig(opts)
 	root := parser.Parse(src)
 	mod := analyzer.Analyze(root, c.analyzerOpts()...)
@@ -167,10 +176,13 @@ func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) 
 		evalOpts = append(evalOpts, eval.WithIndex(c.index))
 	}
 
-	doc, warnings, errs := eval.Eval(mod, evalOpts...)
-	warns := diagnose(Warning, warnings)
-	if len(errs) > 0 {
-		return doc, warns, DiagnosticList(diagnose(Error, errs))
+	doc, diags, aborted := eval.Eval(ctx, mod, evalOpts...)
+	warns := diagnose(Warning, diags.Warnings)
+	if aborted != nil {
+		return nil, warns, fmt.Errorf("markst: compile canceled: %w", aborted)
+	}
+	if len(diags.Errors) > 0 {
+		return doc, warns, DiagnosticList(diagnose(Error, diags.Errors))
 	}
 	return doc, warns, nil
 }
@@ -207,17 +219,21 @@ func (l *Library) Lookup(n name.Name) (value.Value, bool) {
 //
 // A library's markup body is discarded, so a body that is not empty is reported
 // as a warning. Errors and warnings are returned on the same terms as
-// [Compile], and a library that failed to compile is not returned.
-func CompileLibrary(name string, src []byte, opts ...Option) (*Library, []Diagnostic, error) {
+// [Compile], cancellation included, and a library that failed to compile is not
+// returned.
+func CompileLibrary(ctx context.Context, name string, src []byte, opts ...Option) (*Library, []Diagnostic, error) {
 	c := newConfig(append(opts, WithName(name)))
 	root := parser.Parse(src)
 	mod := analyzer.Analyze(root, append(c.analyzerOpts(), analyzer.WithExports())...)
-	body, exports, warnings, errs := eval.EvalExports(mod, c.evalOpts()...)
-	warns := diagnose(Warning, warnings)
-	if len(errs) > 0 {
-		return nil, warns, DiagnosticList(diagnose(Error, errs))
+	exports, diags, aborted := eval.EvalExports(ctx, mod, c.evalOpts()...)
+	warns := diagnose(Warning, diags.Warnings)
+	if aborted != nil {
+		return nil, warns, fmt.Errorf("markst: compile canceled: %w", aborted)
 	}
-	if !isEmptyBody(body) {
+	if len(diags.Errors) > 0 {
+		return nil, warns, DiagnosticList(diagnose(Error, diags.Errors))
+	}
+	if !isEmptyBody(exports.Body) {
 		warns = append(warns, Diagnostic{
 			Severity: Warning,
 			Origin:   name,
@@ -226,7 +242,7 @@ func CompileLibrary(name string, src []byte, opts ...Option) (*Library, []Diagno
 		})
 	}
 
-	return newLibrary(name, exports), warns, nil
+	return newLibrary(name, exports.Bindings), warns, nil
 }
 
 // newLibrary interns the export dict's string keys back into name handles. It

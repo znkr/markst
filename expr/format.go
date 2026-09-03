@@ -26,7 +26,8 @@ import (
 // each function is labeled, each block is a `bN:` section — `bN(vX, vY):`
 // when it has params — and each instruction prints as `vN = opcode operands…`.
 // A terminator carries the args going to its successor's params, as in
-// `jump b1(v0)` or `branch v, b1(v2), b2(v3, v4)`.
+// `jump b1(v0)` or `branch v, b1(v2), b2(v3, v4)`, and a ` [backedge]` suffix
+// when it closes a loop.
 //
 // This is what the analyzer's golden tests compare against.
 func FormatModule(mod *Module) string {
@@ -324,6 +325,10 @@ func (f *formatter) formatInst(inst Instruction) {
 		fmt.Fprintf(sb, "join_add %s, %s", f.ref(i.Acc), f.ref(i.Item))
 	case *JoinResult:
 		fmt.Fprintf(sb, "join_result %s", f.ref(i.Acc))
+	case *ErrorMark:
+		sb.WriteString("error_mark")
+	case *ErrorSince:
+		fmt.Fprintf(sb, "error_since %s", f.ref(i.Mark))
 	case *Heading:
 		fmt.Fprintf(sb, "heading level=%d %s", i.Level, f.ref(i.Body))
 	case *Strong:
@@ -431,6 +436,9 @@ func (f *formatter) formatTerm(t Terminator) {
 		sb.WriteString("unreachable")
 	default:
 		fmt.Fprintf(sb, "%T", t)
+	}
+	if t.Backedge() {
+		sb.WriteString(" [backedge]")
 	}
 }
 

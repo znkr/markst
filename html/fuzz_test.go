@@ -80,7 +80,7 @@ func compileForFuzz(t *testing.T, src string) (doc *value.Document) {
 			t.Skipf("compiling panicked, which is not this package's bug: %v", r)
 		}
 	}()
-	doc, _, _ = markst.Compile([]byte(src))
+	doc, _, _ = markst.Compile(t.Context(), []byte(src))
 	return doc
 }
 

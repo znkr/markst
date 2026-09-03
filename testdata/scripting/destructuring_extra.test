@@ -14,3 +14,20 @@
 // Error: 6-12 cannot destructure a dictionary using a positional pattern
 // Hint: 6-12 use named fields like `(key: binding)`, or plain identifiers for shorthand
 #let (a, _) = (a: 1, b: 2)
+
+--- destructuring-let-duplicate-bindings ---
+// Typst reports these from the parser, markst from the analyzer. The upstream
+// case that covers them also holds patterns markst's parser rejects, which
+// suppress every analyzer diagnostic in that source, so they are checked here
+// on their own. See destructuring-let-array-with-unnamed-sink.
+// Error: 10-11 duplicate binding: a
+#let (a, a) = (1, 2)
+
+// Error: 12-15 only one destructuring sink is allowed
+#let (..a, ..a) = (1, 2)
+
+// Error: 12-13 duplicate binding: a
+#let (a, ..a) = (1, 2)
+
+// Error: 13-14 duplicate binding: a
+#let (a: a, a) = (a: 1, b: 2)

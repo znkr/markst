@@ -92,39 +92,32 @@
 #h(amount: 0.5)
 
 --- call-args-bad-colon ---
-// Error: 2-6 unknown variable: func
 // Error: 7-8 unexpected colon
 #func(:)
 
 --- call-args-bad-token ---
-// Error: 2-6 unknown variable: func
 // Error: 10-12 unexpected end of block comment
 // Hint: 10-12 consider escaping the `*` with a backslash or opening the block comment with `/*`
 #func(a:1*/)
 
 --- call-args-missing-comma ---
-// Error: 2-6 unknown variable: func
 // Error: 8 expected comma
 #func(1 2)
 
 --- call-args-bad-name-and-incomplete-pair ---
-// Error: 2-6 unknown variable: func
 // Error: 7-8 expected identifier, found integer
 // Error: 9 expected expression
 #func(1:)
 
 --- call-args-bad-name-int ---
-// Error: 2-6 unknown variable: func
 // Error: 7-8 expected identifier, found integer
 #func(1:2)
 
 --- call-args-bad-name-string ---
-// Error: 2-6 unknown variable: func
 // Error: 7-12 expected identifier, found string
 #func("abc": 2)
 
 --- call-args-bad-name-group ---
-// Error: 2-6 unknown variable: func
 // Error: 7-10 expected identifier, found group
 #func((x):1)
 
@@ -197,7 +190,6 @@
 #calc.min(.."nope")
 
 --- call-args-content-block-unclosed ---
-// Error: 2-6 unknown variable: func
 // Error: 6-7 unclosed delimiter
 #func[`a]`
 
@@ -229,12 +221,10 @@
 │ #document[]
 
 --- call-args-unclosed ---
-// Error: 3-7 unknown variable: func
 // Error: 7-8 unclosed delimiter
 #{func(}
 
 --- call-args-unclosed-string ---
-// Error: 2-6 unknown variable: func
 // Error: 6-7 unclosed delimiter
 // Error: 7-10 unclosed string
 #func("]

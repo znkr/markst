@@ -110,7 +110,7 @@
 #test(a, ())
 │ #document[]
 
---- destructuring-let-array-with-unnamed-sink ---
+--- destructuring-let-array-with-unnamed-sink (skip: Typst reports duplicate bindings and a repeated sink from the parser, markst from the analyzer, so the parse errors below suppress them; see destructuring_extra.test) ---
 // Destructuring with unnamed sink.
 #let (a, .., b) = (1, 2, 3, 4)
 #test(a, 1)

@@ -33,7 +33,7 @@ type headingLabel struct {
 // is that there is always something to link to.
 func headingLabels(t *testing.T, src string) []headingLabel {
 	t.Helper()
-	doc, warnings, err := markst.Compile([]byte(src))
+	doc, warnings, err := markst.Compile(t.Context(), []byte(src))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestAutoHeadingLabels(t *testing.T) {
 // and nothing else — a document that means to reference a section says so by
 // labeling it.
 func TestAutoHeadingLabelIsNotAReference(t *testing.T) {
-	_, _, err := markst.Compile([]byte("= Hello World\n\nSee @hello-world.\n"))
+	_, _, err := markst.Compile(t.Context(), []byte("= Hello World\n\nSee @hello-world.\n"))
 	if err == nil {
 		t.Fatalf("Compile() = nil error, want one about a missing label")
 	}

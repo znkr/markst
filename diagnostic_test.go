@@ -32,7 +32,7 @@ const threeErrors = "#foo\n\n#bar(1)\n\n#let x = baz\n"
 // caller holding only Compile's return values can say where each problem is,
 // without going back to the source bytes.
 func TestCompileDiagnosticsResolvePositions(t *testing.T) {
-	_, _, err := markst.Compile([]byte(threeErrors))
+	_, _, err := markst.Compile(t.Context(), []byte(threeErrors))
 	if err == nil {
 		t.Fatal("Compile() = nil error, want three errors")
 	}
@@ -79,7 +79,7 @@ func TestCompileDiagnosticsResolvePositions(t *testing.T) {
 // this: an Error method that returned only the first message, so the default
 // %v of a compile failure silently discarded the rest.
 func TestDiagnosticListReportsEveryDiagnostic(t *testing.T) {
-	_, _, err := markst.Compile([]byte(threeErrors))
+	_, _, err := markst.Compile(t.Context(), []byte(threeErrors))
 	if err == nil {
 		t.Fatal("Compile() = nil error, want three errors")
 	}
@@ -122,7 +122,7 @@ func TestDiagnosticAtEndOfInput(t *testing.T) {
 		{"multiline_no_trailing_newline", "a\n\n#let x =", 3, 11},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := markst.Compile([]byte(tt.src))
+			_, _, err := markst.Compile(t.Context(), []byte(tt.src))
 			var diags markst.DiagnosticList
 			if !errors.As(err, &diags) || len(diags) == 0 {
 				t.Fatalf("Compile(%q) = %v, want at least one error", tt.src, err)
@@ -148,7 +148,7 @@ func TestDiagnosticAtEndOfInput(t *testing.T) {
 // realization, which works on content that has lost every link back to the
 // syntax it came from and so has nothing to point at.
 func TestDiagnosticWithoutLocation(t *testing.T) {
-	_, _, err := markst.Compile([]byte("#show heading: (a, b) => a\n= T\n"))
+	_, _, err := markst.Compile(t.Context(), []byte("#show heading: (a, b) => a\n= T\n"))
 	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) || len(diags) != 1 {
 		t.Fatalf("Compile() = %v, want one error", err)
@@ -165,7 +165,7 @@ func TestDiagnosticWithoutLocation(t *testing.T) {
 // TestCompileWarningsCarryPositionsAndHints checks that warnings get the same
 // treatment as errors, hints included.
 func TestCompileWarningsCarryPositionsAndHints(t *testing.T) {
-	_, warnings, err := markst.Compile([]byte("a\n#metadata(1) <l>\n#metadata(2) <l>"))
+	_, warnings, err := markst.Compile(t.Context(), []byte("a\n#metadata(1) <l>\n#metadata(2) <l>"))
 	if err != nil {
 		t.Fatalf("Compile() = %v, want no error", err)
 	}
@@ -310,7 +310,7 @@ func TestFormatDiagnosticsTrace(t *testing.T) {
 // compile a document, hold only Compile's return values, and render them.
 // Nothing here touches the source bytes.
 func TestFormatDiagnosticsEndToEnd(t *testing.T) {
-	_, _, err := markst.Compile([]byte(threeErrors), markst.WithName("doc.wr"))
+	_, _, err := markst.Compile(t.Context(), []byte(threeErrors), markst.WithName("doc.wr"))
 	var diags markst.DiagnosticList
 	if !errors.As(err, &diags) {
 		t.Fatalf("Compile() error is %T, want markst.DiagnosticList", err)

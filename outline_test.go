@@ -72,7 +72,7 @@ func TestOutline(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, _, err := markst.Compile([]byte(tc.src))
+			doc, _, err := markst.Compile(t.Context(), []byte(tc.src))
 			if err != nil {
 				t.Fatalf("compiling: %v", err)
 			}
@@ -119,7 +119,7 @@ func TestOutlineNilDocument(t *testing.T) {
 // walks the document it was compiled from.
 func TestCompileWithIndex(t *testing.T) {
 	var idx value.Index
-	doc, _, err := markst.Compile([]byte("= One\n\nSome text.\n\n== Two\n"), markst.WithIndex(&idx))
+	doc, _, err := markst.Compile(t.Context(), []byte("= One\n\nSome text.\n\n== Two\n"), markst.WithIndex(&idx))
 	if err != nil {
 		t.Fatalf("Compile() = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestCompileWithIndex(t *testing.T) {
 // returned, which after a failure is the document it got to rather than none.
 func TestCompileWithIndexOnFailure(t *testing.T) {
 	var idx value.Index
-	doc, _, err := markst.Compile([]byte("#let x = "), markst.WithIndex(&idx))
+	doc, _, err := markst.Compile(t.Context(), []byte("#let x = "), markst.WithIndex(&idx))
 	if err == nil {
 		t.Fatal("Compile() of a broken document succeeded")
 	}

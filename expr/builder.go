@@ -15,6 +15,7 @@
 package expr
 
 import (
+	"fmt"
 	"math"
 	"slices"
 
@@ -323,6 +324,24 @@ func (b *Builder) Branch(span syntax.Span, cond Ref, thenBlk, elseBlk BlockID) {
 	}
 	for i, a := range elseArgs {
 		b.recordParamUser(a, b.fn.Blocks[elseBlk].Params[i])
+	}
+}
+
+// MarkBackedge marks the current block's terminator as closing a loop, so the
+// evaluator checks for cancellation there. It panics if the block has no
+// terminator yet.
+func (b *Builder) MarkBackedge() {
+	t := b.fn.Blocks[b.cur].Term
+	if t == nil {
+		panic("MarkBackedge: block is not terminated")
+	}
+	switch t := t.(type) {
+	case *Jump:
+		t.setBackedge()
+	case *Branch:
+		t.setBackedge()
+	default:
+		panic(fmt.Sprintf("MarkBackedge: %T cannot be a back edge", t))
 	}
 }
 
@@ -725,6 +744,21 @@ func (b *Builder) Error(span syntax.Span, msg string, from Ref, hints ...string)
 func (b *Builder) SyntaxError(span syntax.Span, msg string, hints ...string) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &Error{instr: instr{result: ref}, Msg: msg, Hints: hints, From: NoRef, Reported: true}
+	})
+}
+
+// ErrorMark emits an instruction reading the run's current error count.
+func (b *Builder) ErrorMark(span syntax.Span) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &ErrorMark{instr: instr{result: ref}}
+	})
+}
+
+// ErrorSince emits an instruction reporting whether any error has been
+// recorded since mark was taken.
+func (b *Builder) ErrorSince(span syntax.Span, mark Ref) Ref {
+	return b.emit(span, func(ref Ref) Instruction {
+		return &ErrorSince{instr: instr{result: ref}, Mark: mark}
 	})
 }
 

@@ -383,20 +383,22 @@ v in iter {}
 │     v1 = make_array [1, 2, 3]
 │     v2 = iter_open v1
 │     v3 = join_begin
+│     v4 = error_mark
 │     jump b1(v3)
-│   b1(v8):
-│     v4 = iter_has_next v2
-│     branch v4, b2, b3
+│   b1(v9):
+│     v5 = iter_has_next v2
+│     branch v5, b2, b3(v9)
 │   b2:
-│     v5 = iter_advance v2
-│     v6 = make_closure $fn_0
-│     v7 = call v6()
-│     v9 = join_add v8, v7
-│     jump b1(v9)
-│   b3:
-│     v10 = join_result v8
-│     v11 = content_result [v0, v10]
-│     return v11
+│     v6 = iter_advance v2
+│     v7 = make_closure $fn_0
+│     v8 = call v7()
+│     v10 = join_add v9, v8
+│     v11 = error_since v4
+│     branch v11, b3(v10), b1(v10) [backedge]
+│   b3(v12):
+│     v13 = join_result v12
+│     v14 = content_result [v0, v13]
+│     return v14
 │ 
 │ fn $fn_0:
 │   b0:
@@ -416,19 +418,21 @@ v in iter {}
 │     v0 = make_array [1, 2, 3]
 │     v1 = iter_open v0
 │     v2 = join_begin
+│     v3 = error_mark
 │     jump b1(v2)
-│   b1(v7):
-│     v3 = iter_has_next v1
-│     branch v3, b2, b3
+│   b1(v8):
+│     v4 = iter_has_next v1
+│     branch v4, b2, b3(v8)
 │   b2:
-│     v4 = iter_advance v1
-│     v5 = make_closure $fn_0
-│     v6 = call v5()
-│     v8 = join_add v7, v6
-│     jump b1(v8)
-│   b3:
-│     v9 = join_result v7
-│     return v9
+│     v5 = iter_advance v1
+│     v6 = make_closure $fn_0
+│     v7 = call v6()
+│     v9 = join_add v8, v7
+│     v10 = error_since v3
+│     branch v10, b3(v9), b1(v9) [backedge]
+│   b3(v11):
+│     v12 = join_result v11
+│     return v12
 │ 
 │ fn $fn_0:
 │   b0:

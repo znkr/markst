@@ -81,24 +81,26 @@ func (a *analyzer) addJoinItem(ref expr.Ref, span syntax.Span) {
 
 // loopInfo describes one enclosing loop of the current frame: the
 // break/continue jump targets, the accumulator its iteration values flush
-// into, and bodyScope — the index of the first join scope inside the loop,
-// one past the loop's own accumulator entry on [frame.joinScopes].
+// into, the error mark its back edges compare against, and bodyScope — the
+// index of the first join scope inside the loop, one past the loop's own
+// accumulator entry on [frame.joinScopes].
 type loopInfo struct {
 	header, exit expr.BlockID
 	accVar       expr.Var
+	errMark      expr.Ref
 	bodyScope    int
 }
 
-// pushLoop records header/exit targets and the accumulator for a loop on the
-// current frame, and opens the loop's accumulator entry on the join stack.
-// break/continue inside the body resolve to the innermost entry. The matching
-// [analyzer.popLoop] must run once the body is lowered (and any escape from
-// it is fired — the accumulator entry must still be on the stack so a return
-// crossing the loop recovers the completed iterations).
-func (a *analyzer) pushLoop(header, exit expr.BlockID, accVar expr.Var) {
+// pushLoop records header/exit targets, the accumulator and the error mark for
+// a loop on the current frame, and opens the loop's accumulator entry on the
+// join stack. break/continue inside the body resolve to the innermost entry.
+// The matching [analyzer.popLoop] must run once the body is lowered (and any
+// escape from it is fired — the accumulator entry must still be on the stack so
+// a return crossing the loop recovers the completed iterations).
+func (a *analyzer) pushLoop(header, exit expr.BlockID, accVar expr.Var, errMark expr.Ref) {
 	f := a.frame()
 	f.joinScopes = append(f.joinScopes, joinScope{acc: true, accVar: accVar})
-	f.loops = append(f.loops, loopInfo{header: header, exit: exit, accVar: accVar, bodyScope: len(f.joinScopes)})
+	f.loops = append(f.loops, loopInfo{header: header, exit: exit, accVar: accVar, errMark: errMark, bodyScope: len(f.joinScopes)})
 }
 
 // popLoop drops the innermost loop and its accumulator entry from the current
@@ -107,6 +109,16 @@ func (a *analyzer) popLoop() {
 	f := a.frame()
 	f.joinScopes = f.joinScopes[:len(f.joinScopes)-1]
 	f.loops = f.loops[:len(f.loops)-1]
+}
+
+// loopBackedge ends the current block with a loop back edge: control returns to
+// header unless an error has been recorded since errMark was taken, in which
+// case it leaves through exit. See [analyzer.lowerLoop] for why the check is
+// here.
+func (a *analyzer) loopBackedge(span syntax.Span, header, exit expr.BlockID, errMark expr.Ref) {
+	failed := a.b.ErrorSince(span, errMark)
+	a.b.Branch(span, failed, exit, header)
+	a.b.MarkBackedge()
 }
 
 // joinItems combines items into a single value. As content it is always a
@@ -277,7 +289,9 @@ func (a *analyzer) firePending(body expr.Ref, warnDiscard bool) {
 		if p.kind == escapeBreak {
 			a.b.Jump(p.span, l.exit)
 		} else {
-			a.b.Jump(p.span, l.header)
+			// A continue reaches the header without passing the ordinary back
+			// edge, so it carries the same check.
+			a.loopBackedge(p.span, l.header, l.exit, l.errMark)
 		}
 	case escapeReturn:
 		val := p.val

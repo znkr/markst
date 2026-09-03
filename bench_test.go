@@ -45,7 +45,7 @@ func benchSource(b *testing.B) []byte {
 
 func benchDocument(b *testing.B) *value.Document {
 	b.Helper()
-	doc, _, err := markst.Compile(benchSource(b))
+	doc, _, err := markst.Compile(b.Context(), benchSource(b))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func benchDocument(b *testing.B) *value.Document {
 func benchIndex(b *testing.B) *value.Index {
 	b.Helper()
 	var idx value.Index
-	if _, _, err := markst.Compile(benchSource(b), markst.WithIndex(&idx)); err != nil {
+	if _, _, err := markst.Compile(b.Context(), benchSource(b), markst.WithIndex(&idx)); err != nil {
 		b.Fatal(err)
 	}
 	return &idx
@@ -97,13 +97,32 @@ func BenchmarkAnalyze(b *testing.B) {
 	}
 }
 
+// The context is cancellable, as a host's would be, so the number includes the
+// one cancellation registration each run makes. Evaluation itself checks the
+// resulting flag only at loop back edges and function entry.
 func BenchmarkEval(b *testing.B) {
 	mod := analyzer.Analyze(parser.Parse(benchSource(b)))
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _, errs := eval.Eval(mod)
-		if len(errs) > 0 {
-			b.Fatalf("Eval() = %v", errs)
+		_, diags, _ := eval.Eval(b.Context(), mod)
+		if len(diags.Errors) > 0 {
+			b.Fatalf("Eval() = %v", diags.Errors)
+		}
+	}
+}
+
+// BenchmarkLoop is a hot loop and nothing else: 200k iterations over an integer
+// add, where per-iteration overhead is the whole number. Every loop carries a
+// check that leaves it when its body records an error, and this is what says
+// what that check costs.
+func BenchmarkLoop(b *testing.B) {
+	src := "#{\n  let i = 0\n  let s = 0\n  while i < 200000 {\n    s += i\n    i += 1\n  }\n  s\n}\n"
+	mod := analyzer.Analyze(parser.Parse([]byte(src)))
+	b.ReportAllocs()
+	for b.Loop() {
+		_, diags, _ := eval.Eval(b.Context(), mod)
+		if len(diags.Errors) > 0 {
+			b.Fatalf("Eval() = %v", diags.Errors)
 		}
 	}
 }
@@ -115,7 +134,7 @@ func BenchmarkCompile(b *testing.B) {
 	b.SetBytes(int64(len(src)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, _, err := markst.Compile(src); err != nil {
+		if _, _, err := markst.Compile(b.Context(), src); err != nil {
 			b.Fatalf("Compile() = %v", err)
 		}
 	}
@@ -173,7 +192,7 @@ func BenchmarkCompileWithIndex(b *testing.B) {
 	b.SetBytes(int64(len(src)))
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, _, err := markst.Compile(src, markst.WithIndex(&idx)); err != nil {
+		if _, _, err := markst.Compile(b.Context(), src, markst.WithIndex(&idx)); err != nil {
 			b.Fatalf("Compile() = %v", err)
 		}
 	}

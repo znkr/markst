@@ -16,9 +16,11 @@ package eval
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"znkr.io/markst/builtin"
@@ -49,13 +51,39 @@ func WithIndex(x *value.Index) Option {
 	return func(s *session) { s.index = x }
 }
 
-// Eval runs a module and returns the document it builds, with warnings and
-// errors reported separately.
+// Diagnostics is what a run reported. Warnings describe a document that
+// compiled, such as a label used twice or content discarded where it can have
+// no effect; errors describe one that did not.
+type Diagnostics struct {
+	Warnings []Error
+	Errors   []Error
+}
+
+// Exports is what a module analyzed with [analyzer.WithExports] produced: the
+// bindings other files are compiled against, and the body the file would have
+// produced as a document. Bindings is non-nil for a run that finished, empty
+// when the file bound nothing.
+type Exports struct {
+	Bindings *value.Dict
+	Body     value.Value
+}
+
+// Eval runs a module and returns the document it builds together with the
+// diagnostics the run reported.
 //
 // The document is realized: paragraphs formed, style rules applied, and every
 // heading labeled.
-func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, err []Error) {
-	s, v := runTop(mod, opts)
+//
+// The error is non-nil only when ctx was cancelled before the module finished.
+// It is then the context's cause, the document is nil, and the diagnostics hold
+// what had been recorded when evaluation stopped. Evaluation is the one stage
+// whose running time the source controls — a loop can be written that never
+// ends — so a host running a source it did not write should pass a deadline.
+func Eval(ctx context.Context, mod *expr.Module, opts ...Option) (*value.Document, Diagnostics, error) {
+	s, v, aborted := runTop(ctx, mod, opts)
+	if aborted != nil {
+		return nil, s.diagnostics(), aborted
+	}
 	// A top-level Error value has already been recorded on the session, so
 	// drop it and produce empty content.
 	if _, ok := value.IsError(v); ok {
@@ -72,11 +100,9 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	// Turn the recorded content tree into a realized document: paragraphs
 	// formed, list/enum/term items grouped, styles resolved, wrapped in a
 	// Document root.
-	doc = s.realizeDocument(cc)
+	doc := s.realizeDocument(cc)
 	s.checkRefs()
-	warn = s.warnings
-	err = s.errors
-	return
+	return doc, s.diagnostics(), nil
 }
 
 // EvalExports runs a module analyzed with [analyzer.WithExports] and returns
@@ -89,8 +115,14 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 // for its constants and its source positions, but runs under whichever
 // evaluation calls it, so its diagnostics land on the document being compiled
 // at the time.
-func EvalExports(mod *expr.Module, opts ...Option) (body value.Value, exports *value.Dict, warn []Error, err []Error) {
-	s, v := runTop(mod, opts)
+//
+// The error reports a cancelled run on the same terms as [Eval].
+func EvalExports(ctx context.Context, mod *expr.Module, opts ...Option) (Exports, Diagnostics, error) {
+	s, v, aborted := runTop(ctx, mod, opts)
+	if aborted != nil {
+		return Exports{}, s.diagnostics(), aborted
+	}
+	var ex Exports
 	// The pair analyzer.WithExports emits. Anything else means the module was
 	// analyzed without that option, which is a mistake in the host rather
 	// than something a document can cause. The exception is a top-level error
@@ -101,20 +133,26 @@ func EvalExports(mod *expr.Module, opts ...Option) (body value.Value, exports *v
 		if !ok || len(pair.Elems) != 2 {
 			panic(fmt.Sprintf("eval: EvalExports on a module analyzed without WithExports (top-level value is %T)", v))
 		}
-		body = foldStyles(pair.Elems[0])
-		exports, _ = pair.Elems[1].(*value.Dict)
+		ex.Body = foldStyles(pair.Elems[0])
+		ex.Bindings, _ = pair.Elems[1].(*value.Dict)
 	}
-	if exports == nil {
-		exports = &value.Dict{}
+	if ex.Bindings == nil {
+		ex.Bindings = &value.Dict{}
 	}
 	s.checkRefs()
-	return body, exports, s.warnings, s.errors
+	return ex, s.diagnostics(), nil
 }
 
 // runTop applies opts, reports the module's parse errors, and runs its
-// top-level function. Shared by [Eval] and [EvalExports], which differ only in
-// what they make of the value that comes back.
-func runTop(mod *expr.Module, opts []Option) (*session, value.Value) {
+// top-level function. It returns the session, the top-level value, and the
+// context's cause when ctx cancelled the run. Shared by [Eval] and
+// [EvalExports], which differ only in what they make of the value that comes
+// back.
+//
+// A module with parse errors is not run at all: a source that does not parse
+// has no meaning to evaluate, and running it anyway reports failures of code
+// the author never wrote.
+func runTop(ctx context.Context, mod *expr.Module, opts []Option) (*session, value.Value, error) {
 	s := &session{}
 	for _, opt := range opts {
 		opt(s)
@@ -128,8 +166,31 @@ func runTop(mod *expr.Module, opts []Option) (*session, value.Value) {
 		e.Origin = mod.Origin
 		s.recordError(e)
 	}
+	if len(mod.ParseErrors) > 0 {
+		return s, value.None{}, nil
+	}
 
-	return s, runFunction(s, functionCall{mod: mod, fn: mod.Top})
+	// Cancellation flips a flag the evaluator reads at loop back edges. Polling
+	// the context there instead would cost far more per iteration than an
+	// atomic load, and [context.AfterFunc] runs no goroutine unless the
+	// cancellation actually happens. A context that cannot be cancelled skips
+	// the registration altogether.
+	//
+	// AfterFunc on an already-cancelled context sets the flag in a goroutine of
+	// its own, which a short module can outrun, so that case is answered here
+	// instead.
+	if ctx.Done() != nil {
+		if ctx.Err() != nil {
+			return s, nil, context.Cause(ctx)
+		}
+		defer context.AfterFunc(ctx, func() { s.stopped.Store(true) })()
+	}
+
+	v := runFunction(s, functionCall{mod: mod, fn: mod.Top})
+	if s.halted {
+		return s, nil, context.Cause(ctx)
+	}
+	return s, v, nil
 }
 
 // maxCallDepth bounds the number of nested user-closure calls before
@@ -207,6 +268,22 @@ type session struct {
 	// binary search.
 	errors []Error
 
+	// errorSeq counts calls to [session.recordError], the suppressed ones
+	// included. A loop takes it before its header and compares at every back
+	// edge (see [expr.ErrorMark]), so it has to move even when an error is
+	// dropped as a duplicate of one recorded before the loop.
+	errorSeq int
+
+	// stopped is set from the callback [runTop] registers on the caller's
+	// context. Loop back edges and function entry read it, and evaluation
+	// unwinds as soon as they see it.
+	stopped atomic.Bool
+
+	// halted records that a frame did observe stopped and unwound, which is
+	// what separates an aborted run from one that finished just as the context
+	// was cancelled. Only the evaluating goroutine touches it.
+	halted bool
+
 	// footnotes maps each footnote realization encountered to its realized
 	// form. A footnote bound to a name and used twice is one footnote: it has
 	// one number and is printed once. Identity is what establishes that, so
@@ -266,6 +343,7 @@ func (s *session) trace(mod *expr.Module) []syntax.Frame {
 // scan only needs to walk that prefix. In practice it terminates within a
 // handful of steps — at most the source nesting depth.
 func (s *session) recordError(e Error) {
+	s.errorSeq++
 	if len(s.errors) == 0 {
 		s.errors = append(s.errors, e)
 		return
@@ -286,6 +364,11 @@ func (s *session) recordError(e Error) {
 		}
 	}
 	s.errors = slices.Insert(s.errors, idx, e)
+}
+
+// diagnostics returns what the run has reported so far.
+func (s *session) diagnostics() Diagnostics {
+	return Diagnostics{Warnings: s.warnings, Errors: s.errors}
 }
 
 // recordWarning appends w to the session's warning list, deduplicating
@@ -320,7 +403,8 @@ func errCmp(a, b Error) int {
 func propagatesFromOperands(inst expr.Instruction) bool {
 	switch inst.(type) {
 	case *expr.ContentResult, *expr.CodeJoin, *expr.JoinAdd,
-		*expr.MakeArray, *expr.MakeDict:
+		*expr.MakeArray, *expr.MakeDict,
+		*expr.ErrorSince:
 		return false
 	}
 	return true
@@ -518,7 +602,16 @@ type functionCall struct {
 }
 
 // runFunction drives the block dispatch loop for one [Function] invocation.
+//
+// It returns early, with none, once [session.stopped] is set. The flag is read
+// at function entry and at loop back edges, the only two places a run repeats
+// work without bound; straight-line blocks are not checked, so an evaluation
+// that is never cancelled pays one atomic load per call and per iteration.
 func runFunction(s *session, call functionCall) value.Value {
+	if s.stopped.Load() {
+		s.halted = true
+		return value.None{}
+	}
 	fn := call.fn
 	args, captures, self := call.args, call.captures, call.self
 	fr := &frame{s: s, mod: call.mod, fn: fn, vals: make([]value.Value, fn.NumRefs())}
@@ -547,9 +640,17 @@ func runFunction(s *session, call functionCall) value.Value {
 		// jump completes, so there is no parallel-copy hazard.
 		switch t := block.Term.(type) {
 		case *expr.Jump:
+			if t.Backedge() && s.stopped.Load() {
+				s.halted = true
+				return value.None{}
+			}
 			bindArgs(fr, fn.Blocks[t.Target].Params, t.Args)
 			bb = t.Target
 		case *expr.Branch:
+			if t.Backedge() && s.stopped.Load() {
+				s.halted = true
+				return value.None{}
+			}
 			cond := fr.get(t.Cond)
 			// If the condition is itself an error value, the upstream
 			// computation already recorded it. Pick the Else arm so
@@ -842,6 +943,14 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			panic("join_result: accumulator is not an array")
 		}
 		fr.vals[r] = fr.joinValues(arr.Elems, fr.span(r))
+	case *expr.ErrorMark:
+		fr.vals[r] = value.Int(fr.s.errorSeq)
+	case *expr.ErrorSince:
+		mark, ok := fr.get(i.Mark).(value.Int)
+		if !ok {
+			panic("error_since: mark is not an int")
+		}
+		fr.vals[r] = value.Bool(fr.s.errorSeq != int(mark))
 	case *expr.Heading:
 		fr.vals[r] = &value.Heading{Depth: i.Level, Body: contentOf(fr.get(i.Body))}
 	case *expr.Strong:

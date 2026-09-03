@@ -42,7 +42,7 @@ func BenchmarkEvaluate(b *testing.B) {
 	mod := benchModule(b)
 	b.ReportAllocs()
 	for b.Loop() {
-		s, v := runTop(mod, nil)
+		s, v, _ := runTop(b.Context(), mod, nil)
 		if len(s.errors) > 0 {
 			b.Fatalf("evaluating: %v", s.errors)
 		}
@@ -56,7 +56,7 @@ func BenchmarkEvaluate(b *testing.B) {
 // rules applied, headings labeled.
 func BenchmarkRealize(b *testing.B) {
 	mod := benchModule(b)
-	s, v := runTop(mod, nil)
+	s, v, _ := runTop(b.Context(), mod, nil)
 	if len(s.errors) > 0 {
 		b.Fatalf("evaluating: %v", s.errors)
 	}
@@ -76,7 +76,7 @@ func BenchmarkRealize(b *testing.B) {
 // the walk that labels headings builds one on the way through.
 func BenchmarkRealizeWithIndex(b *testing.B) {
 	mod := benchModule(b)
-	s, v := runTop(mod, nil)
+	s, v, _ := runTop(b.Context(), mod, nil)
 	if len(s.errors) > 0 {
 		b.Fatalf("evaluating: %v", s.errors)
 	}

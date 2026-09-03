@@ -1392,10 +1392,18 @@ func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 // The catch fires escapes that arose in the body: a break or continue targeting
 // this loop, or a return passing through it. The ordinary back-edge then lands
 // in dead code.
+//
+// The back edge is a branch, not a jump: an error recorded anywhere in the body
+// leaves the loop through the exit block. Without it a loop whose condition
+// does not depend on the failing value runs to its ordinary end, which for
+// `while` can be never. The body's value cannot serve as the signal, because
+// the joins it passes through drop error items rather than propagate them, so
+// the check is against the run's error count taken before the header.
 func (a *analyzer) lowerLoop(n syntax.Node, cond func() (expr.Ref, syntax.Span), body func() expr.Ref) expr.Ref {
 	accName := a.b.NewVar(name.Make("$acc"))
 	accInit := a.b.JoinBegin(n.Span())
 	a.b.WriteVar(accName, a.b.CurrentBlock(), accInit)
+	errMark := a.b.ErrorMark(n.Span())
 
 	header := a.b.NewBlock()
 	bodyBlk := a.b.NewBlock()
@@ -1408,7 +1416,7 @@ func (a *analyzer) lowerLoop(n syntax.Node, cond func() (expr.Ref, syntax.Span),
 
 	a.b.SetBlock(bodyBlk)
 	a.b.SealBlock(bodyBlk)
-	a.pushLoop(header, exit, accName)
+	a.pushLoop(header, exit, accName, errMark)
 	bodyRef := a.catchEscapes(false, func() expr.Ref {
 		ref := body()
 		if ref == expr.NoRef {
@@ -1418,7 +1426,7 @@ func (a *analyzer) lowerLoop(n syntax.Node, cond func() (expr.Ref, syntax.Span),
 	})
 	a.popLoop()
 	a.appendJoin(accName, n.Span(), bodyRef)
-	a.b.Jump(n.Span(), header)
+	a.loopBackedge(n.Span(), header, exit, errMark)
 
 	a.b.SealBlock(header)
 	a.b.SetBlock(exit)
