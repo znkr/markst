@@ -20,7 +20,7 @@ func TestCustomFormat(t *testing.T) {
 			want: "#custom(\"include-diff\")\n",
 		},
 		{
-			name: "labelled",
+			name: "labeled",
 			in:   &Custom{Elem: "include-snippet", Label: &Label{Name: name.Make("snip")}},
 			want: "#custom(\"include-snippet\") <snip>\n",
 		},

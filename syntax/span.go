@@ -2,7 +2,7 @@ package syntax
 
 import "fmt"
 
-// Span represents a range of text in the source document.
+// Span is a range of bytes in a source document.
 type Span struct {
 	Start uint32 // Start offset (inclusive)
 	End   uint32 // End offset (exclusive)
@@ -14,24 +14,25 @@ type Span struct {
 // to point at. [Locate] resolves it to the zero [Location].
 var NoSpan = Span{Start: ^uint32(0), End: ^uint32(0)}
 
-// Position represents a position in the source document, consisting of a line
-// and column number.
+// Position is a line and column in a source document, both counted from 1.
 type Position struct {
 	Line   uint32 // Line number (1-based)
 	Column uint32 // Column number (1-based)
 }
 
+// String returns the position as "line:column".
 func (p Position) String() string {
 	return fmt.Sprintf("%d:%d", p.Line, p.Column)
 }
 
-// IsValid reports whether the position is valid (i.e., both line and column are
-// greater than 0).
+// IsValid reports whether the position names a place in a source, which the
+// zero Position does not.
 func (p Position) IsValid() bool {
 	return p.Line > 0 && p.Column > 0
 }
 
-// Source provides information about a source file.
+// Source converts between byte offsets and line/column positions in one
+// source document.
 type Source interface {
 	// Position returns the position corresponding to the given offset in the
 	// file.
@@ -42,14 +43,12 @@ type Source interface {
 	Offset(pos Position) uint32
 }
 
-// Origin identifies the source a [Span] belongs to: the bytes needed to
-// resolve it and the name to report it under. A document and a library are the
-// same kind of thing here — the only difference is that a library is always
-// named, while a host compiling a one-off document may not bother.
+// Origin says which source a [Span] belongs to: what resolves its offsets, and
+// what to call it in a diagnostic. Documents and libraries are alike here,
+// except that a library always has a name and a one-off document may not.
 //
-// The zero Origin degrades gracefully: [Locate] resolves any span against a nil
-// [Source] to the zero [Location], which is the same "no location" outcome a
-// [NoSpan] produces.
+// The zero Origin is usable: [Locate] resolves any span against it to the zero
+// [Location], the same result [NoSpan] gives.
 type Origin struct {
 	// Name is the display name diagnostics about this source are reported
 	// under, e.g. "lib.mst". Empty when the host supplied none.
@@ -59,11 +58,10 @@ type Origin struct {
 	Source Source
 }
 
-// Frame is one call site on the path to a diagnostic: the place a call was
-// written, in the source that wrote it. Frames are recorded only where a call
-// crosses from one [Origin] into another, so a diagnostic raised inside a
-// library function can say which document called it without a stack trace's
-// worth of noise.
+// Frame is one call site on the path to a diagnostic: where the call was
+// written, in the source that wrote it. Only calls crossing from one [Origin]
+// to another get a frame, so a failure inside a library says which document
+// called it, without the rest of a stack trace.
 type Frame struct {
 	// Origin is the source Span points into — the caller's, not the callee's.
 	Origin Origin
@@ -75,10 +73,9 @@ type Frame struct {
 	Callee string
 }
 
-// Location is a [Span] resolved against a [Source]: the byte offsets together
-// with the line/column positions they correspond to. It exists so a diagnostic
-// can be self-describing — a caller holding one needs neither the [Source] nor
-// the source bytes to say where the problem is.
+// Location is a [Span] with the line and column positions its offsets resolve
+// to. Carrying both means a diagnostic holding one can say where it happened
+// without the source or a [Source] to hand.
 type Location struct {
 	Span  Span     // byte offsets
 	Start Position // position of Span.Start
@@ -89,6 +86,8 @@ type Location struct {
 // It is false for a location built from [NoSpan].
 func (l Location) IsValid() bool { return l.Start.IsValid() }
 
+// String returns the location as "line:column", or as "line:column-line:column"
+// when it spans more than a point. An invalid location prints "<no location>".
 func (l Location) String() string {
 	if !l.IsValid() {
 		return "<no location>"

@@ -1,6 +1,6 @@
 // Package html renders a realized markst document as HTML.
 //
-// [Render] writes an HTML *fragment*: the document's content, with no
+// [Render] writes an HTML fragment: the document's content, with no
 // <html>, <head>, or <body> around it. Wrapping it in a page is the caller's
 // job, because the title, the stylesheet, and the rest of the page belong to
 // whatever is publishing the document, not to the document.
@@ -11,9 +11,9 @@
 //
 // Some of what a document names, markst cannot resolve on its own: where an
 // image path points, what a [value.Custom] element means, whether raw text
-// should be syntax-highlighted. [WithElement] is the way in. A hook is
-// consulted before the built-in rendering of every element and says whether it
-// handled it:
+// should be syntax-highlighted. [WithElement] adds a hook for these. It is
+// consulted before the built-in rendering of every element and reports whether
+// it handled the element:
 //
 //	html.Render(w, doc, html.WithElement(
 //		func(e *html.Encoder, c value.Content) (bool, error) {
@@ -26,18 +26,18 @@
 //		}))
 //
 // Hooks compose: each is tried in the order it was added, so two extensions
-// that care about different elements can be passed together. Inside a hook,
-// [Encoder.Content] renders nested content through the same pipeline and
-// [Encoder.Default] renders one element the built-in way, which is how a hook
-// decorates an element rather than replacing it.
+// handling different elements can be passed together. Inside a hook,
+// [Encoder.Content] renders nested content through the same pipeline, and
+// [Encoder.Default] renders one element the built-in way, which lets a hook
+// decorate an element rather than replace it.
 //
 // # URLs
 //
 // An #image path, a #link destination, and the anchor an @ref resolves to are
-// escaped and otherwise written as the document wrote them — a javascript:
-// URL included. A markst document is authored content, and a renderer that
-// quietly rewrote what it said would be lying about it. [WithLinkURL] and its
-// siblings are the place to impose a policy on input that is not trusted.
+// escaped, but otherwise written as the document wrote them, a javascript: URL
+// included. A markst document is authored content, so the renderer does not
+// second-guess it. To impose a policy on input you do not trust, use
+// [WithLinkURL] and its siblings.
 //
 // # Whitespace
 //
@@ -111,12 +111,11 @@ func WithoutFootnoteList() Option {
 	return func(c *config) { c.noFootnoteList = true }
 }
 
-// WithFootnotes fixes the numbering, rather than taking it from the content
-// being rendered. Pass what [Footnotes] returned for the whole document to
-// render a piece of it — a heading in a table of contents, say — whose
-// citations carry the numbers they have in the document rather than starting
-// again from 1. Pair it with [WithoutFootnoteList], or the piece gets the
-// whole document's endnotes appended to it.
+// WithFootnotes fixes the numbering instead of taking it from the content
+// being rendered. To render a piece of a document — a heading in a table of
+// contents, say — with the numbers that piece has in the whole document, pass
+// what [Footnotes] returned for the document. Pair it with
+// [WithoutFootnoteList], or the piece gets the whole document's endnotes.
 func WithFootnotes(notes []*value.Footnote) Option {
 	return func(c *config) { c.footnotes = notes }
 }
@@ -151,11 +150,10 @@ func newConfig(opts []Option) *config {
 // what was passed are numbered from 1 and listed at the end; see
 // [WithoutFootnoteList].
 //
-// The first failure stops the render. There are three: a hook that returned an
-// error, a write to w that did not succeed, and a [value.Custom] element with
-// no hook to render it — markst carries a host's element through the pipeline
-// but has no idea what it means, so there is nothing honest to write for one.
-// Every element markst does define has an HTML form and cannot fail.
+// The first failure stops the render. Three things can fail: a hook returning
+// an error, a write to w, and a [value.Custom] element with no hook to render
+// it, since markst has no rendering for a host's own element. Every element
+// markst defines has an HTML form and cannot fail.
 func Render(w io.Writer, c value.Content, opts ...Option) error {
 	cfg := newConfig(opts)
 
@@ -182,9 +180,9 @@ func Render(w io.Writer, c value.Content, opts ...Option) error {
 	return e.err
 }
 
-// stringWriter is the writer the encoder wants: one that takes a string
-// without turning it into a fresh []byte first. bytes.Buffer, strings.Builder,
-// and bufio.Writer all qualify, so the common cases are never double-buffered.
+// stringWriter is a writer that accepts a string without converting it to a
+// fresh []byte first. bytes.Buffer, strings.Builder, and bufio.Writer all
+// satisfy it, so the common cases are never double-buffered.
 type stringWriter interface {
 	io.Writer
 	io.StringWriter

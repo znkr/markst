@@ -1,3 +1,4 @@
+// Package graphemes splits text into what a reader sees as one character.
 package graphemes
 
 import (
@@ -5,8 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// All iterates over Unicode grapheme clusters in s.
-// This handles combining marks and ZWJ emoji sequences.
+// All iterates the grapheme clusters of s, so a base letter and its combining
+// marks, or a ZWJ emoji sequence, come out as one string.
 func All(s string) func(yield func(string) bool) {
 	return func(yield func(string) bool) {
 		for len(s) > 0 {
@@ -19,6 +20,8 @@ func All(s string) func(yield func(string) bool) {
 	}
 }
 
+// Decode returns the first grapheme cluster of s and how many bytes it took.
+// For an empty s it returns the replacement character and a width of 0.
 func Decode(s string) (grapheme string, width int) {
 	if len(s) == 0 {
 		return string(utf8.RuneError), 0

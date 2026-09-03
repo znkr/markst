@@ -684,12 +684,12 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 	others := args[1].(*value.Arguments)
 	exact := named.Get(names.Exact).(value.Bool)
 
-	// Reject unexpected named arguments captured by the sink.
+	// The sink swallows named arguments, and zip takes none, so reject
+	// anything that landed there.
 	for name := range others.Named.All() {
 		return nil, value.ArgErrorNamedPairf(name, "unexpected argument: %s", name.String())
 	}
 
-	// Collect all arrays: self + others.
 	arrays := make([]*value.Array, 1+len(others.Positional))
 	arrays[0] = self
 	for i, v := range others.Positional {
@@ -700,7 +700,7 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 		arrays[i+1] = arr
 	}
 
-	// Find minimum length.
+	// Without exact, the result is as long as the shortest input.
 	minLen := len(self.Elems)
 	for _, a := range arrays[1:] {
 		if len(a.Elems) < minLen {
@@ -708,7 +708,8 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 		}
 	}
 
-	// Check exact mode.
+	// With exact, every array has to match the first, and each mismatch is
+	// reported against the array it came from.
 	if exact {
 		var errs []error
 		for i, a := range arrays[1:] {
@@ -725,7 +726,6 @@ func arrayZipImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 		}
 	}
 
-	// Build result.
 	result := make([]value.Value, minLen)
 	for i := 0; i < minLen; i++ {
 		tuple := make([]value.Value, len(arrays))

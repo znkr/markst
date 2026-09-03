@@ -32,7 +32,7 @@ func benchBody(sections int) *value.Document {
 	return &value.Document{Body: &value.Sequence{Children: children}}
 }
 
-// BenchmarkAssignHeadingLabels covers the walk that labels every unlabelled
+// BenchmarkAssignHeadingLabels covers the walk that labels every unlabeled
 // heading: one pass for the headings, and one over each heading's own body for
 // its text, pruned at footnotes.
 func BenchmarkAssignHeadingLabels(b *testing.B) {

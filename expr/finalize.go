@@ -5,18 +5,18 @@ import (
 	"znkr.io/markst/value"
 )
 
-// resultSetter is implemented by every value-producing IR node (instructions
-// embedding [instr], and [*BlockParam]). Void instructions (those embedding
-// [voidInstr]) do not implement it, so the finalize loop naturally skips them
-// via a type assertion.
+// resultSetter is implemented by every IR node that produces a value: the
+// instructions embedding [instr], and [BlockParam]. A void instruction embeds
+// [voidInstr] and does not implement it, so a type assertion is all it takes to
+// skip one.
 type resultSetter interface {
 	setResult(Ref)
 }
 
-// producer indexes the in-block def of a function-local Ref. Only set for
-// in-block producers — block params and instructions. Function params,
-// captures, and self never get an entry — their `exists` flag stays false,
-// so [Builder.droppable] refuses to mark them dead.
+// producer locates the in-block definition of a function-local Ref. Only block
+// params and instructions get an entry. Function params, captures, and self do
+// not: their exists flag stays false, so [Builder.droppable] never marks them
+// dead.
 type producer struct {
 	block   BlockID
 	idx     int // index into block.Params (isParam) or block.Instrs
@@ -24,34 +24,25 @@ type producer struct {
 	exists  bool
 }
 
-// Finalize seals the function for consumption in a single combined pass:
+// Finalize prepares the finished function for the evaluator. It does three
+// things:
 //
-//  1. Trivial-param rewrite: a reference to a param removed by
-//     [tryRemoveTrivialParam] follows the rename map to the param's single
-//     incoming value.
-//  2. Dead-code elimination: pure instructions and block params whose result
-//     Ref has no uses are dropped. When a param is dropped its slot is
-//     spliced from every incoming terminator's arg list in lock-step. Cascades
-//     to fixed point. A joiner fixup pre-pass strips constant-`none` items
-//     from [ContentResult]/[CodeJoin] and drops [DiscardCheck]s over the
-//     `none` constant (they can never warn).
-//  3. Ref compaction: surviving Refs are renumbered into a dense
-//     `[0, NumRefs)` range; [Function.RefSpans] shrinks to match.
+//  1. Replaces every reference to a block param whose incoming values were all
+//     the same with that one value.
+//  2. Drops pure instructions and block params nothing uses, repeating until
+//     nothing more can go.
+//  3. Renumbers the surviving [Ref]s into a dense range, so [Function.NumRefs]
+//     is exactly the size of the value table a call needs.
 //
-// The three intents share one walker: a single `rename` function combines the
-// trivial-param redirect with the dense-Ref remap. After Finalize, every
-// operand in the IR points at the dense Ref of a surviving producer, the
-// runtime `vals` table has no holes, and `b.redirects` is empty.
-//
-// Must be called once construction is complete, before the function is handed
-// to the evaluator or formatter.
+// Call it once, when construction is complete and before the function is
+// evaluated or formatted.
 func (b *Builder) Finalize() {
-	// Joiner fixups first: strip constant-`none` items from
-	// ContentResult/CodeJoin and drop DiscardChecks that can never warn. This
-	// runs before the NumRefs fast path below because a function whose values
-	// are all module constants (no local Refs at all) can still carry a
-	// droppable DiscardCheck. Use counts are unaffected: the removed operands
-	// are ModConstRefs, which are never counted.
+	// Joiner fixups first: remove constant-`none` items from ContentResult and
+	// CodeJoin, and drop DiscardChecks that can never warn. This runs before the
+	// NumRefs fast path below, because a function whose values are all module
+	// constants, with no local Refs at all, can still hold a droppable
+	// DiscardCheck. Use counts do not change, since the removed operands are
+	// ModConstRefs and are never counted.
 	if noneID, ok := b.mb.noneConstID(); ok {
 		noneRef := ModConstRef(noneID)
 		for _, block := range b.fn.Blocks {
@@ -63,10 +54,10 @@ func (b *Builder) Finalize() {
 				case *CodeJoin:
 					x.Items, x.ItemSpans = filterNoneWithSpans(x.Items, x.ItemSpans, noneID)
 				case *DiscardCheck:
-					// A check over the none constant can never warn (none is
-					// not content); drop it. This is what keeps the common
-					// `{ return x }` body free of a useless check — the body
-					// join of an otherwise empty block is the none constant.
+					// A check over the none constant can never warn, since none is
+					// not content, so drop it. This is what keeps a common
+					// `{ return x }` body free of a useless check: the body join of
+					// an otherwise empty block is the none constant.
 					if x.Value == noneRef {
 						continue
 					}
@@ -98,10 +89,10 @@ func (b *Builder) Finalize() {
 		}
 	}
 
-	// redirect follows the trivial-param rename for a function-local Ref;
-	// pass-through for NoRef and ModConstRef. Use counts and worklist DCE
-	// both consult this so a dead param's incoming args attribute uses to
-	// the trivial target, not the param itself.
+	// redirect follows the trivial-param rename for a function-local Ref, and
+	// passes NoRef and ModConstRef through unchanged. Use counting and worklist DCE
+	// both go through it, so a dead param's incoming args count as uses of the
+	// trivial target rather than of the param.
 	redirect := func(r Ref) Ref {
 		if r < 0 {
 			return r
@@ -312,9 +303,9 @@ func (b *Builder) Finalize() {
 		return remap[r]
 	}
 
-	// Walk 3: apply rename to every Ref-typed field, both producer-side (result
-	// Refs) and operand-side. Void instructions don't implement resultSetter
-	// and naturally skip the producer-side update.
+	// Walk 3: apply rename to every Ref, both results and operands. A void
+	// instruction has no result, does not implement resultSetter, and so is
+	// skipped on the producer side.
 	for i := range b.fn.Params {
 		if b.fn.Params[i].Default != NoRef {
 			b.fn.Params[i].Default = rename(b.fn.Params[i].Default)

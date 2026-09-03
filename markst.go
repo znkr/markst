@@ -1,3 +1,9 @@
+// Package markst compiles Markst markup to a document tree, which
+// [znkr.io/markst/html] renders as HTML.
+//
+// [Compile] runs the whole pipeline over a source file. [CompileLibrary] does
+// the same for a file compiled for the bindings it defines rather than the
+// document it produces. [Outline] and [Query] read a compiled document.
 package markst
 
 import (
@@ -21,24 +27,21 @@ type config struct {
 	index    *value.Index
 }
 
-// WithName sets the display name diagnostics about this source are reported
-// under — the file it was read from, conventionally. Without it a diagnostic
-// still says which line and column it is about, just not which file.
+// WithName sets the name diagnostics about this source are reported under,
+// conventionally the file it was read from. Without it a diagnostic still says
+// which line and column it is about, just not which file.
 //
-// [CompileLibrary] takes its name as an argument instead: a library's failures
-// surface while some other file is being compiled, where an unnamed location
-// would be unreadable.
+// [CompileLibrary] takes its name as an argument instead, since a library's
+// failures surface while some other file is being compiled.
 func WithName(name string) Option {
 	return func(c *config) { c.name = name }
 }
 
-// WithLibrary makes every binding of each library resolve as if it were part
-// of the built-in universe, so a document can use what a library defines
-// without importing anything.
+// WithLibrary makes each library's bindings resolve as if they were built in,
+// so a document can use what a library defines without importing anything.
 //
-// Precedence runs outward: a document's own `#let` shadows a library binding,
-// a library binding shadows a built-in, and a later library shadows an earlier
-// one.
+// A document's own `#let` shadows a library binding, a library binding shadows
+// a built-in, and a later library shadows an earlier one.
 func WithLibrary(libs ...*Library) Option {
 	return func(c *config) {
 		for _, lib := range libs {
@@ -49,10 +52,9 @@ func WithLibrary(libs ...*Library) Option {
 	}
 }
 
-// WithBindings does for host-defined Go values what [WithLibrary] does for
-// markst-defined ones: each name resolves as if it were a member of the
-// built-in universe. Values must be non-nil; pass a [value.Error] for
-// "declared, but using it must fail".
+// WithBindings makes host-defined Go values resolve as if they were built in,
+// as [WithLibrary] does for values defined in markst. Values must be non-nil;
+// to declare a name whose use must fail, bind a [value.Error].
 func WithBindings(bindings map[name.Name]value.Value) Option {
 	return func(c *config) {
 		for n, v := range bindings {
@@ -61,33 +63,27 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 	}
 }
 
-// WithIndex fills x with a [value.Index] of the document that was compiled —
-// the flat record of its content that walking it repeatedly is worth paying
-// for. Pass it on to [Outline], or to [znkr.io/markst/html.WithIndex], instead
-// of walking the document again:
+// WithIndex fills x with a [value.Index] of the compiled document, a flat
+// record of its content that makes repeated traversals cheaper. Pass it to
+// [Outline] or [znkr.io/markst/html.WithIndex] instead of traversing the
+// document again:
 //
 //	var idx value.Index
 //	doc, warns, err := markst.Compile(src, markst.WithIndex(&idx))
 //	toc := markst.Outline(&idx)
 //	err = html.Render(w, doc, html.WithIndex(&idx))
 //
-// The index is built by the walk realization needs anyway, so asking for one
-// costs its records rather than a traversal of the document. It records the
-// document Compile returns — including the document a failed compile returns
-// alongside its diagnostics, so x is written either way, and a caller keeping
-// an index across compilations gets it replaced rather than left alone.
-//
-// It is the caller's to keep, and it goes stale the moment that document's
-// content is added to, removed from or replaced; see [value.Index].
-// [CompileLibrary] ignores it: a library is compiled for the bindings it
-// defines, and there is no document for an index to be of.
+// Compile writes x whether or not the compile succeeded, replacing anything
+// already there. The index becomes invalid as soon as the document's content
+// changes; see [value.Index]. [CompileLibrary] ignores it, since a library
+// produces no document to index.
 func WithIndex(x *value.Index) Option {
 	return func(c *config) { c.index = x }
 }
 
-// WithNow fixes the instant the document is rendered at — what
-// `datetime.today` reads the current date off. Without it the system clock is
-// used; passing a fixed instant makes a render reproducible.
+// WithNow fixes the instant the document is compiled at, which is what
+// `datetime.today` reads. Without it the system clock is used, so passing a
+// fixed instant is what makes a compile reproducible.
 func WithNow(t time.Time) Option {
 	return func(c *config) { c.now = t }
 }
@@ -123,36 +119,30 @@ func (c *config) evalOpts() []eval.Option {
 	return opts
 }
 
-// Compile turns markst source into a realized document, running the whole
-// pipeline over it: parse, analyze, evaluate, realize. Presenting the result is
-// a separate job: [znkr.io/markst/html] renders the document as HTML, and a
-// presenter targeting anything else walks it with [value.Preorder] — see
-// [znkr.io/markst/smartquote] for the one part of that it cannot do on its own.
+// Compile turns markst source into a realized document. Rendering it is a
+// separate step. [znkr.io/markst/html] writes HTML; a presenter for any other
+// format traverses the document with [value.Preorder], using
+// [znkr.io/markst/smartquote] to resolve quotation marks.
 //
-// Every heading in the returned document carries a [value.Label], so there is
-// always an anchor to link a section by; [Outline] gives them as a tree. A heading the source left unlabelled
-// gets one derived from its text — after show rules, so it describes the
-// heading a reader sees — marked [value.Label.Auto] and made unique against
-// every label the document already uses. Only the labels the source wrote are
-// part of the document's namespace: `@ref` does not resolve a generated one.
-// A reference resolves against the whole document rather than the part of it
-// written above the reference, so `@conclusion` in an introduction names the
-// section it expects to.
+// Every heading in the returned document has a [value.Label], so a section can
+// always be linked to, and [Outline] returns them as a tree. A heading left
+// unlabeled by the source gets a label derived from its text, taken after show
+// rules have run so that it matches the heading a reader sees. Such a label is
+// marked [value.Label.Auto] and made unique against the labels already in the
+// document, but it is not part of the document's namespace: `@ref` resolves
+// only labels the source wrote. A reference can name a label anywhere in the
+// document, so `@conclusion` works in an introduction.
 //
-// Warnings are returned separately from err, because they describe a document
-// that compiled: a label used twice, content discarded where it can have no
-// effect. A caller that folded them into failure would reject documents that
-// are fine. err is a [DiagnosticList] when it is non-nil, so the individual
-// diagnostics are reachable through errors.As or its Unwrap, and its Error
-// method names all of them rather than only the first.
+// Warnings are returned separately from err because they describe a document
+// that did compile, such as a label used twice or content discarded where it
+// has no effect. A non-nil err is a [DiagnosticList], so its Error method
+// reports every diagnostic and errors.As can reach an individual one.
 //
-// Every returned [Diagnostic] carries a resolved [syntax.Location] — byte
-// offsets and the line/column they correspond to — and the name of the source
-// it belongs to, so a caller holding only these return values can report where
-// a problem is without going back to the source bytes. That matters once
-// [WithLibrary] is in play: a failure inside a library function is reported
-// against the library's own text, with the call site that reached it.
-// [FormatDiagnostics] renders them.
+// Each [Diagnostic] carries a resolved [syntax.Location] and the name of the
+// source it came from, so a caller can report the position without the source
+// bytes. This matters with [WithLibrary]: a failure inside a library function
+// is reported against the library's own text, together with the call site that
+// reached it. [FormatDiagnostics] renders them.
 func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) {
 	c := newConfig(opts)
 	root := parser.Parse(src)
@@ -171,15 +161,14 @@ func Compile(src []byte, opts ...Option) (*value.Document, []Diagnostic, error) 
 	return doc, warns, nil
 }
 
-// Library is a compiled markst file held for the bindings it defines rather
-// than the document it produces — the way a set of helpers written in markst
-// is shared between documents.
+// Library is a compiled markst file kept for the bindings it defines rather
+// than the document it produces. It is how helpers written in markst are shared
+// between documents.
 //
-// Compile it once and hand it to as many [Compile] calls as you like via
-// [WithLibrary]. The functions it defines are ordinary values: they carry the
-// library along for their own code and source positions, but run against
-// whichever document is being compiled, so what they do — content, `set`
-// rules, labels, failures — belongs to that document.
+// Compile it once and pass it to any number of [Compile] calls through
+// [WithLibrary]. The functions it defines are ordinary values, and each runs
+// against whichever document is being compiled, so the content, rules, labels
+// and errors it produces belong to that document rather than to the library.
 type Library struct {
 	name    string
 	exports map[name.Name]value.Value
@@ -188,23 +177,23 @@ type Library struct {
 // Name returns the library's display name.
 func (l *Library) Name() string { return l.name }
 
-// Lookup returns the value the library binds to n.
+// Lookup returns the value the library binds to n, and reports whether it
+// binds n at all.
 func (l *Library) Lookup(n name.Name) (value.Value, bool) {
 	v, ok := l.exports[n]
 	return v, ok
 }
 
-// CompileLibrary compiles src for its top-level bindings. name is the
-// library's display name, used to locate every diagnostic that arises in it —
-// both here, and later, when a document calls one of its functions.
+// CompileLibrary compiles src for its top-level bindings. name locates every
+// diagnostic arising in the library, both here and later, when a document
+// calls one of its functions.
 //
 // Every top-level binding is exported; there is no export list. Names bound
-// inside a block are local to it and never escape.
+// inside a block stay local to it.
 //
-// A library's markup body is discarded — a library is compiled for what it
-// defines, not what it renders — so a body that is not empty is reported as a
-// warning. Errors and warnings are returned on the same terms as [Compile],
-// and a library that failed to compile is not returned.
+// A library's markup body is discarded, so a body that is not empty is reported
+// as a warning. Errors and warnings are returned on the same terms as
+// [Compile], and a library that failed to compile is not returned.
 func CompileLibrary(name string, src []byte, opts ...Option) (*Library, []Diagnostic, error) {
 	c := newConfig(append(opts, WithName(name)))
 	root := parser.Parse(src)
@@ -227,7 +216,7 @@ func CompileLibrary(name string, src []byte, opts ...Option) (*Library, []Diagno
 }
 
 // newLibrary interns the export dict's string keys back into name handles. It
-// is a function of its own only so that the name package stays reachable —
+// is a separate function only so the name package stays reachable:
 // CompileLibrary's `name` parameter shadows it.
 func newLibrary(libname string, exports *value.Dict) *Library {
 	lib := &Library{name: libname, exports: make(map[name.Name]value.Value, exports.Elems.Len())}
@@ -238,15 +227,15 @@ func newLibrary(libname string, exports *value.Dict) *Library {
 }
 
 // isEmptyBody reports whether a library's markup body renders nothing, so that
-// only a library that actually tried to produce output is warned about.
+// only a library that did try to produce output is warned about.
 //
-// Whitespace does not count. A file of nothing but `let` bindings still has
-// blank lines between them, and those lower to parbreaks and spaces — warning
-// about those would fire on every library there is.
-// rendersSomething is every element except the three that carry nothing of
+// Whitespace does not count. A file of only `let` bindings still has blank
+// lines between them, which lower to parbreaks and spaces; counting those would
+// warn about every library.
+// rendersSomething is every element except the three that produce no output of
 // their own: a sequence is structure, and a parbreak or linebreak between two
-// `let` bindings separates nothing. Leaving them out of the mask stops them
-// being yielded, not descended into.
+// `let` bindings separates nothing. Leaving them out stops them being yielded,
+// not descended into.
 var rendersSomething = value.AnyKind.Remove(
 	value.KindSequence,
 	value.KindParbreak,
@@ -270,19 +259,18 @@ func isEmptyBody(body value.Value) bool {
 	return true
 }
 
-// Query returns the value carried by the [value.Metadata] element labelled
-// label — the way a document hands data to the program presenting it:
+// Query returns the value of the [value.Metadata] element carrying the given
+// label. It is how a document passes data to the program presenting it:
 //
 //	#metadata("2024-02-29") <published>
 //
-// Pass the [value.Document] that [Compile] returned, or a [value.Index] of one
-// ([WithIndex]), which is worth having when a host reads several fields: each
-// query walks the document again, and an index skips everything that carries no
-// metadata.
+// Pass the [value.Document] [Compile] returned, or a [value.Index] of one. Each
+// query traverses what it is given, so an index is worth building when a host
+// reads several fields.
 //
-// Metadata without a label is never returned: the label is what identifies it.
-// A label shared by two metadata elements is reported as a warning by
-// [Compile]; Query answers with the first in document order.
+// Unlabeled metadata is never returned, since the label identifies it. A label
+// on two metadata elements is reported as a warning by [Compile]; Query returns
+// the first in document order.
 func Query(t value.Tree, label name.Name) (value.Value, bool) {
 	if t == nil {
 		return nil, false

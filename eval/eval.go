@@ -21,37 +21,35 @@ import (
 // Option configures an [Eval] run.
 type Option func(*session)
 
-// WithNow fixes the instant the document is rendered at — what `datetime.today`
-// reads the current date off. Without it the system clock is used; passing a
-// fixed instant makes a render reproducible.
+// WithNow fixes the instant the document is evaluated at, which is what
+// `datetime.today` reads. Without it the system clock is used, so passing a
+// fixed instant is what makes evaluation reproducible.
 func WithNow(t time.Time) Option {
 	return func(s *session) { s.now = t }
 }
 
-// WithIndex fills x with a [value.Index] of the realized document. The index is
-// built by the walk realization needs anyway — the one that labels headings —
-// so asking for it costs the records rather than a traversal of its own.
+// WithIndex fills x with a [value.Index] of the realized document. Realization
+// already walks the document to label its headings, so building the index adds
+// its records but no extra traversal.
 func WithIndex(x *value.Index) Option {
 	return func(s *session) { s.index = x }
 }
 
-// Eval evaluates an SSA [Module] and returns the resulting document
-// [value.Content]. Errors are returned as an [ErrorList]; non-fatal warnings
-// are returned separately. Free names in the module have already been
-// resolved to constants by the analyzer, so Eval needs no scope of its own.
+// Eval runs a module and returns the document it builds, with warnings and
+// errors reported separately.
 //
-// The content it returns is realized: paragraphs formed, style scopes
-// resolved, and every heading labelled — see [session.realizeDocument].
+// The document is realized: paragraphs formed, style rules applied, and every
+// heading labeled.
 func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, err []Error) {
 	s, v := runTop(mod, opts)
-	// If the top-level value is itself an Error, the failure was already
-	// recorded on the session; drop it and emit empty content.
+	// A top-level Error value has already been recorded on the session, so
+	// drop it and produce empty content.
 	if _, ok := value.IsError(v); ok {
 		v = &value.Sequence{}
 	}
-	// A top-level markup body of a single item skips the ContentResult
-	// assembly (lowerMarkup's single-item shortcut), so a lone/trailing set or
-	// show rule reaches here unfolded. Collapse it the same way assembly would.
+	// A top-level markup body of one item skips ContentResult assembly, via
+	// lowerMarkup's single-item shortcut, so a lone or trailing set or show
+	// rule arrives here unfolded. Collapse it as assembly would have.
 	v = foldStyles(v)
 	cc := value.ToContent(v)
 	if cc == nil {
@@ -67,24 +65,23 @@ func Eval(mod *expr.Module, opts ...Option) (doc *value.Document, warn []Error, 
 	return
 }
 
-// EvalExports evaluates a module analyzed with [analyzer.WithExports] and
-// returns its top-level bindings as values, along with the body content the
-// file would have produced. It is how a source file becomes something other
-// files can be compiled against: the closures in exports are ordinary
-// [value.Function]s, ready to be handed to [analyzer.WithBindings].
+// EvalExports runs a module analyzed with [analyzer.WithExports] and returns
+// its top-level bindings, along with the body the file would have produced.
+// This is how a file becomes something other files can be compiled against:
+// the exported closures are ordinary [value.Function]s, ready for
+// [analyzer.WithBindings].
 //
-// The returned closures outlive this call. Each one remembers the module it
-// was written in — for its constant pool, its nested functions and its
-// [syntax.Origin] — but takes the session it runs under from its caller, so a
-// later invocation records its diagnostics on whatever document is being
-// compiled at the time.
+// Those closures outlive this call. Each keeps the module it was written in,
+// for its constants and its source positions, but runs under whichever
+// evaluation calls it, so its diagnostics land on the document being compiled
+// at the time.
 func EvalExports(mod *expr.Module, opts ...Option) (body value.Value, exports *value.Dict, warn []Error, err []Error) {
 	s, v := runTop(mod, opts)
 	// The pair analyzer.WithExports emits. Anything else means the module was
-	// analyzed without the option, which is a programming error in the host,
-	// not something a document can cause — except when the top-level value is
-	// poison, where the failure is already recorded and there is nothing to
-	// take apart.
+	// analyzed without that option, which is a mistake in the host rather
+	// than something a document can cause. The exception is a top-level error
+	// value, where the failure is already recorded and there is nothing to
+	// destructure.
 	if _, ok := value.IsError(v); !ok {
 		pair, ok := v.(*value.Array)
 		if !ok || len(pair.Elems) != 2 {
@@ -109,10 +106,10 @@ func runTop(mod *expr.Module, opts []Option) (*session, value.Value) {
 		opt(s)
 	}
 
-	// Parse errors are diagnostics on the source, reported regardless of
-	// which code paths run — and this is their only reporting channel: the
-	// corresponding IR Error instructions are marked Reported and evaluate to
-	// unrecorded poison values.
+	// Parse errors are diagnostics on the source and are reported whether or
+	// not the code containing them runs. This is the only place they are
+	// reported: the matching IR Error instructions are marked Reported and
+	// evaluate to error values without recording anything.
 	for _, e := range mod.ParseErrors {
 		e.Origin = mod.Origin
 		s.recordError(e)
@@ -131,87 +128,87 @@ const maxCallDepth = 64
 // and the accumulated diagnostics. Each [frame] holds a back-pointer to its
 // session so eval helpers don't have to thread it as a separate parameter.
 //
-// A session is per-render, and deliberately holds nothing about the *code*
-// being run — that lives on [expr.Module], reached through [frame.mod]. The
-// split is what lets a closure defined in one module be called during another
-// module's evaluation: the closure keeps its own module for constants, nested
-// functions and spans, but takes the running session from its caller, so its
-// errors, warnings, labels and `set document` rules land on the document
-// actually being compiled.
+// A session is per-render and holds nothing about the code being run, which is
+// on [expr.Module] and reached through [frame.mod]. Separating the two is what
+// allows a closure defined in one module to be called during another module's
+// evaluation: the closure keeps its own module for constants, nested functions
+// and spans, but takes the running session from its caller, so its errors,
+// warnings, labels and `set document` rules are recorded on the document being
+// compiled.
 type session struct {
 	labels map[name.Name]struct{}
 
-	// index is where [WithIndex] wants an index of the realized document, and
-	// nil when the caller asked for none. It is filled by
-	// [session.realizeDocument], which then labels headings off it.
+	// index is where [WithIndex] requested an index of the realized document,
+	// or nil if the caller requested none. [session.realizeDocument] fills it
+	// in and then assigns heading labels from it.
 	index *value.Index
 
-	// pendingRefs are the references whose target was not labelled yet at the
-	// point they were evaluated, in the order they were reached; seenRefs
-	// keeps a reference that runs many times — in a loop, or in a function
-	// called from several places — to one entry. They are answered once the
-	// document is complete; see [session.checkRefs].
+	// pendingRefs holds the references whose target was not yet labeled when
+	// they were evaluated, in the order they were reached. seenRefs reduces a
+	// reference evaluated many times, in a loop or in a function called from
+	// several places, to a single entry. They are resolved once the document
+	// is complete; see [session.checkRefs].
 	pendingRefs []pendingRef
 	seenRefs    map[refKey]bool
 
 	// metadataLabels is the subset of labels attached to a [value.Metadata].
-	// A label may legitimately be shared by several elements — `#show <x>:`
-	// styles every one of them — but two metadata under one label leave
-	// znkr.io/markst.Query no way to tell them apart, so that case is warned
-	// about; see [frame.attachLabel].
+	// Sharing a label between several elements is legitimate, since
+	// `#show <x>:` styles all of them, but two metadata under one label give
+	// znkr.io/markst.Query no way to distinguish them, so that case is
+	// warned about; see [frame.attachLabel].
 	metadataLabels map[name.Name]struct{}
 
-	// now is the instant the document is rendered at, handed to every builtin
-	// through [value.FunctionCallContext]. The zero value means the builtins
-	// that care read the system clock themselves.
+	// now is the instant the document is rendered at, passed to every builtin
+	// through [value.FunctionCallContext]. The zero value means a builtin that
+	// needs the time reads the system clock itself.
 	now time.Time
 
-	// stack is the chain of user-closure calls currently running, outermost
-	// first. Pushed on entry to a closure in [frame.evalCall] and popped on
-	// return; when it would exceed [maxCallDepth] the call is refused.
+	// stack holds the user-closure calls currently running, outermost first.
+	// [frame.evalCall] pushes on entry to a closure and pops on return, and
+	// refuses a call that would exceed [maxCallDepth].
 	//
-	// It doubles as the source of [value.Error.Trace]: [session.trace] reads
-	// off the entries where a call crossed from one [syntax.Origin] into
-	// another, which is what tells a reader which document called the library
-	// function that failed.
+	// It is also the source of [value.Error.Trace]: [session.trace] takes the
+	// entries where a call crossed from one [syntax.Origin] into another, so
+	// a diagnostic can name the document that called the library function
+	// that failed.
 	stack []callSite
 
 	// warnings collects informal diagnostics produced during evaluation.
 	warnings []Error
 
 	// doc accumulates the document properties collected from `set document(…)`
-	// rules during the realization pass. Body is left alone here; it is filled
-	// in by [session.realizeDocument], which returns a copy of this value as
-	// the document root.
+	// rules during realization. Body is not set here;
+	// [session.realizeDocument] fills it in and returns a copy of this value
+	// as the document root.
 	doc value.Document
 
-	// errors collects every diagnostic produced during evaluation. Every
-	// failure surfaces here via [session.recordError]; instructions that
-	// fail also write a [*value.Error] to their SSA result slot so
-	// downstream operations can propagate it through the value table.
+	// errors collects every diagnostic produced during evaluation, recorded
+	// through [session.recordError]. A failing instruction also writes a
+	// [*value.Error] to its SSA result so later instructions propagate it
+	// through the value table.
 	//
-	// Sorted by (Span.Start ascending, Span.End descending). Insertions
-	// almost always land at the end (errors arrive in roughly source
-	// order), so the slice-shift cost amortizes; binary search keeps the
-	// containment lookup off the hot path.
+	// Sorted by Span.Start ascending, then Span.End descending. Errors arrive
+	// in roughly source order, so an insertion almost always lands at the end
+	// and the cost of shifting the slice amortizes. Containment lookups use
+	// binary search.
 	errors []Error
 
-	// footnotes is the realized form of each footnote met during realization,
-	// keyed by the one it was realized from. A footnote bound to a name and
-	// used twice is one footnote — it carries one number and is printed once —
-	// and identity is what says so, so realizing it a second time has to hand
-	// back the same element rather than an equal one.
+	// footnotes maps each footnote realization encountered to its realized
+	// form. A footnote bound to a name and used twice is one footnote: it has
+	// one number and is printed once. Identity is what establishes that, so
+	// realizing the same footnote again must return the identical element,
+	// not an equal one.
 	footnotes map[*value.Footnote]value.Content
 }
 
 // callSite is one entry on [session.stack]: a call in progress, recorded where
 // it was written.
 type callSite struct {
-	// mod is the *caller's* module — span points into its source, since that
-	// is where the call expression is written. It also stands for the source's
-	// identity in [session.trace]: comparing modules rather than the
-	// [syntax.Source] interface keeps that comparison total, since Source is
-	// exported and an implementation of it need not be comparable.
+	// mod is the caller's module. span points into its source, which is where
+	// the call expression is written. It also identifies the source in
+	// [session.trace]: comparing modules rather than the [syntax.Source]
+	// interface keeps that comparison well defined, since Source is exported
+	// and an implementation of it need not be comparable.
 	mod    *expr.Module
 	span   syntax.Span
 	callee string
@@ -262,7 +259,7 @@ func (s *session) recordError(e Error) {
 	idx, _ := slices.BinarySearchFunc(s.errors, e, errCmp)
 	// Scan backward from idx to find an entry that covers e. Two cases:
 	//   - Same-span entries: leftmost-insertion semantics puts identical-key
-	//     entries *at* idx (and beyond), so the existing duplicate sits at
+	//     entries at idx and beyond, so the existing duplicate is at
 	//     idx itself when idx < len.
 	//   - Broader-span entries: earlier in the slice (Start <= e.Span.Start
 	//     by sort order); End >= e.Span.End determines coverage.
@@ -302,7 +299,7 @@ func errCmp(a, b Error) int {
 // propagation should short-circuit this instruction when any operand is a
 // [*value.Error]. Most value-producing instructions opt in; aggregation
 // constructs ([ContentResult], [CodeJoin], [JoinAdd], [MakeArray],
-// [MakeDict]) opt out because their semantics are to *hold* the operands,
+// [MakeDict]) opt out because their semantics are to hold the operands,
 // errors and all, rather than collapse to a single error. Without this
 // opt-out, `(err, x)` would evaluate to err instead of an array
 // containing err — defeating "continue past errors" for collections.
@@ -319,12 +316,12 @@ func propagatesFromOperands(inst expr.Instruction) bool {
 type frame struct {
 	s *session
 
-	// mod is the module fn was compiled from, and the one its Refs and Spans
-	// are meaningful in. It is carried per-frame rather than per-session
-	// because a single evaluation can run functions from several modules: a
-	// closure exported by a library keeps resolving its module constants,
-	// nested functions and source positions against the library, while
-	// everything else about the call belongs to s.
+	// mod is the module fn was compiled from, in which its Refs and Spans are
+	// meaningful. It is per-frame rather than per-session because one
+	// evaluation can run functions from several modules: a closure exported
+	// by a library resolves its module constants, nested functions and source
+	// positions against that library, while everything else about the call
+	// belongs to s.
 	mod *expr.Module
 
 	fn   *expr.Function
@@ -336,9 +333,8 @@ type frame struct {
 	iters map[expr.Ref]*iteratorState
 
 	// ops is the buffer the operand-error check reads each instruction's
-	// operands into. It is one buffer per frame rather than one slice per
-	// instruction, which is what the check used to cost — on every instruction
-	// the frame runs, however many times it runs it.
+	// operands into. One buffer per frame, reused by every instruction the
+	// frame runs, so the check allocates nothing.
 	ops []expr.Ref
 }
 
@@ -413,9 +409,9 @@ type refKey struct {
 }
 
 // RecordRef records a reference to a label the document has not attached yet,
-// to be answered by [session.checkRefs] once it is complete. It implements
-// [value.RefRecorder], which is how the `ref` builtin reports the references it
-// builds; `@x` markup reaches it through [frame.evalInst].
+// for [session.checkRefs] to resolve once the document is complete. It
+// implements [value.RefRecorder], which is how the `ref` builtin reports the
+// references it builds; `@x` markup reaches it through [frame.evalInst].
 func (fr *frame) RecordRef(target name.Name, span syntax.Span) {
 	if _, ok := fr.s.labels[target]; ok {
 		return
@@ -452,7 +448,7 @@ func (s *session) checkRefs() {
 }
 
 // attachLabel binds lbl to c, registering it in the session's label set
-// and warning at warnSpan if c was already labelled. Used by both
+// and warning at warnSpan if c was already labeled. Used by both
 // [expr.AttachLabel] (explicit `<label>` markup) and [evalContentResult]
 // (labels that appear as siblings to content in a markup body).
 //
@@ -465,6 +461,8 @@ func (s *session) checkRefs() {
 // not to have the conflict is better than staying silent about one that does.
 func (fr *frame) attachLabel(c value.Content, lbl *value.Label, warnSpan syntax.Span) {
 	if old := c.SetLabel(lbl); old != nil {
+		// "labelled" keeps Typst's spelling. The ported test in
+		// testdata/foundations/label.test asserts this wording verbatim.
 		fr.warn(warnSpan, "content labelled multiple times",
 			"only the last label is used, the rest are ignored")
 		delete(fr.s.labels, old.Name)
@@ -541,7 +539,7 @@ func runFunction(s *session, call functionCall) value.Value {
 			cond := fr.get(t.Cond)
 			// If the condition is itself an error value, the upstream
 			// computation already recorded it. Pick the Else arm so
-			// evaluation can continue *and* loops terminate (while/for
+			// evaluation can continue and loops still terminate (while and for
 			// lower with the exit block as Else, so this drops out of the
 			// loop instead of re-evaluating the failing condition every
 			// iteration).
@@ -767,10 +765,10 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.ContentResult:
 		fr.vals[r] = fr.evalContentResult(i)
 	case *expr.Error:
-		// The cascade-suppression rule (when From is already a *value.Error,
-		// propagate it and suppress Msg) is handled by the generic operand-
-		// error short-circuit at the top of evalInst; by the time we reach
-		// here, From is known to be non-error (or absent).
+		// A From that is already a *value.Error is propagated, and its Msg
+		// suppressed, by the operand-error short-circuit at the top of
+		// evalInst. So From is non-error, or absent, by the time it gets
+		// here.
 		if i.Reported {
 			// Parse errors are already reported via Module.ParseErrors;
 			// yield the poison value without recording again.
@@ -790,18 +788,18 @@ func evalInst(fr *frame, inst expr.Instruction) {
 			break
 		}
 		if isStyleUpdate(c) {
-			// A set/show update can never carry a label. The label attaches to
-			// the update's *scope* siblings, not the transient node itself — so
-			// with nothing else preceding it, the label is unattached.
+			// A set or show update cannot carry a label. The label applies to the
+			// siblings the update scopes over, not to the update node, so with
+			// nothing else before it the label attaches to nothing.
 			fr.warn(fr.span(r), fmt.Sprintf("label `<%s>` is not attached to anything", i.Label.String()))
 			fr.vals[r] = value.None{}
 			break
 		}
-		// Use the operand's defining instruction span for the attach
-		// diagnostic. Module-const refs have no per-function span — use the
-		// AttachLabel's own span instead, and skip the operand-slot writeback
-		// (the pool is shared across uses and must stay immutable; the label is
-		// still registered on the session).
+		// Use the span of the operand's defining instruction for the attach
+		// diagnostic. A module constant has no per-function span, so fall back
+		// to the AttachLabel's own span and skip writing back to the operand
+		// slot: the constant pool is shared between uses and must stay
+		// immutable. The label is still registered on the session.
 		var attachSpan syntax.Span
 		if i.Content.IsLocal() {
 			attachSpan = fr.fn.RefSpans[i.Content]
@@ -839,9 +837,9 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.Link:
 		fr.vals[r] = &value.Link{Dest: i.Dest, Body: contentOf(fr.get(i.Body))}
 	case *expr.RefMarkup:
-		// A reference the document has not labelled yet is not an error here:
-		// `@conclusion` in the introduction names a heading further down. The
-		// question is asked again once the whole document has been evaluated.
+		// A reference whose target is not labeled yet is not an error here:
+		// `@conclusion` in the introduction names a heading further down. It is
+		// resolved again once the whole document has been evaluated.
 		fr.RecordRef(i.Target, fr.span(r))
 		v := &value.Ref{Target: i.Target}
 		if i.Supplement != expr.NoRef {
@@ -882,8 +880,8 @@ func evalInst(fr *frame, inst expr.Instruction) {
 	case *expr.MathPrimes:
 		fr.vals[r] = &value.MathPrimes{Base: mathContentOf(fr.get(i.Base)), Count: i.Count}
 	case *expr.MathDelimited:
-		// Typst evaluates `(a)` to lr(open + body + close): the delimiters are
-		// part of the body, not fields beside it.
+		// Typst evaluates `(a)` to lr(open + body + close), so the delimiters
+		// are part of the body rather than separate fields.
 		fr.vals[r] = &value.MathLr{Body: &value.Sequence{Children: []value.Content{
 			mathContentOf(fr.get(i.Open)),
 			mathContentOf(fr.get(i.Body)),
@@ -944,8 +942,8 @@ func contentOf(v value.Value) value.Content {
 }
 
 // evalCodeJoin runs the code-mode joiner over a list of value Refs and
-// returns the joined result. Per-item spans are used so type-mismatch
-// errors point at the offending value (matching legacy behavior).
+// returns the joined result. Each item carries its own span, so a type
+// mismatch points at the value that caused it rather than at the whole join.
 //
 // Returns (nil, err) when the joiner rejects an operand; (joined, nil)
 // otherwise. Items whose value is already a [*value.Error] are skipped so a
@@ -1188,9 +1186,9 @@ func foldStyles(v value.Value) value.Value {
 func (fr *frame) evalContentResult(c *expr.ContentResult) value.Value {
 	ret := make([]value.Content, 0, len(c.Items))
 	var lastSpan syntax.Span
-	// Inside an equation the joiner is the math one, so that a symbol or string
-	// in a run renders like the same character written on its own (which skips
-	// the joiner entirely, see analyzer.lowerMathContent).
+	// Inside an equation, use the math joiner, so a symbol or string in a run
+	// renders the same as that character written on its own, which bypasses the
+	// joiner entirely (see analyzer.lowerMathContent).
 	toContent := value.ToContent
 	if c.Math {
 		toContent = value.ToMathContent
@@ -1487,11 +1485,11 @@ func (fr *frame) evalMethodField(target value.Value, fname name.Name, span, fiel
 	return fr.errorf(fieldSpan, "cannot access fields on type %s", target.Type())
 }
 
-// evalFieldRead replicates the legacy FieldAccess.eval logic for SSA: type
-// methods, module definitions, dict keys, and content fields are all
-// supported. span covers the whole `target.field` expression and is used
-// for type-level errors; fieldSpan covers just the `.field` portion and is
-// used for content-field errors. Returns (nil, err) when the access fails.
+// evalFieldRead reads `target.field`, which may be a type method, a module
+// definition, a dict key, or a content field. span covers the whole
+// expression and locates type-level errors; fieldSpan covers just `.field`
+// and locates content-field errors. It returns nil when the access fails,
+// having recorded the error.
 func (fr *frame) evalFieldRead(target value.Value, fname name.Name, span, fieldSpan syntax.Span) value.Value {
 	switch t := target.(type) {
 	case *value.Type:
@@ -1690,11 +1688,11 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		}
 		return fr.error(c.Callee.Span, msg)
 	}
-	// A mutating method (Impure) needs a mutable place to write back. In math
-	// mode there is none, so a resolved mutating method is rejected outright.
-	// Otherwise, a mutating call on a temporary is an error. Both mutating-ness
-	// and the receiver's place-ness are resolved here at runtime — see
-	// [expr.MutCheck].
+	// A mutating method (Impure) needs a mutable place to write back to. Math
+	// mode has none, so a mutating method is rejected there outright.
+	// Elsewhere, a mutating call on a temporary is an error. Whether the method
+	// mutates and whether the receiver is a place are both decided here at
+	// runtime; see [expr.MutCheck].
 	if c.Mut != nil && fn.Impure {
 		if c.Mut.Math {
 			return fr.error(c.Mut.RecvSpan, "cannot call mutating methods in math",
@@ -1720,9 +1718,9 @@ func (fr *frame) evalCall(c *expr.Call) value.Value {
 		}
 	}
 
-	// Guard the Go stack against unbounded user-closure recursion. Only
-	// closures count toward the depth (matching where the runtime actually
-	// recurses); built-ins do not nest evaluation this way.
+	// Guard the Go stack against unbounded recursion in user closures. Only
+	// closures count toward the depth, since that is where the evaluator
+	// recurses; builtins do not nest evaluation this way.
 	if fn.Closure {
 		if len(fr.s.stack) >= maxCallDepth {
 			return fr.error(fr.span(c.Result()), "maximum function call depth exceeded")
@@ -1776,17 +1774,17 @@ func (fr *frame) evalMathFallback(c *expr.Call) value.Value {
 	return &value.Sequence{Children: []value.Content{callee, parens}}
 }
 
-// callContext builds the context handed to a called function. Runtime carries
-// the running session so that a closure — which remembers the module it was
-// written in, but not the evaluation that created it — records what it does on
-// the document being compiled now.
+// callContext builds the context passed to a called function. Runtime holds the
+// running session, so a closure, which retains the module it was written in but
+// not the evaluation that created it, records what it does on the document
+// being compiled now.
 func (fr *frame) callContext(span syntax.Span) value.FunctionCallContext {
 	return value.FunctionCallContext{Span: span, Now: fr.s.now, Runtime: fr.s, Refs: fr}
 }
 
 // pushCall records a call in progress on the session stack and returns the
 // function that pops it, for `defer fr.pushCall(...)()`. The entry holds the
-// *calling* frame's origin, because span points at the call expression, which
+// calling frame's origin, because span points at the call expression, which
 // is written in the caller's source.
 func (fr *frame) pushCall(span syntax.Span, fn *value.Function) func() {
 	fr.s.stack = append(fr.s.stack, callSite{mod: fr.mod, span: span, callee: fn.Name})
@@ -1853,11 +1851,9 @@ func (fr *frame) evalCallSet(c *expr.CallSet) {
 	setter(newVal)
 }
 
-// evalFieldWrite implements `x.f = v` (and compound forms). For now it
-// supports writing to dictionary fields; other field-writes (e.g. content
-// fields) are uncommon as lvalues and record an error. Side-effect only:
-// all error paths record on the session, and the instruction has no SSA
-// result.
+// evalFieldWrite performs `x.f = v` and its compound forms. Only dictionary
+// fields can be written; anything else records an error. It produces no value,
+// so every failure is recorded rather than returned.
 func (fr *frame) evalFieldWrite(w *expr.FieldWrite) {
 	target := fr.get(w.Target)
 	newVal := fr.get(w.NewVal)
@@ -1936,10 +1932,10 @@ func makeClosureWithFrame(fr *frame, m *expr.MakeClosure) value.Value {
 // function with the supplied captures and an arg-slot layout matching the
 // function's Params.
 //
-// fn.Params can interleave positional, named, and sink kinds in source order,
-// but [value.Function.Positional] only carries positional and sink params. We
-// build a posToParam mapping so the runtime can route each value.Function arg
-// slot back to the correct fn.Params index.
+// fn.Params holds positional, named, and sink params interleaved in source
+// order, while [value.Function.Positional] holds only the positional and sink
+// ones. The posToParam mapping routes each value.Function argument slot back to
+// its fn.Params index.
 //
 // The result closes over mod but not over any session: the module is what fn
 // means (its constant pool, its nested functions, the source its spans index),
@@ -2011,11 +2007,11 @@ func buildFunctionValue(mod *expr.Module, fn *expr.Function, caps []value.Value)
 		}
 		s, ok := call.Runtime.(*session)
 		if !ok {
-			// Every path that reaches a closure goes through the evaluator,
-			// which always sets Runtime — including builtins invoking a
-			// callback, which forward the context they were given. A missing
-			// one means a host called the value directly, with no evaluation
-			// for its diagnostics to land on.
+			// Every path to a closure goes through the evaluator, which always
+			// sets Runtime, including a builtin invoking a callback, which
+			// forwards the context it was given. A missing Runtime means a host
+			// called the value directly, with no evaluation to record its
+			// diagnostics on.
 			return nil, fmt.Errorf("cannot call a markst function outside an evaluation")
 		}
 		return runFunction(s, functionCall{mod: mod, fn: fn, args: paramArgs, captures: caps, self: out}), nil
@@ -2025,9 +2021,9 @@ func buildFunctionValue(mod *expr.Module, fn *expr.Function, caps []value.Value)
 
 // Iterator state /////////////////////////////////////////////////////////////
 //
-// SSA's IterOpen/IterHasNext/IterAdvance instructions need a runtime
-// iterator backing store. [value.Value] is a closed interface, so we keep
-// the state in a sidecar map ([ssaFrame.iters]) instead.
+// IterOpen, IterHasNext and IterAdvance need somewhere to keep an iterator.
+// [value.Value] is a closed interface and cannot hold one, so the state lives
+// in a map on the frame instead.
 
 // iteratorState is the runtime cursor for one IterOpen/IterHasNext/IterAdvance
 // triple. Only one of the three value fields (arr, dict, str) is non-nil at a

@@ -7,10 +7,9 @@ import (
 	"znkr.io/markst/value"
 )
 
-// The content elements. Each is a [value.Element]: it reports itself as a
-// function type (so `type(heading) == function`), acts as a set/show/`.where`
-// target, and — being a function — is its own constructor, producing its
-// dedicated content type.
+// The content elements. Each is a [value.Element], which has the function type
+// (so `type(heading) == function`), serves as the target of a set, show, or
+// `.where` rule, and, being a function, constructs its own content type.
 
 // Emph is the emphasis element; it builds a [value.Emph].
 var Emph = value.NewElement[*value.Emph](value.Function{
@@ -249,8 +248,8 @@ func linkImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 }
 
 // Image is a picture loaded from a file; it builds a [value.Image]. The path is
-// left as written — resolving it against the document root is the presenter's
-// job — and `alt` carries the alternative description for assistive technology.
+// left as written, for the presenter to resolve against the document root, and
+// `alt` holds the alternative description for assistive technology.
 var Image = value.NewElement[*value.Image](value.Function{
 	Name: "image",
 	Positional: []value.Param{
@@ -270,8 +269,8 @@ func imageImpl(_ *value.FunctionCallContext, args []value.Value, named value.Nam
 }
 
 // Metadata is the metadata element; it builds a [value.Metadata]. It produces
-// no output: its value rides along in the document, to be found again by the
-// label attached to it (see znkr.io/markst.Query).
+// no output. Its value is carried through the document and found again by the
+// label attached to it; see znkr.io/markst.Query.
 var Metadata = value.NewElement[*value.Metadata](value.Function{
 	Name: "metadata",
 	Positional: []value.Param{
@@ -295,8 +294,8 @@ var Ref = value.NewElement[*value.Ref](value.Function{
 
 func refImpl(call *value.FunctionCallContext, args []value.Value, _ value.NamedArgsWithDefaults) (value.Value, error) {
 	target := args[0].(*value.Label).Name
-	// The label may not be attached yet, so the reference is recorded rather
-	// than answered; see [value.FunctionCallContext.Refs].
+	// The label may not be attached yet, so record the reference instead of
+	// resolving it; see [value.FunctionCallContext.Refs].
 	if call.Refs != nil {
 		call.Refs.RecordRef(target, call.Span)
 	}
@@ -430,17 +429,17 @@ func termItemImpl(_ *value.FunctionCallContext, args []value.Value, _ value.Name
 	}, nil
 }
 
-// Document is the document root's set target: `#set document(title: …)`
-// configures the realized [value.Document]. It has no constructor (F == nil) —
-// the root is assembled by the realization pass, not called — so `#document(…)`
-// reports "not callable".
+// Document is the set target for the document root: `#set document(title: …)`
+// configures the realized [value.Document]. It has no constructor (F is nil),
+// since realization assembles the root rather than calling anything, so
+// `#document(…)` reports "not callable".
 //
-// The root carries only what the whole document is: its title and its date.
-// Everything else a presenter might want to know about a document — a summary,
-// a revision date, tags — is [Metadata], found by label rather than named here.
+// The root holds only properties of the document as a whole, its title and its
+// date. Anything else a presenter may want — a summary, a revision date, tags —
+// is [Metadata], found by label rather than declared here.
 //
-// `date` takes a datetime, or a `yyyy-mm-dd` string as a shorthand for
-// `datetime.parse_date` of the same text.
+// `date` takes a datetime, or a `yyyy-mm-dd` string as shorthand for
+// `datetime.parse_date` of that text.
 var Document = value.NewElement[*value.Document](value.Function{
 	Name: "document",
 	Named: value.NamedParams{
@@ -458,7 +457,8 @@ func validateDocument(named value.NamedArgs) *value.FunctionCallError {
 	if !ok {
 		return nil
 	}
-	// A datetime needs no checking; bind already rejected everything else.
+	// A datetime needs no further checking, and bind rejected every other
+	// type.
 	s, ok := v.(value.Str)
 	if !ok {
 		return nil

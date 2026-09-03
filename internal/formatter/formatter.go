@@ -1,3 +1,8 @@
+// Package formatter writes Markst values and syntax back out as Markst source.
+//
+// A [Formatter] collects the output and tracks the indent and the mode
+// (markup, math, or code) the source is being written in. Values render
+// themselves through [Formattable].
 package formatter
 
 import (
@@ -7,11 +12,14 @@ import (
 	"znkr.io/markst/syntax"
 )
 
+// Formattable is implemented by anything that can write itself as Markst
+// source.
 type Formattable interface {
+	// Format writes this value to f, in whatever mode f is currently in.
 	Format(f *Formatter)
 }
 
-// Formatter provides a simple DSL for formatting IR nodes.
+// Formatter builds up Markst source. It is not safe for concurrent use.
 type Formatter struct {
 	sb         *strings.Builder
 	mode       syntax.Mode
@@ -25,19 +33,32 @@ type Formatter struct {
 	forceMultiline bool
 }
 
+// New returns an empty Formatter that writes source in the given mode.
 func New(mode syntax.Mode) *Formatter {
 	return &Formatter{sb: new(strings.Builder), mode: mode}
 }
 
-func (f *Formatter) Len() int       { return f.sb.Len() }
+// Len returns the number of bytes written so far.
+func (f *Formatter) Len() int { return f.sb.Len() }
+
+// String returns the source written so far.
 func (f *Formatter) String() string { return f.sb.String() }
 
-func (f *Formatter) Mode() syntax.Mode        { return f.mode }
+// Mode returns the mode source is currently being written in.
+func (f *Formatter) Mode() syntax.Mode { return f.mode }
+
+// SetMode switches the mode source is written in. Callers that change it are
+// expected to change it back.
 func (f *Formatter) SetMode(mode syntax.Mode) { f.mode = mode }
 
+// IncreaseIndent adds one level of indentation to subsequent lines.
 func (f *Formatter) IncreaseIndent() { f.indent++ }
+
+// DecreaseIndent removes one level of indentation from subsequent lines.
 func (f *Formatter) DecreaseIndent() { f.indent-- }
 
+// Inline runs fn with f marked as writing inline code, such as the body of
+// { expr }, and restores the previous setting afterwards.
 func (f *Formatter) Inline(fn func(f *Formatter)) {
 	prev := f.inlineCode
 	f.inlineCode = true
@@ -45,33 +66,47 @@ func (f *Formatter) Inline(fn func(f *Formatter)) {
 	f.inlineCode = prev
 }
 
-func (f *Formatter) Str(s string)                   { f.sb.WriteString(s) }
-func (f *Formatter) Linebreak()                     { f.Str("\n"); f.Indent() }
-func (f *Formatter) Indent()                        { f.Str(strings.Repeat("  ", f.indent)) }
-func (f *Formatter) Print(v any)                    { fmt.Fprint(f.sb, v) }
+// Str writes s verbatim.
+func (f *Formatter) Str(s string) { f.sb.WriteString(s) }
+
+// Linebreak starts a new line and indents it to the current level.
+func (f *Formatter) Linebreak() { f.Str("\n"); f.Indent() }
+
+// Indent writes the indentation for the current level.
+func (f *Formatter) Indent() { f.Str(strings.Repeat("  ", f.indent)) }
+
+// Print writes v as [fmt.Print] would.
+func (f *Formatter) Print(v any) { fmt.Fprint(f.sb, v) }
+
+// Printf writes v as [fmt.Printf] would.
 func (f *Formatter) Printf(format string, a ...any) { fmt.Fprintf(f.sb, format, a...) }
 
-// Prefix writes # when in markup mode (transitioning into code)
+// Prefix writes the # that switches markup into code, and nothing at all in
+// the other modes.
 func (f *Formatter) Prefix() {
 	if f.mode == syntax.ModeMarkup {
 		f.Str("#")
 	}
 }
 
-// Keyword writes a keyword followed by a space
+// Keyword writes s followed by a space.
 func (f *Formatter) Keyword(s string) {
 	f.Str(s)
 	f.Str(" ")
 }
 
+// Arg is one argument of a formatted call, either named or positional.
 type Arg struct {
 	name       string
 	positional bool
 	value      any
 }
 
+// NamedArg returns the argument `name: v`.
 func NamedArg(name string, v any) Arg { return Arg{name: name, value: v} }
-func PositionalArg(v any) Arg         { return Arg{positional: true, value: v} }
+
+// PositionalArg returns the argument `v`.
+func PositionalArg(v any) Arg { return Arg{positional: true, value: v} }
 
 // format writes the argument (with its `name: ` prefix, if named) to f.
 func (a Arg) format(f *Formatter) {
@@ -94,7 +129,10 @@ func (a Arg) format(f *Formatter) {
 // exceed it (accounting for the current indent) is broken across lines instead.
 const maxInlineWidth = 40
 
-// FuncCall formats #name(args)[blocks...] for content nodes
+// FuncCall writes a call, `name(args)[blocks…]`, prefixed with # in markup
+// mode. Arguments go on one line when they fit the width budget and on one
+// line each when they do not; trailing content blocks stay adjacent either
+// way, since separating them would make them separate calls.
 func (f *Formatter) FuncCall(name string, args []Arg, blocks ...Formattable) {
 	f.Prefix()
 	f.Str(name)
@@ -159,11 +197,10 @@ func (f *Formatter) FuncCall(name string, args []Arg, blocks ...Formattable) {
 	}
 }
 
-// BracketedList renders a content block `[items…]`. The items are concatenated
-// inline when the result fits the width budget and has no line breaks;
-// otherwise each item is placed on its own indented line. Use it for content
-// whose parts are worth breaking apart when long (e.g. an equation body),
-// unlike ordinary inline runs which stay concatenated via Bracketed.
+// BracketedList writes a content block, `[items…]`. The items run together on
+// one line when they fit the width budget, and take one line each when they do
+// not. Use it for content whose parts are worth breaking apart when long, such
+// as an equation body.
 func (f *Formatter) BracketedList(items []Formattable) {
 	// Consume any force-multi-line request so it applies to this block only,
 	// not to content nested inside it.

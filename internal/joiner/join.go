@@ -1,3 +1,9 @@
+// Package joiner combines a run of values into one, the way the + operator and
+// a block's trailing expressions do.
+//
+// Which types can be combined and what comes out is decided first, by handing
+// each value's type to a [Selector]; [Selector.Joiner] then returns the
+// [Joiner] that does the work.
 package joiner
 
 import (
@@ -9,9 +15,8 @@ import (
 	"znkr.io/markst/value"
 )
 
-// joinResultType defines which type combinations can be joined with the +
-// operator and what type the result has. For example, str + str = str,
-// content + content = content.
+// joinResultType maps a pair of types, in ascending order, to the type joining
+// them produces: str + str is str, str + content is content.
 var joinResultType = map[[2]types.Type]types.Type{
 	{types.Str, types.Str}:             types.Str,
 	{types.Bytes, types.Bytes}:         types.Bytes,
@@ -22,15 +27,24 @@ var joinResultType = map[[2]types.Type]types.Type{
 	{types.Arguments, types.Arguments}: types.Arguments,
 }
 
+// Joiner accumulates values of one result type into a single joined value.
 type Joiner interface {
+	// Add accumulates v, and returns an error if v cannot be joined with what
+	// came before.
 	Add(v value.Value) error
+
+	// Result returns the joined value.
 	Result() value.Value
 }
 
+// Selector determines the type that joining a run of values will produce. Add
+// each value's type to it, then call [Selector.Joiner] for the joiner to use.
 type Selector struct {
 	rtyp types.Type
 }
 
+// Add folds t into the result type so far, and returns an error if t cannot be
+// joined with it. A `none` is ignored, since joining with none is the identity.
 func (s *Selector) Add(t types.Type) error {
 	if t == types.None {
 		return nil
@@ -53,6 +67,8 @@ func (s *Selector) Add(t types.Type) error {
 	return nil
 }
 
+// Joiner returns a joiner for the result type worked out so far. Call it only
+// after every value's type has gone through [Selector.Add] without error.
 func (s *Selector) Joiner() Joiner {
 	switch s.rtyp {
 	default:
@@ -72,6 +88,9 @@ func (s *Selector) Joiner() Joiner {
 	}
 }
 
+// unjoinableJoiner handles a run whose result type has no joiner: a scalar, or
+// nothing at all. [Selector.Add] has already rejected a run with two such
+// values in it, so at most one ever arrives here.
 type unjoinableJoiner struct {
 	v value.Value
 }

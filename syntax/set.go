@@ -1,12 +1,11 @@
 package syntax
 
-// Set is a compact bitset over [Kind] values, stored as three uint64 words
-// to cover all ~150 Kind constants. It is used by the parser for efficient
-// lookahead checks and token synchronization (e.g. "is this token a binary
-// operator?" or "can this token start an expression?").
+// Set is a group of [Kind]s, as a bitset. The parser uses one to answer
+// questions about a token in a single test: is it a binary operator, can it
+// start an expression, should it be skipped.
 type Set [3]uint64
 
-// SetOf creates a Set containing the given kinds.
+// SetOf returns the set holding exactly the given kinds.
 func SetOf(kind ...Kind) Set {
 	var s Set
 	for _, k := range kind {
@@ -16,7 +15,7 @@ func SetOf(kind ...Kind) Set {
 	return s
 }
 
-// Contains reports whether the set contains the given kind.
+// Contains reports whether k is in the set.
 func (s Set) Contains(k Kind) bool {
 	i, bit := k/64, k%64
 	return s[i]&(1<<bit) != 0
@@ -30,7 +29,7 @@ func (s Set) add(k ...Kind) Set {
 	return s
 }
 
-// Remove returns a copy of the set with the given kinds removed.
+// Remove returns the set without the given kinds. The receiver is unchanged.
 func (s Set) Remove(k ...Kind) Set {
 	for _, kind := range k {
 		i, bit := kind/64, kind%64

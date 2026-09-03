@@ -1,9 +1,10 @@
-// Package errcmp compares expected errors (from inline comments in test
-// input) against actual errors produced by the analyzer or evaluator.
+// Package errcmp checks the diagnostics a test produced against the ones its
+// input asked for.
 //
-// The [Diff] function extracts these expectations from the syntax tree and
-// compares them against the provided actual errors, rendering mismatches
-// as a unified diff of the annotated source file.
+// A test writes its expectations as comments in the source — `// Error:`,
+// `// Warning:`, `// Hint:` — and [Diff] reads them back out of the syntax tree
+// and compares. A mismatch is rendered as a unified diff of the annotated
+// source, so it reads as the change that would fix it.
 package errcmp
 
 import (
@@ -18,8 +19,8 @@ import (
 	"znkr.io/markst/syntax"
 )
 
-// Error represents an error expectation or actual error, with its source
-// span, type ("Error" or "Warning"), message, and optional hints.
+// Error is one diagnostic, either expected or produced: where it points, what
+// kind it is ("Error" or "Warning"), its message, and its hints.
 type Error struct {
 	Span    syntax.Span
 	Type    string // "Error" or "Warning"
@@ -34,10 +35,9 @@ type Hint struct {
 	Msg  string
 }
 
-// Diff extracts error expectations from inline comments in root's syntax tree
-// and compares them against got. It returns a human-readable diff string
-// (empty if they match). Mismatches are shown as a unified diff of the source
-// with error annotations as inline comments.
+// Diff compares the diagnostics the source asked for against got, and returns
+// the difference as a unified diff of the annotated source. It returns "" when
+// they match.
 func Diff(root syntax.RootNode, got []Error) string {
 	src := string(root.Src)
 	gotAnnotated := annotateSource(root.Source, src, got)
@@ -80,7 +80,7 @@ func annotateSource(source syntax.Source, src string, errs []Error) string {
 		attachedErrs[target] = append(attachedErrs[target], e)
 	}
 
-	// Build output.
+	// Write each kept line with the errors attached to it above.
 	var buf strings.Builder
 	for i, kl := range kept {
 		indent := leadingWhitespace(kl.text)

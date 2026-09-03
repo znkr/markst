@@ -5,7 +5,7 @@ package value
 //
 //   - block is about the element's own place in the flow — whether it occupies
 //     a line of its own, which is what [Content.IsBlock] reports.
-//   - flow is about what goes *inside* it. An element whose content model is
+//   - flow is about what goes inside it. An element whose content model is
 //     flow content holds paragraphs; one whose content model is phrasing
 //     content holds a single line's worth of text. `p` is block and phrasing
 //     at once: it starts a line, and realizing its body as flow content would
@@ -59,9 +59,8 @@ var htmlTags = map[string]htmlTag{
 	"pre":        {block: true},
 	"summary":    {block: true},
 
-	// Containers that hold only their own item elements. Their bodies are
-	// written as those items, so phrasing is the honest answer: nothing here
-	// wants a paragraph wrapped around it.
+	// Containers that hold only their own item elements. The body is written
+	// as those items, so it is phrasing: nothing here takes a paragraph.
 	"dl":    {block: true},
 	"ol":    {block: true},
 	"table": {block: true},

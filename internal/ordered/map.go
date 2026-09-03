@@ -1,22 +1,19 @@
-// Package ordered provides an insertion-ordered map implementation.
+// Package ordered provides a map that iterates in insertion order.
 package ordered
 
 import "iter"
 
-// Map is a generic map that preserves insertion order when iterating.
-// The zero value is ready to use.
-//
-// Unlike Go's built-in map, iteration order is deterministic and matches
-// the order in which keys were first inserted. Updating an existing key
-// does not change its position in the iteration order.
+// Map is a map that iterates in the order keys were first inserted, rather
+// than the random order a Go map gives. Updating a key does not move it. The
+// zero Map is ready to use.
 type Map[K comparable, V any] struct {
 	keys   []K
 	values []V
 	index  map[K]int
 }
 
-// Get retrieves the value for key. Returns the value and true if found,
-// or the zero value and false if not present.
+// Get returns the value for key, and reports whether the map holds it. A key
+// the map does not hold gives the zero value.
 func (m *Map[K, V]) Get(key K) (V, bool) {
 	idx, ok := m.index[key]
 	if !ok {
@@ -25,8 +22,8 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 	return m.values[idx], true
 }
 
-// Put inserts or updates a key-value pair. If the key already exists,
-// its value is updated but its position in the iteration order is unchanged.
+// Put sets the value for key, adding it at the end of the iteration order if
+// it is new and leaving it where it is if it is not.
 func (m *Map[K, V]) Put(key K, value V) {
 	idx, ok := m.index[key]
 	if ok {
@@ -42,9 +39,8 @@ func (m *Map[K, V]) Put(key K, value V) {
 	}
 }
 
-// Delete removes key from the map, preserving the relative order of the
-// remaining keys. Returns the removed value and true if the key was present,
-// or the zero value and false otherwise.
+// Delete removes key, leaving the order of the other keys as it was. It
+// returns the value that was there and reports whether the key was present.
 func (m *Map[K, V]) Delete(key K) (V, bool) {
 	idx, ok := m.index[key]
 	if !ok {
@@ -61,7 +57,7 @@ func (m *Map[K, V]) Delete(key K) (V, bool) {
 	return removed, true
 }
 
-// All returns an iterator over all key-value pairs in insertion order.
+// All iterates the map's pairs in insertion order.
 func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		for i, k := range m.keys {
@@ -73,13 +69,13 @@ func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	}
 }
 
-// UnsafeKeys returns the keys in insertion order.
-// The returned slice should not be modified by the caller.
+// UnsafeKeys returns the keys in insertion order. The slice belongs to the map
+// and must not be modified.
 func (m *Map[K, V]) UnsafeKeys() []K {
 	return m.keys
 }
 
-// Len returns the number of key-value pairs in the map.
+// Len returns how many pairs the map holds.
 func (m *Map[K, V]) Len() int {
 	return len(m.keys)
 }

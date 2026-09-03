@@ -1,17 +1,15 @@
-// Package scanner implements the lexer (tokenizer) for Markst source code.
+// Package scanner turns Markst source into tokens.
 //
-// The scanner operates in one of three lexical modes ([syntax.ModeMarkup],
-// [syntax.ModeMath], [syntax.ModeCode]) and produces tokens as ([syntax.Kind],
-// [syntax.Node]) pairs via the [Scanner.Next] method. The parser drives mode
-// switching by calling [Scanner.SetMode] as it enters and exits different
-// syntactic constructs (e.g. entering code mode after a # hash).
+// [Scanner.Next] hands back one token at a time. Which characters make a token
+// depends on the mode — markup, math, or code — and the parser switches the
+// mode with [Scanner.SetMode] as it enters and leaves each construct, entering
+// code mode after a #, for instance.
 //
-// Invalid input produces [syntax.KindError] tokens with an attached
-// [syntax.Error] node containing a diagnostic message and optional hints.
+// Invalid input becomes a [syntax.KindError] token carrying a [syntax.Error]
+// with the diagnostic.
 //
-// Raw text blocks (backtick-delimited) are scanned as complete composite nodes
-// rather than individual tokens, since they require context-sensitive
-// whitespace handling (dedenting, trimming).
+// Raw text between backticks comes out as one composite node rather than
+// several tokens, because dedenting and trimming it needs the whole block.
 package scanner
 
 import (
@@ -28,9 +26,8 @@ import (
 	"znkr.io/markst/syntax/scanner/internal/reader"
 )
 
-// Scanner tokenizes Markst source code. It is created with [New] and produces
-// tokens one at a time via [Next]. The parser controls the lexical mode via
-// [SetMode], which changes how the same characters are interpreted.
+// Scanner reads tokens off Markst source. Make one with [New] and call
+// [Scanner.Next] until it returns [syntax.KindEnd].
 //
 // A Scanner is not safe for concurrent use.
 type Scanner struct {
@@ -57,7 +54,7 @@ type protoerr struct {
 	hints   []string
 }
 
-// New creates a scanner for the given source text, starting in markup mode.
+// New returns a scanner over src, starting in markup mode.
 func New(src []byte) *Scanner {
 	return &Scanner{r: reader.New(src)}
 }
@@ -66,20 +63,21 @@ func New(src []byte) *Scanner {
 // building nodes over them — the parser — can put them in the same blocks.
 func (s *Scanner) Arena() *syntax.Arena { return &s.a }
 
-// Mode returns the current lexical mode.
+// Mode returns the mode the scanner is reading in.
 func (s *Scanner) Mode() syntax.Mode {
 	return s.mode
 }
 
-// SetMode switches the scanner to the given lexical mode. This is called by
-// the parser when entering or leaving different syntactic contexts.
+// SetMode switches the mode the scanner reads in, changing how the same
+// characters are tokenized. The parser calls it on entering and leaving each
+// construct.
 func (s *Scanner) SetMode(mode syntax.Mode) {
 	s.mode = mode
 }
 
-// Source returns a [syntax.Source] that maps byte offsets to line/column
-// positions for the text being scanned. It should be called after scanning
-// is complete, as newline positions are tracked during scanning.
+// Source returns a [syntax.Source] converting between byte offsets and
+// line/column positions in the text being scanned. Call it once scanning is
+// done: it knows only about the newlines seen so far.
 func (s *Scanner) Source() syntax.Source {
 	content := s.r.Source()
 	newlines := s.r.Newlines()
@@ -99,23 +97,22 @@ func (s *Scanner) Source() syntax.Source {
 	}
 }
 
-// Offset returns the current byte offset in the source text.
+// Offset returns where in the source the scanner has read to.
 func (s *Scanner) Offset() int {
 	return s.r.Offset()
 }
 
-// Seek moves the scanner to the given byte offset. Used by the parser for
-// backtracking.
+// Seek moves the scanner to a byte offset, which is how the parser backtracks.
 func (s *Scanner) Seek(offset int) {
 	s.r.Seek(offset)
 }
 
-// Next scans and returns the next token. It returns the token's kind and
-// either a [syntax.Leaf] node (for valid tokens) or a [syntax.Error] node
-// (for invalid input). At the end of input it returns [syntax.KindEnd].
+// Next returns the next token: its kind, and a [syntax.Leaf] node, or a
+// [syntax.Error] node if the input was invalid. At the end of the source it
+// returns [syntax.KindEnd].
 //
-// For raw text (backtick-delimited), Next returns a composite [syntax.Inner]
-// node of kind [syntax.KindRaw] containing the full raw block.
+// Raw text between backticks is the exception. It comes back as a
+// [syntax.Inner] node of kind [syntax.KindRaw] holding the whole block.
 func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	start := s.r.Offset()
 	ch := s.r.Next()
@@ -139,13 +136,13 @@ func (s *Scanner) Next() (syntax.Kind, syntax.Node) {
 	}
 }
 
-// Column returns the current column number (0-based) in the source text.
+// Column returns which column the scanner has read to, counting from 0.
 func (s *Scanner) Column() int {
 	return s.r.Column()
 }
 
-// Newline reports whether the most recently scanned token contained a newline.
-// The parser uses this to detect paragraph breaks and heading boundaries.
+// Newline reports whether the token just scanned contained a newline, which is
+// how the parser finds paragraph breaks and the ends of headings.
 func (s *Scanner) Newline() bool {
 	return s.newline
 }
@@ -285,9 +282,8 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 		backticks++
 	}
 
-	// Special case for `` (two backticks with no content). We construct the node
-	// directly because there is nothing between the delimiters for scanBlockyRaw
-	// or scanInlineRaw to process.
+	// `` is two delimiters with nothing between them, so build the node here:
+	// there is no content for scanBlockyRaw or scanInlineRaw to work on.
 	if backticks == 2 {
 		span := s.spanFrom(start)
 		delims := s.a.Nodes(2)
@@ -340,23 +336,21 @@ func (s *Scanner) scanRaw() (syntax.Kind, syntax.Node) {
 //
 // # The initial line
 //
-//   - Text until the first whitespace or backtick is parsed as the language tag.
-//   - We check the rest of the line and if all characters are whitespace,
-//     trim it. Otherwise we trim a single leading space if present.
-//     If more trimmed characters follow on future lines, they will be
-//     merged into the same trimmed element.
-//   - If we didn't trim the entire line, the rest is kept as text.
+//   - Text up to the first whitespace or backtick is the language tag.
+//   - The rest of the line is trimmed entirely if it is all whitespace, and
+//     otherwise loses a single leading space. Characters trimmed on later
+//     lines merge into the same trimmed element.
+//   - Whatever is left of the line is kept as text.
 //
 // # Inner lines
 //
-//   - We determine the "dedent" by iterating over the lines. The dedent is
-//     the minimum number of leading whitespace characters (not bytes) before
-//     each line that has any non-whitespace characters.
-//     The opening delimiter's line does not contribute to the dedent, but
-//     the closing delimiter's line does (even if that line is entirely
-//     whitespace up to the delimiter).
-//   - We then trim the newline and dedent characters of each line, and add a
-//     (potentially empty) text element of all remaining characters.
+//   - The dedent is the fewest leading whitespace characters — characters,
+//     not bytes — on any line that has something other than whitespace on
+//     it. The opening delimiter's line does not count towards it; the
+//     closing delimiter's line does, even when it is nothing but whitespace
+//     up to the delimiter.
+//   - Each line then loses its newline and its dedent, and what remains
+//     becomes a text element, possibly an empty one.
 //
 // # The final line
 //
@@ -415,8 +409,9 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 			// All white space
 			lines = lines[:len(lines)-1]
 		} else {
-			// If last line ends in a backtick, try to trim a single space. This check must happen
-			// before we add the first line since the last and first lines might be the same.
+			// A last line ending in a backtick loses a single space. This has
+			// to happen before the first line is added, because the first and
+			// last line may be the same line.
 			if lastLine[idx] == '`' {
 				lines[len(lines)-1] = strings.TrimSuffix(lastLine, " ")
 			}
@@ -428,9 +423,9 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 	if len(lines) > 0 {
 		idx := strings.IndexFunc(lines[0], func(r rune) bool { return !unicode.IsSpace(r) })
 		if idx == -1 {
-			// All white space. This is the only spot we advance the scanner, but don't immediately
-			// call `push`. But the rest of the function ensures we will always add this text to
-			// a `KindRawTrimmed` later.
+			// All whitespace. This is the one place the scanner advances
+			// without a matching `push`; the rest of the function always
+			// folds this text into a later `KindRawTrimmed`.
 			s.r.Seek(s.r.Offset() + len(lines[0]))
 		} else {
 			lineEnd := s.r.Offset() + len(lines[0])
@@ -439,7 +434,7 @@ func (s *Scanner) scanBlockyRaw(rawEnd int, push func(syntax.Kind)) {
 				s.r.Next()
 				push(syntax.KindRawTrimmed)
 			}
-			// We know here that the rest of the line is non-empty.
+			// The rest of the line is known to be non-empty here.
 			s.r.Seek(lineEnd)
 			push(syntax.KindText)
 		}
@@ -793,10 +788,9 @@ func (s *Scanner) scanMathText(start int, ch rune) syntax.Kind {
 	return syntax.KindMathText
 }
 
-// MaybeMathNamedArg probes for a named argument (`name:`) starting at the byte
-// offset start. On a match it consumes the identifier and returns its node,
-// leaving the reader positioned at the `:`. On no match it restores the reader
-// and returns nil. Used by the parser for math argument lists.
+// MaybeMathNamedArg looks for a named argument, `name:`, at byte offset start.
+// On a match it consumes the name and returns its node, leaving the scanner on
+// the `:`. On no match it returns nil, having scanned nothing.
 func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
 	cursor := s.r.Offset()
 	s.r.Seek(start)
@@ -816,10 +810,9 @@ func (s *Scanner) MaybeMathNamedArg(start int) syntax.Node {
 	return nil
 }
 
-// MaybeMathSpreadArg probes for a spread argument (`..`) starting at the byte
-// offset start. On a match it consumes `..` and returns a Dots node; otherwise
-// it restores the reader and returns nil. Used by the parser for math argument
-// lists.
+// MaybeMathSpreadArg looks for a spread argument, `..`, at byte offset start.
+// On a match it consumes it and returns a Dots node. On no match it returns
+// nil, having scanned nothing.
 func (s *Scanner) MaybeMathSpreadArg(start int) syntax.Node {
 	cursor := s.r.Offset()
 	s.r.Seek(start)

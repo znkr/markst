@@ -88,7 +88,7 @@ build, and the first one already gave the answer.]
   has not reached yet.
 / Outliving the walk: The chain unwinds; a caller that needs to keep it takes a
   copy.
-/ Positions: Realized content carries no spans, so there is no analogue of
+/ Positions: Realized content carries no spans, so there is no analog of
   finding the innermost node at a byte offset.
 
 None of those are needed by anything in this repository today, which is the

@@ -1,3 +1,6 @@
+// Package builtin defines everything a Markst document can use without
+// declaring it: the global functions and types in [Universe], and the methods
+// each type answers to in [TypeFields].
 package builtin
 
 import (
@@ -9,6 +12,8 @@ import (
 	"znkr.io/markst/value"
 )
 
+// Std is the `std` module, holding every global binding under one name so a
+// document can still reach a builtin it has shadowed.
 var Std = &value.Module{
 	Name: "std",
 	Def:  stdDef,
@@ -35,7 +40,7 @@ var stdDef = value.SimpleModuleDef{
 	names.Footnote:   Footnote,
 	names.H:          H,
 	names.Heading:    Heading,
-	names.Html:       Html,
+	names.Html:       HTML,
 	names.Image:      Image,
 	names.Int:        reflectedTypes[types.Int],
 	names.Label:      reflectedTypes[types.Label],
@@ -66,8 +71,9 @@ var stdDef = value.SimpleModuleDef{
 	names.Type:       reflectedTypes[types.ReflectedType],
 }
 
-// Universe is the top-level scope containing all built-in type constructors
-// and global functions (range, repr, type).
+// Universe is the scope every document starts in: the type constructors, the
+// global functions such as `range` and `repr`, and [Std] itself. A document's
+// own bindings shadow these.
 var Universe = map[name.Name]value.Value{
 	names.Std: Std,
 }
@@ -137,10 +143,9 @@ var reflectedTypes = [...]*value.Type{
 	},
 }
 
-// TypeFields maps each type to its available methods and fields. When a field
-// access like x.len() is evaluated, the evaluator looks up the field name in
-// TypeFields[x.Type()] and returns the method function (pre-bound with x as the
-// receiver via [Function.With]).
+// TypeFields holds the methods and fields of each type, indexed by
+// [types.Type]. Evaluating `x.len()` looks up `len` in `TypeFields[x.Type()]`
+// and gets back the method with x already bound as its receiver.
 var TypeFields = [...]map[name.Name]value.Value{
 	types.None:          {},
 	types.ReflectedType: {},

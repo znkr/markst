@@ -140,16 +140,16 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
-// skipped holds the kinds the cursor steps over. Beyond trivia proper this
-// includes the two markers `parseEmbeddedCodeExpr` splices in as *flat
-// siblings* of the code expression it parses: the leading [syntax.KindHash]
-// and the optional statement-terminating [syntax.KindSemicolon]. Neither is
-// wrapped into a node standing for "an embedded code expression", so without
-// this every context admitting `#code` — math content, attachment operands,
-// fraction operands, spread values, math arguments, markup, code blocks —
-// would have to skip them by hand, and any context that forgot would take an
-// [analyzer.internal] panic on valid input. [syntax.KindParbreak] is here for
-// the same reason and comes back out for markup cursors; see [markupSkipped].
+// skipped holds the kinds the cursor steps over. Besides trivia, that includes
+// the two tokens `parseEmbeddedCodeExpr` leaves as flat siblings of the code
+// expression it parses: the leading [syntax.KindHash] and the optional
+// terminating [syntax.KindSemicolon]. Neither is wrapped in a node standing for
+// the embedded expression, so without this every context that admits `#code` —
+// math content, attachment operands, fraction operands, spread values, math
+// arguments, markup, code blocks — would have to skip them by hand, and one
+// that forgot would take an [analyzer.internal] panic on valid input.
+// [syntax.KindParbreak] is here for the same reason, and markup cursors put it
+// back; see [markupSkipped].
 var skipped = syntax.SetOf(
 	syntax.KindSpace,
 	syntax.KindParbreak,
@@ -181,13 +181,14 @@ type nodes struct {
 	skips syntax.Set
 }
 
-// inner returns a cursor for the children of n. It is returned by value: a
-// cursor is a few words the caller walks and drops, and handing back a pointer
-// put one on the heap for every node lowered. When n's kind doesn't
-// match — either because the parser substituted a [*syntax.Error] or
-// because the caller is being defensive about a malformed sub-tree — the
-// returned cursor is empty so iteration is a no-op and callers can fall
-// through to their cleanup with NoRef.
+// inner returns a cursor over the children of n. The cursor is returned by
+// value: it is a few words the caller walks and discards, and returning a
+// pointer would put one on the heap for every node lowered.
+//
+// When n's kind does not match, either because the parser substituted a
+// [syntax.Error] or because the caller is guarding against a malformed subtree,
+// the cursor is empty. Iterating it does nothing, so the caller falls through to
+// its cleanup with NoRef.
 func (a *analyzer) inner(n syntax.Node, kind syntax.Kind) nodes {
 	if !a.expect(kind, n) {
 		return nodes{a: a, items: nil, skips: skipped}
@@ -248,7 +249,7 @@ func (ns *nodes) node() syntax.Node {
 // nextContent returns the next node the cursor will yield that contributes
 // content, without moving the cursor. Labels are skipped: one attaches to the
 // item before it and emits nothing of its own, so it never stands between two
-// neighbours. Returns nil when nothing is left.
+// neighbors. Returns nil when nothing is left.
 func (ns *nodes) nextContent() syntax.Node {
 	for i := ns.pos; i < len(ns.items); i++ {
 		if k := ns.items[i].Kind(); !ns.skips.Contains(k) && k != syntax.KindLabel {
@@ -354,10 +355,10 @@ func unquote(s string) string {
 			case '\\', '"', '\'':
 				sb.WriteRune(r)
 			case 'u':
-				// The scanner validates both the shape and the code point of a
-				// `\u{...}` escape, so a string literal that reaches the
-				// analyzer always decodes. Anything else is drift: keep the
-				// text as written rather than panicking on user input.
+				// The scanner has already checked the shape and the code
+				// point of a `\u{...}` escape, so one that reaches here
+				// always decodes. If the two ever disagree, keep the text as
+				// written rather than panicking on a document.
 				if i >= len(s) || s[i] != '{' {
 					sb.WriteRune('\\')
 					sb.WriteRune(r)
@@ -383,7 +384,7 @@ func unquote(s string) string {
 				sb.WriteRune(rune(num))
 			default:
 				// Likewise: the scanner rejects unknown escapes, so this is
-				// only reachable on drift.
+				// only reached if the two disagree.
 				sb.WriteRune('\\')
 				sb.WriteRune(r)
 			}

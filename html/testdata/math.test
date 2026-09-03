@@ -82,7 +82,7 @@ $ bold(x) + sans(y) $
 $ 12 + x + "text" $
 │ <math display="block"><mrow><mn>12</mn><mo>+</mo><mi>x</mi><mo>+</mo><mi>text</mi></mrow></math>
 
---- labelled-equation ---
+--- labeled-equation ---
 $ x = y $ <eq>
 │ <math display="block" id="eq"><mrow><mi>x</mi><mo>=</mo><mi>y</mi></mrow></math>
 

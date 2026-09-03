@@ -1,5 +1,5 @@
 // Test that the whitespace between markup items survives lowering. A markup
-// space lowers to a text " ", which realization merges into its neighbours.
+// space lowers to a text " ", which realization merges into its neighbors.
 
 --- spacing-around-strong ---
 a *bold* word

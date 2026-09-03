@@ -1,81 +1,61 @@
-// Package analyzer is the bridge between Markst's concrete syntax tree and
-// evaluation. It walks the tree produced by the parser and emits an
-// [expr.Module] — a top-level function plus every closure nested inside it,
-// each in SSA form — that the evaluator can run without ever looking at the
-// syntax again.
+// Package analyzer lowers a Markst syntax tree to the SSA IR the evaluator
+// runs.
+//
+// [Analyze] walks the tree the parser produced and returns an [expr.Module]:
+// the document body as a function, plus one function per closure nested in it.
+// The evaluator never looks at the syntax again.
 //
 // # Scopes and frames
 //
-// The analyzer keeps two notions of nesting distinct.
+// A scope is a lexical region: a code block, a conditional, a loop body. It
+// determines only which source names are visible where.
 //
-// A scope is a lexical region introduced by source-level constructs (code
-// blocks, conditionals, loops, let-bindings, ...). Scopes only affect which
-// source names are visible at a given point.
+// A frame is one function, either the document body or a closure inside it.
+// Every SSA value, basic block, and capture belongs to exactly one frame.
 //
-// A frame corresponds to one function: the document body or any closure nested
-// inside it. Frames are the unit of SSA construction — every value reference,
-// basic block, and capture lives in exactly one frame.
-//
-// Scopes nest inside frames. A frame opens with its own boundary scope and
-// closes when its function is complete; lexical scopes inside come and go
-// without affecting the frame.
+// Scopes nest inside frames. A frame begins with a scope of its own and ends
+// when its function is complete; the scopes inside it open and close without
+// affecting it.
 //
 // # Name resolution
 //
-// When the analyzer encounters an identifier, it resolves the source name
-// against the scope chain and turns it into an SSA value reference. Four
-// outcomes are possible:
+// An identifier resolves against the scope chain to one of four things:
 //
-//   - A builtin, or a name supplied via [WithBindings], materializes as a
-//     constant inline.
+//   - A builtin, or a name from [WithBindings], becomes a constant in place.
 //
-//   - A name bound by a let, parameter, or destructuring pattern in the
-//     same frame reads as a local SSA value.
+//   - A name bound in the same frame, by a let, a parameter, or a
+//     destructuring pattern, becomes a local SSA value.
 //
-//   - A name bound in an enclosing frame becomes a capture: the enclosing
-//     function's value flows into the inner closure at construction time.
-//     Captures that cross more than one frame are threaded through each
-//     intermediate frame in turn.
+//   - A name bound in an enclosing frame becomes a capture, threaded through
+//     each frame in between and passed into the closure when it is built.
 //
-//   - A let-bound closure may refer to itself by name. The reference
-//     resolves to a self reference that the runtime materializes as the
-//     currently-executing closure value, with no capture allocated. This
-//     is what enables direct recursion.
+//   - A let-bound closure referring to itself becomes a self reference, which
+//     the evaluator resolves to the closure currently running. Direct
+//     recursion therefore needs no capture.
 //
-// Unknown names produce an "unknown variable" error.
+// A name that resolves to none of these is an "unknown variable" error.
 //
 // # Escapes
 //
-// break, continue, and return are escapes: they abandon the value a block is
-// building and jump away. break/continue unwind to the innermost loop on
-// [frame.loops]; bare return to the frame itself (a closure body,
-// [frame.isFn]).
+// break, continue, and return discard the value a block is building and
+// transfer control elsewhere: break and continue to the innermost enclosing
+// loop, a bare return to the closure body.
 //
-// An escape does not emit its control transfer at its own site. Typst treats
-// escapes as flow events: the statement containing the escape is evaluated to
-// its end (sibling arguments, enclosing calls) and only then does control
-// leave. Lowering mirrors that by recording a [pendingEscape] on the frame;
-// statement sequences stop lowering once one is pending, and the innermost
-// enclosing catch point — a conditional branch, a loop body, or the closure
-// body — emits the terminator ([analyzer.firePending]). Before the transfer,
-// the escape recovers the in-flight value built so far: the partial join of
-// the frame's open join scopes from the escape target inward, with crossed
-// loops contributing their accumulated iterations, so a bare return still
-// folds through an enclosing loop's body (see [analyzer.partialJoin]).
-//
-// Recovering the value is shared ([analyzer.partialJoin]); only the delivery
-// differs by escape kind. break/continue append the recovered value to the
-// loop's runtime accumulator and jump to its exit/header block, while return
-// hands it to a Return terminator directly.
+// The jump is not emitted where the escape is written. Typst finishes
+// evaluating the statement containing an escape, including sibling arguments
+// and enclosing calls, before control leaves. Lowering matches that by
+// recording the escape and emitting the jump at the innermost construct that
+// can catch it: a branch, a loop body, or the closure body. The escape takes
+// the value built so far with it, joined across every scope it crosses, so a
+// return inside a loop still includes that loop's completed iterations.
 //
 // # Errors
 //
-// Lexical and parse errors are already represented as [syntax.Error] nodes
-// embedded in the syntax tree; the analyzer threads them, alongside any
-// semantic errors it discovers (unknown variables, illegal writes to captured
-// variables, duplicate parameters, and so on), into the IR as [expr.Error]
-// instructions. The evaluator surfaces them at eval time, so the rest of the
-// document keeps rendering around the failure.
+// Scanner and parser errors are already in the tree as [syntax.Error] nodes.
+// The analyzer lowers those, along with the errors it finds itself (unknown
+// variables, writes to captured variables, duplicate parameters), to
+// [expr.Error] instructions. The evaluator raises them when it reaches them, so
+// the rest of the document still renders.
 package analyzer
 
 import (
@@ -97,11 +77,10 @@ import (
 // Option configures the analyzer.
 type Option func(*analyzer)
 
-// WithBindings makes name→value pairs available to the program as if they
-// were members of the built-in universe. References resolve at analyze time
-// and lower to inline [expr.Const] instructions, so values must be known
-// before [Analyze] runs. Values must be non-nil; pass [value.Error] for
-// "declared but evaluation must fail" placeholders.
+// WithBindings makes name/value pairs resolve as if they were built in. Names
+// resolve while analyzing and become constants in the IR, so the values must
+// be known before [Analyze] runs. Values must be non-nil; to declare a name
+// whose use must fail, bind a [value.Error].
 func WithBindings(bindings map[name.Name]value.Value) Option {
 	return func(a *analyzer) {
 		for name, v := range bindings {
@@ -110,65 +89,59 @@ func WithBindings(bindings map[name.Name]value.Value) Option {
 	}
 }
 
-// WithoutApproximations turns off the conservative approximations the analyzer
-// uses to lower less than the general case would require — see
-// [analyzer.ownsLine].
+// WithoutApproximations turns off the approximations the analyzer uses to lower
+// less than the general case needs.
 //
-// An approximation is always static and one-sided: it may skip work only when a
-// later, fully informed stage would undo that work anyway, and it does nothing
-// whenever it cannot tell. So turning them off changes how large the module is,
-// never the document it evaluates to. TestApproximationsPreserveOutput checks
-// that over the whole corpus by analyzing every case both ways.
-//
-// A change that is not output-preserving does not belong behind this option. If
-// disabling it changes a document, it is a semantic rule, not an approximation,
-// and it must run unconditionally.
+// An approximation only ever skips work a later stage would have undone, and
+// does nothing when it cannot tell, so this option changes how large the module
+// is and never the document it evaluates to. Anything that would change the
+// document is a semantic rule rather than an approximation, and must run
+// whatever this option says.
 func WithoutApproximations() Option {
 	return func(a *analyzer) {
 		a.disableApprox = true
 	}
 }
 
-// WithName sets the display name diagnostics about this source are reported
-// under, e.g. "lib.mst". It lands on [expr.Module.Origin] and travels with
-// every span the module produces, so a failure inside a function defined here
-// still names this source when it fires during another module's evaluation.
+// WithName sets the name diagnostics about this source are reported under,
+// such as "lib.mst". It goes on [expr.Module.Origin] and travels with the
+// module, so a failure inside a function defined here still names this source
+// when it fires during another module's evaluation.
 //
-// Without it the origin still carries the source — spans remain resolvable to
-// line and column — and is simply unnamed.
+// Without it the origin is unnamed, but still carries the source, so spans
+// still resolve to a line and column.
 func WithName(name string) Option {
 	return func(a *analyzer) {
 		a.name = name
 	}
 }
 
-// WithExports makes the top-level function return the file's top-level
-// bindings alongside its body, so a host can compile a file for the values it
-// defines rather than the document it produces. The returned value is a
-// two-element array: the body content, and a dict mapping each top-level
-// binding's name to its value as of the end of the file.
+// WithExports makes the top-level function return the file's bindings as well
+// as its body, so a host can compile a file for the values it defines rather
+// than the document it produces. The result is a two-element array: the body
+// content, and a dict of each top-level binding's name to its value at the end
+// of the file.
 //
-// Only bindings introduced at the top level are exported. Names bound inside a
-// block have gone out of scope by the time the exports are read, and constants
-// (the built-in universe, anything from [WithBindings]) name no variable and
-// are not the file's to export.
+// Only top-level bindings are exported. A name bound inside a block is out of
+// scope by then, and a constant — a builtin, or anything from [WithBindings] —
+// names no variable of this file's.
 func WithExports() Option {
 	return func(a *analyzer) {
 		a.exports = true
 	}
 }
 
-// Analyze converts the syntax tree rooted at n into an SSA [expr.Module].
-// Errors discovered during lowering (along with embedded scanner/parser
-// errors from the syntax tree) are emitted into the module as [expr.Error]
-// instructions and surfaced by [eval.Eval] at run time. The returned module
-// is always non-nil.
+// Analyze lowers a syntax tree to an SSA [expr.Module], which is never nil.
+//
+// Analyze never fails. Errors it finds, along with the scanner and parser
+// errors already in the tree, become [expr.Error] instructions in the module,
+// raised by the evaluator when it reaches them.
 func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 	a := &analyzer{source: n.Source, text: string(n.Src)}
-	// The universe is shared rather than copied per analysis: it is a binding
-	// per built-in, and building that map was one of the more expensive things
-	// an analysis did. A scope is pushed on top of it for the options to bind
-	// into, so nothing ever writes to the shared one.
+	// The universe is shared rather than copied per analysis: it holds a
+	// binding per builtin, and building that map is among the most expensive
+	// things an analysis does. The scope pushed on top of it below is where
+	// the options bind, so nothing ever writes to the shared one.
 	a.scope = universe()
 	a.openScope()
 
@@ -199,14 +172,14 @@ func Analyze(n syntax.RootNode, opts ...Option) *expr.Module {
 	return mod
 }
 
-// exportDict emits a dict of every variable bound in the top-level scope,
-// keyed by source name; see [WithExports]. Each value is read at the current
-// block — the end of the file — so a binding that was reassigned or defined
-// conditionally exports the value it ended up with.
+// exportDict emits a dict of every variable bound in the top-level scope, keyed
+// by source name; see [WithExports]. Each value is read at the current block,
+// the end of the file, so a binding that was reassigned or defined
+// conditionally exports its final value.
 //
-// The entries are sorted by name. Scope bindings live in a map, and the IR is
-// golden-tested, so an arbitrary iteration order would make the module differ
-// between runs of the same source.
+// The entries are sorted by name. Scope bindings are held in a map and the IR
+// is golden-tested, so map iteration order would make the module differ between
+// runs over the same source.
 func (a *analyzer) exportDict(top *scope, span syntax.Span) expr.Ref {
 	names := make([]name.Name, 0, len(top.bindings))
 	for n, b := range top.bindings {
@@ -234,18 +207,17 @@ type analyzer struct {
 	source syntax.Source
 
 	// texts and mathTexts allocate the content values a markup or math token
-	// lowers to. There is one per token — the constant pool cannot hold them,
-	// since a content value carries a label that the evaluator may set — so
-	// they are the values worth allocating in blocks rather than singly.
+	// lowers to. There is one per token, and the constant pool cannot hold
+	// them because a content value carries a label the evaluator may set, so
+	// these are worth allocating in blocks rather than one at a time.
 	texts     slab.Of[value.Text]
 	mathTexts slab.Of[value.MathText]
 
-	// text is the source as a string, converted once. The syntax tree carries
-	// bytes — scanning allocates nothing for a token's text that way — and the
-	// analyzer is where strings start to matter: a name to intern, a literal to
-	// hold in a value. Every node's text is exactly the source it spans, so
-	// [analyzer.str] hands those out as slices of this one string rather than a
-	// copy per node.
+	// text is the source as a string, converted once. The syntax tree holds
+	// bytes, so scanning allocates nothing per token, but the analyzer needs
+	// strings: a name to intern, a literal to store in a value. A node's text
+	// is exactly the source it spans, so [analyzer.str] returns slices of this
+	// string rather than copying per node.
 	text  string
 	scope *scope
 	b     *expr.Builder
@@ -282,10 +254,10 @@ type analyzer struct {
 type frame struct {
 	b *expr.Builder
 
-	// scope is the bottom of the frame's lexical scope chain: any further
-	// scopes the frame opens chain off it, and its parent is the outer
-	// frame's scope at push time. Name resolution stops treating bindings
-	// as locals once it walks past this scope.
+	// scope is the bottom of the frame's lexical scope chain. Scopes the
+	// frame opens chain off it, and its parent is the outer frame's scope at
+	// push time. Name resolution stops treating bindings as locals once it
+	// passes this scope.
 	scope *scope
 
 	// captures caches the capture Ref allocated for each captured
@@ -293,20 +265,20 @@ type frame struct {
 	// even if the body references it many times.
 	captures map[name.Name]expr.Ref
 
-	// isFn marks a closure-body frame, the target of bare return. It is false
-	// for the document-body frame, where return is illegal. Per-frame (like
-	// scopes, loops, and pending below) because escapes don't cross closure
-	// boundaries: a break inside a nested closure that itself sits inside a
-	// loop is invalid (and would jump to a block in the wrong function's CFG),
-	// and a return resolves to its own closure.
+	// isFn marks a closure-body frame, the target of a bare return. It is
+	// false for the document-body frame, where return is not allowed. Like
+	// scopes, loops, and pending below, it is per-frame because escapes do
+	// not cross closure boundaries: a break inside a closure nested in a loop
+	// is invalid, and would otherwise jump to a block in another function's
+	// CFG, and a return resolves to its own closure.
 	isFn bool
 
 	// joinScopes is the stack of open join scopes (see [joinScope]),
-	// innermost last: block scopes collecting in-flight items, interleaved in
+	// innermost last: block scopes collecting items so far, interleaved in
 	// source order with the accumulator entries of enclosing loops. Flattened
-	// from any index up to the top they are the in-flight value an escape
-	// recovers via [analyzer.partialJoin]. (Distinct from [frame.scope], the
-	// bottom of the frame's lexical scope chain.)
+	// from any index to the top, they give the value an escape takes with it
+	// via [analyzer.partialJoin]. This is not [frame.scope], which is the
+	// bottom of the frame's lexical scope chain.
 	joinScopes []joinScope
 
 	// loops is the stack of enclosing loops (see [loopInfo]), innermost last.
@@ -342,12 +314,13 @@ func (a *analyzer) popFrame() {
 	a.scope = f.scope.parent
 }
 
-// emitError emits an [expr.Error] instruction at the current insertion
-// point and returns its Ref. The Ref carries a [*value.Error] at eval time;
-// callers that produce a value at their site should return the Ref so any
-// enclosing construct sees an error operand and short-circuits via
-// [eval.propagatesFromOperands]. Callers in statement position discard the
-// Ref — the instruction stays in the block and still records the error.
+// emitError emits an [expr.Error] instruction at the current insertion point
+// and returns its Ref, which holds a [*value.Error] at eval time.
+//
+// A caller that produces a value should return this Ref, so an enclosing
+// construct sees an error operand and short-circuits through
+// [eval.propagatesFromOperands]. A caller in statement position discards it;
+// the instruction stays in the block and still records the error.
 func (a *analyzer) emitError(span syntax.Span, msg string, hints ...string) expr.Ref {
 	return a.b.Error(span, msg, expr.NoRef, hints...)
 }
@@ -383,17 +356,17 @@ func (a *analyzer) adoptParseErrors(n syntax.Node) {
 type scope struct {
 	parent *scope
 
-	// bindings maps a source name to its current SSA-mangled name within
-	// this scope. Used by the SSA lowering so that shadowing `let x = ...` in
-	// nested scopes doesn't collide with outer bindings in the Builder's flat
-	// currentDef table.
+	// bindings maps a source name to the [expr.Var] currently standing for it
+	// in this scope, so that a shadowing `let x = ...` in a nested scope does
+	// not collide with an outer binding in the builder's flat currentDef
+	// table.
 	bindings map[name.Name]binding
 
-	// mathScope, when set, is a module consulted as a low-precedence fallback
-	// during name resolution: it is checked only after the entire scope chain's
-	// bindings miss. The analyzer installs it on the scope wrapping an equation
-	// body so math identifiers (`pi`, `frac`, …) resolve through the normal
-	// resolution machinery while still being shadowed by any local binding.
+	// mathScope, when set, is a module consulted during name resolution only
+	// after every binding in the scope chain has missed. The analyzer installs
+	// it on the scope around an equation body, so math identifiers such as
+	// `pi` and `frac` resolve through the normal machinery while any local
+	// binding still shadows them.
 	mathScope value.ModuleDef
 }
 
@@ -437,7 +410,7 @@ func (a *analyzer) lookupMath(source name.Name) (binding, bool) {
 		if v := fallback.Get(source); v != nil {
 			return valueBinding{val: v}, true
 		}
-		// `std` is the way into the universe from math, so math can see it.
+		// `std` reaches the universe from math, so math resolves it too.
 		if source == names.Std {
 			if v := builtin.Universe[names.Std]; v != nil {
 				return valueBinding{val: v}, true
@@ -507,10 +480,10 @@ func (a *analyzer) assignVar(bnd binding, source name.Name, span syntax.Span) (e
 // Source-level names can shadow each other (`let x = 1; { let x = 2; ... }`).
 // The Braun-style builder uses a flat per-function variable table keyed by
 // [expr.Var], so each `let` allocates a fresh, versioned Var for the source
-// name. Scopes track only the Var currently visible for each source name;
-// closing a scope drops its mappings. Assignments without a `let` walk the
-// scope chain and rebind the existing Var, which is exactly what we want
-// for Braun's block-param insertion.
+// name. A scope tracks only the Var visible for each source name, and closing
+// it drops those mappings. An assignment without a `let` walks the scope chain
+// and rebinds the existing Var, which is what Braun's block-param insertion
+// needs.
 
 // allocVar allocates a fresh versioned [expr.Var] for source and binds it in
 // the current scope.

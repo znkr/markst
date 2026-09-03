@@ -57,9 +57,9 @@ func (p *parser) checkDepth(stops syntax.Set) bool {
 
 // depthExceeded replaces the input the caller would have parsed with a single
 // error node. It consumes up to the next token in stops that is not inside a
-// delimited group, or one token — plus the group it opens, if it opens one —
-// when stops is empty. Unless the input is exhausted it always consumes at
-// least one token, which is what keeps the callers' loops moving.
+// delimited group. When stops is empty it consumes one token, plus the group
+// that token opens if it opens one. Unless the input is exhausted it always
+// consumes at least one token, so the caller's loop makes progress.
 func (p *parser) depthExceeded(stops syntax.Set) {
 	from := len(p.nodes) - p.cur.trivia
 	balance := 0

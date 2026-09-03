@@ -10,46 +10,45 @@ import (
 	"znkr.io/markst/value"
 )
 
-// ModuleBuilder accumulates the per-module state shared by every [Builder]
-// during analysis.
+// ModuleBuilder holds what every [Builder] in one module shares: the constant
+// pool and the list of functions.
 type ModuleBuilder struct {
 	mod *Module
 
-	// constIndex provides an index from a constant to [Module.Constants]
-	// entries so repeated references to the same constant share a single module
-	// constant entry.
+	// constIndex maps a constant to its [Module.Constants] entry, so repeated
+	// references to the same constant share one entry.
 	constIndex map[any]int32
 
 	// consts allocates the Const instructions of every function in the module
-	// in blocks. Const is three quarters of the instructions a document lowers
-	// to — one per markup token that is not poolable, which content values are
-	// not — so it is the one kind worth not allocating singly.
+	// in blocks. Const accounts for about three quarters of the instructions a
+	// document lowers to, one per markup token, since content values cannot go
+	// in the constant pool. It is the only kind worth not allocating singly.
 	consts slab.Of[Const]
 }
 
-// Builder constructs an SSA [Function]. The analyzer drives it as it walks the
-// syntax tree, emitting instructions and tracking variable definitions per
-// block. Join values are materialized as block parameters; the corresponding
-// args on each predecessor terminator are populated as terminators are
-// emitted and as new params are added to a block. The on-the-fly construction
-// algorithm follows Braun, Buchwald & Hack (2013), "Simple and Efficient
-// Construction of Static Single Assignment Form".
+// Builder constructs one SSA [Function]. The analyzer drives it while walking
+// the syntax tree, emitting instructions and recording where each variable is
+// written. Reading a variable that two paths wrote differently adds a
+// [BlockParam] and fills in the args on each predecessor's terminator.
+//
+// Call [Builder.Finalize] when the function is complete.
 //
 // Typical usage:
 //
-//		mb := expr.NewModuleBuilder()
-//		b := mb.NewBuilder()
-//		v := b.Const(span, value.Int(1))
-//		b.WriteVar(name, b.CurrentBlock(), v)
-//		then := b.NewBlock()
-//		els  := b.NewBlock()
-//		join := b.NewBlock()
-//		b.Branch(span, cond, then, els)
-//		... emit then and els blocks, each ending with b.Jump(join) ...
-//		b.SealBlock(join)
-//		r := b.ReadVar(name, join)   // inserts a block param at join if needed
-//		fn := b.Function()
-//	 mod := mb.Module()
+//	mb := expr.NewModuleBuilder()
+//	b := mb.NewBuilder()
+//	v := b.Const(span, value.Int(1))
+//	b.WriteVar(name, b.CurrentBlock(), v)
+//	then := b.NewBlock()
+//	els := b.NewBlock()
+//	join := b.NewBlock()
+//	b.Branch(span, cond, then, els)
+//	// emit then and els, each ending with b.Jump(join)
+//	b.SealBlock(join)
+//	r := b.ReadVar(name, join) // adds a block param at join if needed
+//	b.Finalize()
+//	fn := b.Function()
+//	mod := mb.Module()
 type Builder struct {
 	fn  *Function
 	mb  *ModuleBuilder
@@ -65,10 +64,10 @@ type Builder struct {
 	// is deferred to seal time so that the args set is complete.
 	incompleteParams map[BlockID]map[Var]*BlockParam
 
-	// paramVar records the source [Var] each param joins. Used by
-	// [synthesizeArgs] and [SealBlock] to read the right value from each
-	// predecessor; never escapes the builder. Sidecar map (rather than a
-	// field on [BlockParam]) so the IR type stays free of build-time state.
+	// paramVar records the source [Var] each param joins. [synthesizeArgs] and
+	// [SealBlock] use it to read the right value from each predecessor. It is a
+	// separate map rather than a field on [BlockParam] so the IR type holds no
+	// build-time state, and it never escapes the builder.
 	paramVar map[*BlockParam]Var
 
 	// Set of blocks that have been sealed. A block is sealed when all of
@@ -81,21 +80,21 @@ type Builder struct {
 	// whenever an arg is appended or rewritten.
 	paramUsers map[Ref]map[*BlockParam]struct{}
 
-	// redirects records the rename target for each trivially-removed
-	// block param. Populated by [tryRemoveTrivialParam]; consumed by
-	// [Finalize], which transitively closes the map, rewrites every Ref
-	// in the IR through it, and physically splices the dead param slots
-	// from blocks and their incoming terminators. Never escapes the builder.
+	// redirects records the rename target of each trivially removed block
+	// param. [tryRemoveTrivialParam] fills it and [Finalize] consumes it,
+	// closing the map transitively, rewriting every Ref in the IR through it,
+	// and removing the dead param slots from blocks and their incoming
+	// terminators. It never escapes the builder.
 	redirects map[Ref]Ref
 
-	// liveWrites collects every Ref ever passed as the value side of a
-	// user-level [WriteVar] call. The SSA graph does not record these uses
-	// (writes update an internal table, not an instruction operand), so DCE
-	// counts each entry as +1 use to prevent dropping the RHS of a
-	// write-only assignment — whose evaluation may surface a runtime error
-	// even when the bound name is never read again. Builder-internal
-	// caching writes (from [readVarRecursive]) bypass this slice via
-	// [writeVarInternal] so they don't artificially pin param results.
+	// liveWrites holds every Ref passed as the value side of a [WriteVar]
+	// call. A write updates an internal table rather than an instruction
+	// operand, so the SSA graph does not record it as a use. Counting each
+	// entry here as one use keeps DCE from dropping the right-hand side of an
+	// assignment whose name is never read again, which can still fail at
+	// runtime. The builder's own caching writes go through writeVarInternal
+	// and are not recorded here, so they do not keep unused param results
+	// alive.
 	liveWrites []Ref
 
 	// versions tracks how many [Var]s have been minted for each source
@@ -104,23 +103,22 @@ type Builder struct {
 	// at y$1. Used by [NewVar].
 	versions map[name.Name]int
 
-	// captures records the source names of captures registered via
-	// [AddCapture], in the order they were added. Mirrors the indices of
-	// [Function.Captures]. Returned by [Captures] for the analyzer's outer-Ref
-	// wiring; the IR itself doesn't carry names because nothing consumes them
-	// post-Finalize.
+	// captures records the source names of captures registered through
+	// [AddCapture], in order, matching the indices of [Function.Captures].
+	// [Captures] returns them so the analyzer can wire up the outer Refs. The
+	// IR does not carry names, since nothing reads them after Finalize.
 	captures []name.Name
 }
 
-// NewModuleBuilder starts a fresh module. The returned ModuleBuilder is the
-// hub from which per-function [Builder]s are created.
+// NewModuleBuilder starts a new module. Make one [Builder] per function from
+// it with [ModuleBuilder.NewBuilder].
 func NewModuleBuilder() *ModuleBuilder {
 	return &ModuleBuilder{mod: &Module{}}
 }
 
-// Module returns the [Module] under construction. Safe to call mid-build to
-// e.g. attach the top-level function, but Constants is still growing until
-// every [Builder] has finished emitting.
+// Module returns the module being built. Calling it before every [Builder] has
+// finished is allowed — attaching the top-level function needs it — but the
+// constant pool is still growing until they have.
 func (mb *ModuleBuilder) Module() *Module { return mb.mod }
 
 // noneConstID returns the [Module.Constants] index of the interned
@@ -131,18 +129,18 @@ func (mb *ModuleBuilder) noneConstID() (int32, bool) {
 	return id, ok
 }
 
-// RegisterFunction appends fn to the module's closure list and returns the
-// assigned [FuncID]. Use this for closures hoisted out of the document body;
-// the top-level body is attached via [Module.Top].
+// RegisterFunction adds fn to the module as a closure and returns its
+// [FuncID]. The document body is not registered this way; it goes on
+// [Module.Top].
 func (mb *ModuleBuilder) RegisterFunction(fn *Function) FuncID {
 	id := FuncID(len(mb.mod.Functions))
 	mb.mod.Functions = append(mb.mod.Functions, fn)
 	return id
 }
 
-// NewBuilder starts construction of a fresh [Function] inside mb's module.
-// The entry block (id 0) is created and made current. All builders created
-// from the same ModuleBuilder share the constant pool.
+// NewBuilder starts a new [Function] in mb's module, with the entry block
+// created and current. Every builder from one ModuleBuilder shares its
+// constant pool.
 func (mb *ModuleBuilder) NewBuilder() *Builder {
 	b := &Builder{
 		fn:               &Function{SelfRef: NoRef},
@@ -187,14 +185,14 @@ func internKey(v value.Value) any {
 	case value.None, value.Bool, value.Int, value.Decimal, value.Str, value.Bytes, value.Ratio, value.Fraction, value.Length, value.Relative, value.Angle:
 		return v
 	case value.Float:
-		// Use a bitwise representation for float64 to ensure that different
-		// float values that compare equal (e.g. +0.0 and -0.0) get different
-		// keys, and that NaNs work as expected.
+		// Key floats by their bit pattern, so that values which compare equal
+		// but differ, such as +0.0 and -0.0, get different keys, and so that
+		// NaNs are handled correctly.
 		return float64key(math.Float64bits(float64(v)))
 	case *value.Function, *value.Type:
 		// Universe builtins and reflected types are global singletons, so
-		// pointer identity is a sound intern key. User-defined closures and
-		// partial applications (Function.With) only materialize at runtime and
+		// pointer identity is a valid intern key. User-defined closures and
+		// partial applications from Function.With exist only at runtime and
 		// never reach the pool.
 		return v
 	default:
@@ -205,32 +203,25 @@ func internKey(v value.Value) any {
 // Function returns the function under construction.
 func (b *Builder) Function() *Function { return b.fn }
 
-// CurrentBlock returns the block that subsequent [Emit]/terminator calls
-// will append to.
+// CurrentBlock returns the block instructions are being appended to.
 func (b *Builder) CurrentBlock() BlockID { return b.cur }
 
-// NewBlock allocates a fresh empty block and returns its id. The new block
-// is not made current; use [SetBlock].
+// NewBlock adds an empty block and returns its id. It does not become current;
+// use [Builder.SetBlock] for that.
 func (b *Builder) NewBlock() BlockID {
 	id := BlockID(len(b.fn.Blocks))
 	b.fn.Blocks = append(b.fn.Blocks, &BasicBlock{ID: id})
 	return id
 }
 
-// SetBlock makes id the current insertion point.
+// SetBlock makes id the block instructions are appended to.
 func (b *Builder) SetBlock(id BlockID) { b.cur = id }
 
-// SealBlock marks a block as having no more predecessors to be added. While
-// the block was unsealed, [Jump]/[Branch] emissions targeting it carried
-// empty arg lists and [readVarRecursive] created params without filling
-// their incoming args (cycle hazard: a back-edge can reach back into this
-// block during pred-walk). At seal time we walk every incomplete param and
-// append one arg per predecessor (computed by reading the param's associated
-// [Var] from each pred), then run trivial-param elimination.
+// SealBlock declares that a block will get no further predecessors, which lets
+// the builder finish any block param it could not fill in before.
 //
-// Branch joins are typically sealed immediately after their predecessors'
-// terminators are emitted. Loop-header blocks are sealed only after the
-// back-edge has been added.
+// Seal a branch join once both arms have been terminated, and a loop header
+// only once its back-edge exists.
 func (b *Builder) SealBlock(block BlockID) {
 	if _, ok := b.sealed[block]; ok {
 		return
@@ -241,13 +232,12 @@ func (b *Builder) SealBlock(block BlockID) {
 	if len(pending) == 0 {
 		return
 	}
-	// For each predecessor, walk block.Params in declaration order and
-	// append one arg per param. block.Params order is fixed by the order
-	// of [newParam] calls during analyzer construction (source order), so
-	// the resulting IR shape is deterministic across runs. currentDef
-	// already maps each pending param's var to the param's Ref, so a
-	// back-edge ReadVar that reaches this block resolves directly without
-	// creating duplicates.
+	// For each predecessor, walk block.Params in declaration order and append
+	// one arg per param. Params are in the order [Builder.AddParam] added
+	// them, which is source order, so the IR comes out the same on every run.
+	// currentDef already maps each pending param's var to that param's Ref, so
+	// a back-edge ReadVar reaching this block resolves straight to it instead
+	// of making a second one.
 	params := b.fn.Blocks[block].Params
 	for _, predID := range b.fn.Blocks[block].Preds {
 		predTerm := b.fn.Blocks[predID].Term
@@ -280,9 +270,8 @@ func (b *Builder) SealBlock(block BlockID) {
 
 // Terminators /////////////////////////////////////////////////////////////////
 
-// Jump terminates the current block with an unconditional branch to target,
-// passing one arg per [BlockParam] on the target (in declaration order).
-// The target's predecessor list is updated.
+// Jump ends the current block with a jump to target, passing one arg per
+// [BlockParam] the target declares.
 func (b *Builder) Jump(span syntax.Span, target BlockID) {
 	cur := b.cur
 	args := b.synthesizeArgs(target, cur)
@@ -294,9 +283,9 @@ func (b *Builder) Jump(span syntax.Span, target BlockID) {
 	}
 }
 
-// Branch terminates the current block with a two-way branch on cond. Each
-// arm carries one arg per [BlockParam] on its respective target. The
-// analyzer is responsible for ensuring thenBlk != elseBlk; this is asserted.
+// Branch ends the current block with a branch on cond, each arm passing one
+// arg per [BlockParam] its target declares. It panics if the two targets are
+// the same block.
 func (b *Builder) Branch(span syntax.Span, cond Ref, thenBlk, elseBlk BlockID) {
 	if thenBlk == elseBlk {
 		panic("Branch: Then and Else must be distinct blocks")
@@ -323,8 +312,8 @@ func (b *Builder) Branch(span syntax.Span, cond Ref, thenBlk, elseBlk BlockID) {
 	}
 }
 
-// Return terminates the current block with a return of v. Pass [NoRef] for
-// a bare return.
+// Return ends the current block with a return of v. Pass [NoRef] for a bare
+// return.
 func (b *Builder) Return(span syntax.Span, v Ref) {
 	b.fn.Blocks[b.cur].Term = &Return{term: term{span: span}, Value: v}
 }
@@ -350,11 +339,11 @@ func (b *Builder) synthesizeArgs(target, cur BlockID) []Ref {
 
 // Instructions ////////////////////////////////////////////////////////////////
 
-// Const registers v in the module's constant pool (deduping when possible)
-// and returns the resulting module-constant [Ref]. No instruction is emitted
-// and no function-local [Def] slot is consumed. span is currently unused —
-// spans on constants only matter at their use sites, which carry their own
-// spans on the consuming instruction.
+// Const puts v in the module's constant pool, reusing an entry where it can,
+// and returns the [Ref] naming it. No instruction is emitted and no value slot
+// is used, so a constant costs nothing at run time. span is ignored: a
+// constant is only ever reported at the instruction that consumes it, which
+// has a span of its own.
 func (b *Builder) Const(span syntax.Span, v value.Value) Ref {
 	if ref := b.mb.addConstant(v); ref != NoRef {
 		return ref
@@ -364,11 +353,10 @@ func (b *Builder) Const(span syntax.Span, v value.Value) Ref {
 	})
 }
 
-// PeekVar returns the SSA def currently visible for v in this builder's
-// current block, without inserting any block params. Returns (NoRef, false) when
-// the variable has no definition recorded in the current block — predecessors
-// are not walked. Used by side-effect-free callers (e.g. the analyzer's
-// capture-time const peek) that want a conservative "current value" lookup.
+// PeekVar returns the value of v written in the current block, and reports
+// whether there was one. Unlike [Builder.ReadVar] it modifies nothing: it does
+// not consult predecessors and never adds a block param, so a caller can query
+// it without changing the IR.
 func (b *Builder) PeekVar(v Var) (Ref, bool) {
 	refs, ok := b.currentDef[v]
 	if !ok {
@@ -429,12 +417,11 @@ func (b *Builder) FieldRead(span, fieldSpan syntax.Span, target Ref, field name.
 	})
 }
 
-// MethodField emits a field-access instruction that is the callee of a method
-// call (`target.field(...)`). Method-call semantics differ from a plain field
-// read: dictionary keys cannot be called directly, and a missing field on a
-// content element or method-bearing type is reported as a missing *method*.
-// targetText is the source text of the target expression, used to build the
-// "wrap in parentheses" / "remove the arguments" hints.
+// MethodField emits the field access that is the callee of a method call,
+// `target.field(...)`. It differs from a plain field read: a dictionary key
+// cannot be called, and a field a type does not have is reported as a missing
+// method rather than a missing field. targetText is the source of the target
+// expression, which the hints quote back.
 func (b *Builder) MethodField(span, fieldSpan syntax.Span, target Ref, field name.Name, targetText string, math bool) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &MethodField{
@@ -476,9 +463,8 @@ func (b *Builder) MathCall(span syntax.Span, callee Callee, args []CallArg, mut 
 	})
 }
 
-// CallSet emits a function-call lvalue assignment. The instruction is
-// side-effect-only: it has no SSA result. Errors during the call flow
-// through the session, not through a value Ref.
+// CallSet emits a call whose result is assigned to. It produces no value, so a
+// failure in the call is recorded directly rather than traveling as a result.
 func (b *Builder) CallSet(span syntax.Span, callee Callee, args []CallArg, blocks []Ref, newVal Ref, op syntax.BinaryOp) {
 	b.emitVoid(func() Instruction {
 		return &CallSet{
@@ -492,10 +478,8 @@ func (b *Builder) CallSet(span syntax.Span, callee Callee, args []CallArg, block
 	})
 }
 
-// DiscardCheck emits a side-effect-only instruction that warns at eval time
-// when value (the join a bare return would have produced) is content discarded
-// by an explicit `return`. No SSA result; the warning flows through the
-// session.
+// DiscardCheck emits an instruction that warns at eval time when value is
+// content an explicit `return` threw away. It produces no value.
 func (b *Builder) DiscardCheck(span syntax.Span, value Ref) {
 	b.emitVoid(func() Instruction {
 		return &DiscardCheck{
@@ -697,7 +681,7 @@ func (b *Builder) ContentResult(span syntax.Span, items []Ref) Ref {
 }
 
 // MathContentResult emits a content-join instruction over the items of an
-// equation, which joins in math flavour (see [ContentResult.Math]).
+// equation, which joins in math flavor (see [ContentResult.Math]).
 func (b *Builder) MathContentResult(span syntax.Span, items []Ref) Ref {
 	return b.emit(span, func(ref Ref) Instruction {
 		return &ContentResult{instr: instr{result: ref}, Items: items, Math: true}
@@ -912,12 +896,9 @@ func (b *Builder) emitVoid(mkInstr func() Instruction) {
 
 // Braun SSA construction //////////////////////////////////////////////////////
 
-// WriteVar records that v has SSA value val visible from block onwards.
-// This is the user-level entry point (called from analyzer lowering); the
-// write is also recorded in [Builder.liveWrites] so DCE keeps val alive
-// even when v is never read again. Internal SSA-construction writes
-// (cycle-breaking caches in [readVarRecursive]) call [writeVarInternal]
-// instead so they don't artificially pin block-param results.
+// WriteVar records that v holds val from block onwards. The write counts as a
+// use of val, so an assignment whose right-hand side fails is kept even if v is
+// never read again.
 func (b *Builder) WriteVar(v Var, block BlockID, val Ref) {
 	b.writeVarInternal(v, block, val)
 	if val >= 0 {
@@ -935,8 +916,9 @@ func (b *Builder) writeVarInternal(v Var, block BlockID, val Ref) {
 	defs[block] = val
 }
 
-// ReadVar returns the SSA value for v visible from block, inserting block
-// params as needed. Returns [NoRef] if v has never been written.
+// ReadVar returns the value of v as seen from block, adding block params where
+// paths meeting there wrote different values. It returns [NoRef] if v was never
+// written.
 func (b *Builder) ReadVar(v Var, block BlockID) Ref {
 	if v.Name == name.Invalid {
 		panic("invalid var")
@@ -950,10 +932,10 @@ func (b *Builder) ReadVar(v Var, block BlockID) Ref {
 func (b *Builder) readVarRecursive(v Var, block BlockID) Ref {
 	var val Ref
 	if _, ok := b.sealed[block]; !ok {
-		// Unsealed (e.g. loop header before back-edge is in): place an
-		// incomplete param. Args are filled at SealBlock when the pred
-		// list is final. Deferring avoids the cycle hazard from a back-edge
-		// reaching this block during pred-walk.
+		// The block is unsealed, as a loop header is before its back-edge
+		// exists, so add an incomplete param. SealBlock fills its args once
+		// the predecessor list is final. Deferring this avoids a cycle when
+		// a back-edge reaches this block while walking predecessors.
 		p := b.allocateParam(block, v)
 		val = p.result
 		if b.incompleteParams[block] == nil {
@@ -967,9 +949,9 @@ func (b *Builder) readVarRecursive(v Var, block BlockID) Ref {
 		// caller (analyzer) can report an error.
 		return NoRef
 	} else {
-		// Sealed multi-pred: allocate param, write currentDef *before*
-		// the backfill walk so a recursive ReadVar that reaches this
-		// block via a pred finds the param and terminates.
+		// Sealed with several predecessors. Allocate the param and write
+		// currentDef before walking back, so a recursive ReadVar reaching
+		// this block through a predecessor finds the param and stops.
 		p := b.allocateParam(block, v)
 		val = p.result
 		b.writeVarInternal(v, block, val)
@@ -1017,10 +999,10 @@ func (b *Builder) backfillParamArgs(p *BlockParam) {
 // self-references). In that case it can be replaced by that single value.
 // Returns the Ref to use in place of the (possibly removed) param.
 //
-// Rather than rewriting every instruction operand that references the param
-// — which would require type-switching every Instruction kind — we record a
-// rename in [Builder.redirects] pointing the param's Ref at its single
-// value. [Builder.Finalize] closes the map, rewrites every Ref in the IR
+// Rewriting every operand that references the param here would mean type-
+// switching over every instruction kind, so instead the param's Ref is
+// recorded in [Builder.redirects] pointing at its one value.
+// [Builder.Finalize] closes the map, rewrites every Ref in the IR
 // through it, and physically splices the dead param slot. The "already
 // trivialized" check uses [Builder.redirects] directly (instead of a dead
 // flag on the IR type), keeping cascade idempotent without leaking build
@@ -1053,8 +1035,8 @@ func (b *Builder) tryRemoveTrivialParam(p *BlockParam) Ref {
 		same = op
 	}
 	if same == NoRef {
-		// Sits on unreachable code (no real defining operands). Leave alone;
-		// the analyzer surfaces undefined-var errors via NoRef-tainted reads.
+		// Unreachable code, with no real defining operands. Leave it alone;
+		// the analyzer reports undefined variables through NoRef reads.
 		return p.result
 	}
 	users := b.paramUsers[p.result]

@@ -6,30 +6,30 @@ import (
 	"znkr.io/markst/value"
 )
 
-// Instruction is a single SSA operation. Instructions live inside
-// [BasicBlock.Instrs] in program order; each produces a single SSA value (its
-// [Result]) or [NoRef] for void operations.
+// Instruction is one SSA operation. Instructions are held in
+// [BasicBlock.Instrs] in program order.
 //
-// Per-Ref source spans for value-producing kinds live in [Function.RefSpans]
-// keyed by [Result]; the [instr] base therefore carries no span field.
-// Void-instruction kinds (which have no Result) keep their span on the
-// [voidInstr] base.
+// Most instructions produce a value; the ones that only have an effect produce
+// [NoRef] instead. The span an instruction came from is in [Function.RefSpans],
+// keyed by its result.
 type Instruction interface {
+	// Result returns the SSA value this instruction produces, or [NoRef] if it
+	// produces none.
 	Result() Ref
+
+	// Operands appends the instruction's Ref operands to dst and returns the
+	// result. Passing a scratch slice back in avoids an allocation per call.
 	Operands(dst []Ref) []Ref
-	// RemapOperands substitutes every Ref-typed operand through rename.
-	// Used by [Builder.Finalize] to inline trivial-param removals.
+
+	// RemapOperands replaces every Ref operand with rename of it.
 	RemapOperands(rename func(Ref) Ref)
+
 	aInstruction()
 }
 
-// IsPure reports whether inst can be safely removed when its result Ref has
-// no uses. Pure instructions have no observable effect beyond producing
-// their result; impure ones (calls, error-recording, iterator mutation,
-// stub TODO instructions) must be kept regardless of use count.
-//
-// Block params are always pure; this predicate is only consulted for
-// instructions.
+// IsPure reports whether instr can be dropped when nothing uses its result. A
+// pure instruction does nothing but produce that result; an impure one — a
+// call, a recorded error, a step of an iterator — has to run either way.
 func IsPure(instr Instruction) bool {
 	switch instr.(type) {
 	case *Const, *Unary, *Binary,
@@ -47,11 +47,9 @@ func IsPure(instr Instruction) bool {
 	return false
 }
 
-// instr is the base for value-producing instruction kinds: those that
-// publish their result as an SSA value via [Result]. Concrete kinds embed
-// *instr to inherit Result/aInstruction (and setResult, which is used by
-// [Builder.Finalize]'s Ref-compaction pass). The source span lives in
-// [Function.RefSpans] indexed by [Result], not on the instruction.
+// instr is embedded by the instruction kinds that produce a value. It supplies
+// Result and setResult, and having setResult is what marks a kind as
+// value-producing for [Builder.Finalize].
 type instr struct {
 	result Ref
 }
@@ -60,12 +58,10 @@ func (i *instr) Result() Ref     { return i.result }
 func (i *instr) aInstruction()   {}
 func (i *instr) setResult(r Ref) { i.result = r }
 
-// voidInstr is the base for side-effect-only instruction kinds: those that
-// have no SSA result. Embedding voidInstr instead of [instr] is what makes
-// a kind structurally void — there is no result field to misuse, no
-// setResult method, and [Result] is hardcoded to [NoRef]. Compaction and
-// other Ref-rewriting passes dispatch on the absence of setResult to skip
-// these kinds.
+// voidInstr is embedded by the instruction kinds that only have an effect. It
+// has no result field and no setResult, so passes that rewrite result Refs skip
+// these kinds. It carries the span instead, which [instr] leaves to
+// [Function.RefSpans].
 type voidInstr struct {
 	span syntax.Span
 }
@@ -76,14 +72,20 @@ func (i *voidInstr) aInstruction()     {}
 
 // Terminator ends a [BasicBlock]. Every block has exactly one.
 type Terminator interface {
+	// Successors returns the blocks control can reach from here.
 	Successors() []BlockID
-	// Operands returns the Ref-typed operands of the terminator, including
-	// every arg flowing to a successor's [BlockParam] slot.
+
+	// Operands appends the terminator's Ref operands to dst and returns the
+	// result, including the args flowing into each successor's [BlockParam]s.
 	Operands(dst []Ref) []Ref
-	// RemapOperands substitutes every Ref-typed operand through rename,
-	// including args.
+
+	// RemapOperands replaces every Ref operand with rename of it, args
+	// included.
 	RemapOperands(rename func(Ref) Ref)
+
+	// Span returns the source this terminator came from.
 	Span() syntax.Span
+
 	aTerminator()
 }
 
@@ -94,9 +96,8 @@ type term struct {
 func (t *term) Span() syntax.Span { return t.span }
 func (t *term) aTerminator()      {}
 
-// Jump unconditionally transfers control to Target, carrying Args into
-// Target's [BlockParam]s in declaration order. `len(Args)` always equals
-// `len(Blocks[Target].Params)`.
+// Jump passes control to Target, binding Args to Target's [BlockParam]s in
+// order. There is always exactly one arg per param.
 type Jump struct {
 	term
 	Target BlockID
@@ -111,10 +112,9 @@ func (t *Jump) RemapOperands(f func(Ref) Ref) {
 	}
 }
 
-// Branch is a two-way branch on a boolean SSA value. ThenArgs flow to
-// Blocks[Then].Params on the true edge; ElseArgs flow to
-// Blocks[Else].Params on the false edge. Then and Else are distinct
-// blocks (analyzer-enforced).
+// Branch passes control to Then or Else depending on Cond, binding ThenArgs or
+// ElseArgs to that block's [BlockParam]s. Then and Else are always different
+// blocks.
 type Branch struct {
 	term
 	Cond     Ref
@@ -195,7 +195,8 @@ func edgeArgs(pred Terminator, target BlockID) *[]Ref {
 
 // Instructions ////////////////////////////////////////////////////////////////
 //
-// Concrete instruction types live here. Each embeds [inst] for span/result.
+// The instruction kinds. Each embeds [instr] or, when it produces no value,
+// [voidInstr].
 
 // Const materializes a constant runtime value.
 type Const struct {
@@ -316,16 +317,16 @@ type FieldRead struct {
 // MethodField reads the callee of a method call (`target.field(...)`). It uses
 // the same field resolution as [FieldRead] but applies method-call error
 // semantics: dictionary keys are not directly callable, and a missing field on
-// a content element or a method-bearing type is reported as a missing *method*
+// a content element or a method-bearing type is reported as a missing method
 // rather than a missing field. TargetText is the source text of the target
 // expression, used to build the dictionary-key call hints.
 type MethodField struct {
 	fieldAccess
 	TargetText string
 	// Math is true when the method call is in math mode (`$ target.field(...) $`).
-	// Math-mode calls report the same errors but with math-specific hints (steer
-	// the user to code mode) and, for dictionary keys holding a non-function,
-	// suggest adding a space before the parentheses instead of dropping them.
+	// A math-mode call reports the same errors with math-specific hints, which
+	// point at code mode, and for a dictionary key holding a non-function suggest
+	// adding a space before the parentheses rather than removing them.
 	Math bool
 }
 
@@ -363,7 +364,7 @@ type Callee struct {
 // Call invokes a function value. Args carry the positional, named, and spread
 // arguments in source order; Blocks holds the Refs of any trailing content
 // blocks (markup form: `f[...]`). AllowSetter is true when this call is the LHS
-// of an assignment, signalling that the callee's runtime should surface a
+// of an assignment, signaling that the callee's runtime should surface a
 // setter via FunctionCallContext. Mut, set for method calls, carries the
 // receiver place check that reports "cannot mutate a temporary value" when the
 // resolved method is mutating.
@@ -404,15 +405,16 @@ type MathBadArg struct {
 	Hints []value.Hint
 }
 
-// MutCheck describes the receiver of a method call for the runtime
-// mutable-place check. When the call's resolved callee is a mutating
-// ([value.Function.Impure]) method, the receiver must be a mutable place or the
-// call reports "cannot mutate a temporary value" at RecvSpan. Place-ness is
-// decided dynamically: the receiver chain must root in a variable
-// (RecvTemporary is false) and every method link must resolve to an accessor
-// (RecvAccessors, checked via [value.Function.Accessor]). An empty RecvAccessors
-// with RecvTemporary false is an unconditional place (a bare identifier or field
-// chain).
+// MutCheck describes a method call's receiver, so the evaluator can tell
+// whether the call is allowed to mutate it.
+//
+// A mutating method ([value.Function.Impure]) needs a receiver that names a
+// place rather than a temporary; if it does not, the call reports "cannot
+// mutate a temporary value" at RecvSpan. Whether it does can only be settled at
+// run time: the receiver has to be rooted in a variable (RecvTemporary false),
+// and every method in the chain has to be an accessor (RecvAccessors, checked
+// with [value.Function.Accessor]). A bare identifier or field chain has no
+// accessors to check and is always a place.
 type MutCheck struct {
 	RecvSpan      syntax.Span
 	RecvTemporary bool
@@ -761,10 +763,9 @@ func (r *Error) RemapOperands(f func(Ref) Ref) {
 	}
 }
 
-// AttachLabel binds a label name to the content produced by Content. It also
-// registers the label in the evaluator's label set so subsequent [RefMarkup]
-// instructions can resolve it. Re-labelling produces a runtime warning and
-// discards the older label, matching legacy semantics.
+// AttachLabel puts a label on the content Content produces, and records it in
+// the document's label set so a [RefMarkup] can resolve it. Labeling content
+// that already has a label warns at eval time and keeps the newer label.
 type AttachLabel struct {
 	instr
 	Content Ref
@@ -832,7 +833,7 @@ type JoinResult struct {
 func (a *JoinResult) Operands(dst []Ref) []Ref      { return append(dst, a.Acc) }
 func (a *JoinResult) RemapOperands(f func(Ref) Ref) { a.Acc = f(a.Acc) }
 
-// Heading represents a `= Title`-style heading at the given level.
+// Heading is a `= Title` heading at the given level.
 type Heading struct {
 	instr
 	Level int
@@ -891,7 +892,7 @@ func (r *RefMarkup) RemapOperands(f func(Ref) Ref) {
 	}
 }
 
-// ListItem represents a bulleted list item.
+// ListItem is one item of a bulleted list.
 type ListItem struct {
 	instr
 	Body Ref
@@ -900,7 +901,8 @@ type ListItem struct {
 func (l *ListItem) Operands(dst []Ref) []Ref      { return append(dst, l.Body) }
 func (l *ListItem) RemapOperands(f func(Ref) Ref) { l.Body = f(l.Body) }
 
-// EnumItem represents a numbered list item. Number is -1 for "+" markers.
+// EnumItem is one item of a numbered list. Number is -1 when the item was
+// written with `+` and takes its number from its position.
 type EnumItem struct {
 	instr
 	Number int
@@ -910,7 +912,7 @@ type EnumItem struct {
 func (e *EnumItem) Operands(dst []Ref) []Ref      { return append(dst, e.Body) }
 func (e *EnumItem) RemapOperands(f func(Ref) Ref) { e.Body = f(e.Body) }
 
-// TermItem represents a definition-list entry: term / description.
+// TermItem is one entry of a term list: a term and its description.
 type TermItem struct {
 	instr
 	Term        Ref
@@ -925,8 +927,8 @@ func (t *TermItem) RemapOperands(f func(Ref) Ref) {
 
 // Math instructions ///////////////////////////////////////////////////////////
 
-// Equation represents a math equation `$...$`. Block reports whether it is
-// displayed on its own line.
+// Equation is a math equation, `$...$`. Block reports whether it stands on a
+// line of its own rather than in the surrounding text.
 type Equation struct {
 	instr
 	Block bool
@@ -1026,11 +1028,7 @@ func (m *MathDelimited) RemapOperands(f func(Ref) Ref) {
 	m.Close = f(m.Close)
 }
 
-// Stub instructions for currently-unimplemented constructs ////////////////////
-//
-// Set/show rules, contextual blocks, and module includes have IR placeholders
-// so the analyser can produce well-formed modules; the evaluator panics on
-// these (matching today's behaviour for the legacy tree IR).
+// Rules and other top-level constructs /////////////////////////////////////////
 
 // SetRule is a `set target(args) [if cond]` rule.
 type SetRule struct {

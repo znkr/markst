@@ -20,11 +20,12 @@ type Of[T any] struct {
 	block []T
 }
 
-// New adds v to the slab and returns a pointer to it. Pointers stay valid: a
-// full block is replaced rather than grown, because growing would copy the
-// values already handed out while the pointers to them keep pointing into the
-// block they were cut from.
+// New adds v to the slab and returns a pointer to it. The pointer stays valid
+// for as long as the slab does.
 func (s *Of[T]) New(v T) *T {
+	// A full block is replaced rather than grown: growing would copy the values
+	// already handed out, leaving every pointer to them behind in the old
+	// block.
 	if len(s.block) == cap(s.block) {
 		s.block = make([]T, 0, Block)
 	}
@@ -32,9 +33,9 @@ func (s *Of[T]) New(v T) *T {
 	return &s.block[len(s.block)-1]
 }
 
-// Slice returns n zero values in one run, for a caller that wants a slice out
-// of the slab rather than a pointer. Its capacity is its length, so appending
-// to it copies rather than writing over whatever the slab hands out next.
+// Slice returns n contiguous zero values, for a caller that needs a slice from
+// the slab rather than a pointer. Its capacity equals its length, so appending
+// to it copies rather than overwriting the next values the slab allocates.
 func (s *Of[T]) Slice(n int) []T {
 	if n == 0 {
 		return nil

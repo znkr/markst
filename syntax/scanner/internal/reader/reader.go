@@ -5,8 +5,8 @@ import (
 	"unicode/utf8"
 )
 
-// EOF represents the end of input. Returned by [Reader.Next] and [Reader.Peek]
-// when all source text has been consumed.
+// EOF is what [Reader.Next] and [Reader.Peek] return once the source is used
+// up. No valid rune has this value.
 const EOF rune = -1
 
 // Reader provides character-level reading over UTF-8 source text, tailored to
@@ -79,7 +79,6 @@ func (b *Reader) Next() rune {
 			b.newlines = append(b.newlines, uint32(b.cur))
 		}
 	} else if b.col >= 0 {
-		// Only update column if valid.
 		b.col++
 	}
 	return r
@@ -111,7 +110,7 @@ func (b *Reader) Scout(dist int) (rune, bool) {
 		return r, true
 	}
 
-	// dist > 0
+	// Scouting forwards.
 	if b.ch == EOF {
 		return utf8.RuneError, false
 	}
@@ -133,9 +132,8 @@ func (b *Reader) Scout(dist int) (rune, bool) {
 	return r, true
 }
 
-// Backup undoes the last call to [Next].
-//
-// Panics if called after [Release] or at the beginning of the stream.
+// Backup undoes the last call to [Reader.Next]. It panics at the beginning of
+// the source, where there is nothing to undo.
 func (b *Reader) Backup() {
 	if b.cur == 0 {
 		panic("backup: cannot backup past the beginning")
@@ -144,8 +142,8 @@ func (b *Reader) Backup() {
 	b.cur -= n
 	b.ch = ch
 	b.chw = n
-	// Move back one column, if we go back to < 0, it will be recomputed on next Column() call or
-	// when Next() encounters a newline.
+	// Move back one column. Going below 0 is fine: the next Column call
+	// recomputes it, as does Next on reaching a newline.
 	b.col--
 }
 

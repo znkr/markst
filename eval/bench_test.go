@@ -39,7 +39,7 @@ func BenchmarkEvaluate(b *testing.B) {
 }
 
 // BenchmarkRealize is the second half: paragraphs formed, items grouped, show
-// rules applied, headings labelled.
+// rules applied, headings labeled.
 func BenchmarkRealize(b *testing.B) {
 	mod := benchModule(b)
 	s, v := runTop(mod, nil)

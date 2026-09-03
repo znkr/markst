@@ -13,11 +13,11 @@ import (
 )
 
 // realizeDocument turns the recorded content tree into a realized
-// [value.Document]: paragraphs are formed, list/enum/term items grouped,
-// `*value.Styled` wrappers resolved (show recipes applied, `set document`
-// properties hoisted), and every unlabelled heading given a label to be linked
-// by. It runs inside [Eval] while the session — and any closures captured by
-// show transforms — are still live.
+// [value.Document]: paragraphs are formed, list, enum and term items are
+// grouped, `*value.Styled` wrappers are resolved by applying show recipes and
+// hoisting `set document` properties, and every unlabeled heading is given a
+// label. It runs inside [Eval], while the session and any closures captured by
+// show transforms are still valid.
 func (s *session) realizeDocument(c value.Content) *value.Document {
 	// Realize first: the body is where the `set document` rules live, so
 	// s.doc isn't populated until it has been walked.
@@ -33,7 +33,7 @@ func (s *session) realizeDocument(c value.Content) *value.Document {
 	//
 	// A caller who asked for an index gets it built here, off the same pass:
 	// the index records structure only, so building it before the labels are
-	// handed out records the same document, and labelling then reads the
+	// handed out records the same document, and labeling then reads the
 	// headings off the index rather than walking the document a second time.
 	var tree value.Tree = d
 	if s.index != nil {
@@ -54,8 +54,8 @@ func topChildren(c value.Content) []value.Content {
 }
 
 // realizeBody flattens and realizes a run of sibling content, then groups it
-// into paragraphs and item containers. This is *block context*: bare inline runs
-// become paragraphs.
+// into paragraphs and item containers. This is block context, where a bare
+// inline run becomes a paragraph.
 func (s *session) realizeBody(children []value.Content, label *value.Label) value.Content {
 	r := seqOf(groupContent(trimRun(mergeText(s.flattenAndRealize(children)), true, true)))
 	if label != nil {
@@ -64,12 +64,12 @@ func (s *session) realizeBody(children []value.Content, label *value.Label) valu
 	return r
 }
 
-// flattenAndRealize realizes each child and splices unlabeled sequences (and
-// resolved style scopes) into a single flat run, so paragraph/item grouping sees
-// across nested-sequence boundaries.
+// flattenAndRealize realizes each child and splices unlabeled sequences, and
+// resolved style scopes, into one flat run, so that paragraph and item grouping
+// works across nested sequences.
 func (s *session) flattenAndRealize(children []value.Content) []value.Content {
-	// One entry per child before anything flattens into it, which is what most
-	// runs come to: sized from the run rather than doubled up to it.
+	// One entry per child, before any flattening adds more. Most runs need no
+	// more than this, so sizing from the run avoids growing the slice.
 	out := make([]value.Content, 0, len(children))
 	for _, ch := range children {
 		switch c := ch.(type) {
@@ -125,8 +125,8 @@ func (s *session) realize(c value.Content) value.Content {
 	case *value.HTMLElem:
 		return &value.HTMLElem{Tag: c.Tag, Attrs: c.Attrs, Body: s.realizeHtmlBody(c), Block: c.Block, Label: c.Label}
 	case *value.Equation:
-		// A block equation's body ends where the block ends; an inline one sits
-		// in the middle of a line, so its edges still separate words.
+		// A block equation's body ends where the block does. An inline one is
+		// mid-line, so whitespace at its edges still separates words.
 		return &value.Equation{Block: c.Block, Body: s.realizeInlineRun(c.Body, c.Block), Label: c.Label}
 	case *value.List:
 		items := make([]*value.ListItem, len(c.Children))
@@ -168,25 +168,25 @@ func (s *session) realize(c value.Content) value.Content {
 	}
 }
 
-// realizeInline realizes inline content whose run sits inside a line: a
-// strong/emph/link body, or a sequence about to be spliced into a surrounding
-// run. Its edge whitespace is kept, because it still separates words —
+// realizeInline realizes inline content that sits within a line: a strong,
+// emph or link body, or a sequence about to be spliced into a surrounding run.
+// Whitespace at the edges is kept, because it still separates words:
 // `#emph[Hello ]world` reads "Hello world".
 func (s *session) realizeInline(c value.Content) value.Content {
 	return s.realizeInlineRun(c, false)
 }
 
 // realizeInlineBlock is [session.realizeInline] for a body whose ends are block
-// boundaries — a heading or paragraph body — where edge whitespace has nothing
-// left to separate.
+// boundaries, such as a heading or paragraph body. Whitespace at those edges
+// separates nothing and is trimmed.
 func (s *session) realizeInlineBlock(c value.Content) value.Content {
 	return s.realizeInlineRun(c, true)
 }
 
-// realizeInlineRun realizes inline content without forming paragraphs: it
-// resolves style scopes and recurses into wrapper bodies but leaves sequences
-// flat. edges says whether the run this builds ends on block boundaries; it
-// reaches the run's own ends through [trimRun] and [trimEdges].
+// realizeInlineRun realizes inline content without forming paragraphs. It
+// resolves style scopes and recurses into wrapper bodies, but leaves sequences
+// flat. edges says whether the run ends on block boundaries, and is passed on
+// to [trimRun] and [trimEdges].
 func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 	switch c := c.(type) {
 	case *value.Styled:
@@ -202,12 +202,12 @@ func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 		}
 		return &value.Sequence{Children: trimRun(mergeText(children), edges, edges), Label: c.Label}
 	case *value.Footnote:
-		// Opaque to the edges either way: a footnote is a mark on the line, and
-		// the body behind it is a run of its own.
+		// A footnote is a mark within the line and its body is a separate run,
+		// so neither edge applies to it.
 		return s.realizeFootnote(c)
 	default:
-		// A run of one: this element is its own first and last item, so a block
-		// edge reaches straight into it.
+		// A run of one element, which is both its first and last item, so a
+		// block edge applies directly to it.
 		r, keep := trimEdges(mapChildren(c, s.realizeInline), edges, edges)
 		if !keep {
 			return &value.Sequence{}
@@ -216,15 +216,15 @@ func (s *session) realizeInlineRun(c value.Content, edges bool) value.Content {
 	}
 }
 
-// realizeHtmlBody realizes an HTML element's body in the context its tag calls
-// for. A tag whose content model is flow content holds paragraphs, so its body
-// is realized the way the document body is; everything else holds a single
-// line's worth of content, and realizing it as flow would nest a paragraph
-// inside markup that cannot have one — `p` being the case that gives the rule
-// away. The tag is what decides this, not `block:`, which cannot turn a
-// phrasing body into a flow one; see [value.HtmlTagFlow]. It can rule one out,
-// though: an element forced inline sits inside a paragraph, and a paragraph
-// nested in that one would be markup no browser accepts.
+// realizeHtmlBody realizes an HTML element's body in the context its tag
+// requires. A tag whose content model is flow content holds paragraphs, so its
+// body is realized like the document body. Every other tag holds one line's
+// worth of content, and realizing that as flow would put a paragraph inside
+// markup that cannot contain one; `p` is the clearest case.
+//
+// The tag decides this, not `block:`; see [value.HtmlTagFlow]. `block:` can
+// only rule flow out: an element forced inline sits inside a paragraph, and a
+// paragraph nested there is markup no browser accepts.
 func (s *session) realizeHtmlBody(c *value.HTMLElem) value.Content {
 	if c.Body == nil {
 		return nil
@@ -232,18 +232,18 @@ func (s *session) realizeHtmlBody(c *value.HTMLElem) value.Content {
 	if c.Block && value.HtmlTagFlow(c.Tag) {
 		return s.realizeBody(topChildren(c.Body), nil)
 	}
-	// The element's own edges are where its body ends, so edge whitespace has
-	// nothing left to separate — realizeInlineBlock, as for a heading.
+	// The element's edges are where its body ends, so whitespace there
+	// separates nothing. Same as a heading.
 	return s.realizeInlineBlock(c.Body)
 }
 
-// realizeFootnote realizes a footnote's body as a block body. An endnote is a
-// document of its own — it is printed away from the line that cites it — so
-// paragraphs form in it no matter where the citation sits.
+// realizeFootnote realizes a footnote's body as a block body. An endnote is
+// printed away from the line citing it, so paragraphs form in it wherever the
+// citation appears.
 //
-// The same footnote reached twice realizes to the same element, not to two
-// equal ones: `#let n = footnote[…]` used in two places is one footnote, and a
-// presenter tells that from identity.
+// Realizing the same footnote twice returns the identical element, not an equal
+// one. `#let n = footnote[…]` used in two places is one footnote, and a
+// presenter distinguishes them by identity.
 func (s *session) realizeFootnote(c *value.Footnote) value.Content {
 	if r, ok := s.footnotes[c]; ok {
 		return r
@@ -267,12 +267,11 @@ func groupContent(items []value.Content) []value.Content {
 		if len(para) == 0 {
 			return
 		}
-		// A run of nothing but invisible elements has no paragraph to make:
-		// `#metadata(…) <x>` alone on a line would otherwise leave an empty
-		// paragraph behind for the presenter to render. They stay where they
-		// are, as siblings of the blocks around them, and the whitespace
-		// between them goes too — with nothing visible on either side, it has
-		// nothing left to separate.
+		// A run holding only invisible elements makes no paragraph. Otherwise
+		// `#metadata(…) <x>` alone on a line would leave an empty paragraph
+		// for the presenter to render. The elements stay as siblings of the
+		// surrounding blocks, and the whitespace between them is dropped: with
+		// nothing visible on either side it separates nothing.
 		if !slices.ContainsFunc(para, isVisible) {
 			for _, c := range para {
 				if !spaceOnly(c) {
@@ -347,13 +346,13 @@ func appendItemRun(out *[]value.Content, items []value.Content, i int) int {
 }
 
 // mergeText concatenates adjacent unlabeled Text items and collapses the
-// whitespace that markup composition duplicates at their seam. A markup space
+// whitespace that composing markup duplicates where they join. A markup space
 // is an ordinary Text holding " " (see the analyzer's lowering of
-// syntax.KindSpace), so this is where `[*Hello* ] + [world!]` gets its single
-// separating space. Dropping the whitespace that has nothing to separate is
-// [trimRun]'s job; run the two in that order.
+// syntax.KindSpace), so this is what gives `[*Hello* ] + [world!]` a single
+// separating space. Dropping whitespace that separates nothing is [trimRun]'s
+// job, and must run after this.
 //
-// Whitespace inside a single Text value is never touched: an explicit
+// Whitespace inside one Text value is never touched, so an explicit
 // #text("a    b") keeps its spacing.
 func mergeText(items []value.Content) []value.Content {
 	out := make([]value.Content, 0, len(items))
@@ -363,10 +362,9 @@ func mergeText(items []value.Content) []value.Content {
 			i++
 			continue
 		}
-		// Take the whole run of mergeable text at once. Folding it one item at
-		// a time would build every prefix of the result along the way, which
-		// for a paragraph of forty words is forty strings, each longer than the
-		// last.
+		// Take the whole run of mergeable text at once. Merging one item at a
+		// time would build every prefix of the result: forty strings for a
+		// paragraph of forty words.
 		j := i + 1
 		for j < len(items) {
 			if _, ok := mergeable(items[j]); !ok {
@@ -375,7 +373,7 @@ func mergeText(items []value.Content) []value.Content {
 			j++
 		}
 		if j == i+1 {
-			// A run of one is the item itself; merging it would only copy it.
+			// A run of one is the item itself, so merging would only copy it.
 			out = append(out, items[i])
 		} else {
 			out = append(out, mergeRun(items[i:j]))
@@ -394,8 +392,8 @@ func mergeRun(run []value.Content) *value.Text {
 	}
 	var sb strings.Builder
 	sb.Grow(size)
-	// Whether what has been written so far ends in whitespace, which is what
-	// decides the seam: both sides contributing space means keeping one.
+	// Whether the text written so far ends in whitespace. When both sides of
+	// a join contribute space, only one is kept.
 	endsSpace := false
 	for _, it := range run {
 		text, _ := mergeable(it)
@@ -412,29 +410,30 @@ func mergeRun(run []value.Content) *value.Text {
 	return &value.Text{Text: sb.String()}
 }
 
-// trimRun drops the whitespace in a merged run that has nothing to separate:
-// a space beside content that breaks the line anyway, and — where left or right
-// is set — a space at that end of the run. Both are true for a run whose ends
-// really are block boundaries (the document body, a list item, a heading or
-// paragraph body) and false for one that sits inside a line, where the trailing
-// space of `#emph[Hello ]world` still separates two words. They differ only for
-// a wrapper body that sits on one edge but not the other.
+// trimRun drops the whitespace in a merged run that separates nothing: a space
+// next to content that breaks the line anyway, and, where left or right is set,
+// a space at that end of the run.
 //
-// A block edge trims whatever lands on it — see [trimEdges]; only the
-// whitespace *inside* a Text is off limits.
+// Both are set for a run whose ends are block boundaries: the document body, a
+// list item, a heading or paragraph body. Both are clear for a run within a
+// line, where the trailing space of `#emph[Hello ]world` still separates two
+// words. They differ only for a wrapper body on one edge but not the other.
 //
-// trimRun filters in place, which is why it takes the run rather than being
-// folded into [mergeText]: every caller hands it a freshly built slice.
+// A block edge trims whatever is on it; see [trimEdges]. Only whitespace inside
+// a Text value is left alone.
+//
+// trimRun filters in place, which is why it takes the run instead of being part
+// of [mergeText]: every caller passes a freshly built slice.
 func trimRun(items []value.Content, left, right bool) []value.Content {
 	kept := items[:0]
 	l := left
 	for i, it := range items {
-		// edgeRight looks ahead into slots this loop has not written yet, so it
-		// reads the run as it came in — which is what it is asking about.
+		// edgeRight reads slots this loop has not written yet, so it sees the
+		// run as it was passed in, which is the state it needs to inspect.
 		it, keep := trimEdges(it, l, edgeRight(items, i, right))
 		if !keep {
-			// A space that trimmed away leaves the edge where it was, so the
-			// item behind it lands on the edge in its turn.
+			// A space that was trimmed does not move the edge, so the next item
+			// is on the edge instead.
 			continue
 		}
 		l = breaksLine(it)
@@ -443,10 +442,11 @@ func trimRun(items []value.Content, left, right bool) []value.Content {
 	return kept
 }
 
-// edgeRight reports whether items[i] ends on an edge: the run's own end when
-// right is set, a neighbor that breaks the line, or nothing but space that is
-// about to trim away on the same edge. [mergeText] leaves at most one Text
-// between two other items, so the scan takes a step or two.
+// edgeRight reports whether items[i] ends on an edge. That is the case at the
+// run's own end when right is set, next to a neighbor that breaks the line, or
+// where everything that follows is space about to be trimmed on the same edge.
+// [mergeText] leaves at most one Text between two other items, so the scan
+// looks ahead only a step or two.
 func edgeRight(items []value.Content, i int, right bool) bool {
 	for j := i + 1; j < len(items); j++ {
 		if breaksLine(items[j]) || isFootnote(items[j]) {
@@ -459,18 +459,18 @@ func edgeRight(items []value.Content, i int, right bool) bool {
 	return right
 }
 
-// spaceOnly reports whether c is an unlabeled Text of nothing but whitespace —
-// one that leaves the run entirely once an edge trims it.
+// spaceOnly reports whether c is an unlabeled Text holding only whitespace,
+// which an edge removes from the run entirely.
 func spaceOnly(c value.Content) bool {
 	text, ok := mergeable(c)
 	return ok && strings.TrimFunc(text.Text, unicode.IsSpace) == ""
 }
 
-// trimEdges trims the whitespace on whichever sides of c are marked by left and
-// right, descending through the inline wrappers a block edge sees straight
-// through: the space in `#strong[ x ]` alone in a heading has as little left to
-// separate as the space in a bare ` x `. keep is false when c was a Text that
-// trimmed away to nothing and leaves the run.
+// trimEdges trims whitespace on whichever sides of c are marked by left and
+// right, descending through inline wrappers, which a block edge applies through:
+// the space in `#strong[ x ]` alone in a heading separates as little as the
+// space in a bare ` x `. keep is false when c was a Text that trimmed away to
+// nothing and is removed from the run.
 func trimEdges(c value.Content, left, right bool) (_ value.Content, keep bool) {
 	if !left && !right {
 		return c, true
@@ -498,15 +498,15 @@ func trimEdges(c value.Content, left, right bool) (_ value.Content, keep bool) {
 	case *value.Link:
 		return &value.Link{Dest: c.Dest, Body: trimBody(c.Body, left, right), Label: c.Label}, true
 	}
-	// Everything else is opaque to the edge: an inline equation keeps its own
-	// spacing, and a leaf has nothing to trim.
+	// The edge does not apply to anything else: an inline equation keeps
+	// its own spacing, and a leaf has no whitespace to trim.
 	return c, true
 }
 
-// trimBody trims the edges of a wrapper's realized body, which is a run in its
-// own right: a sequence hands its children back to [trimRun], anything else is
-// a run of one. A body that trims away to nothing leaves the wrapper empty
-// rather than dropping it — `#strong[ ]` on an edge is still a strong.
+// trimBody trims the edges of a wrapper's realized body, which is itself a run:
+// a sequence passes its children to [trimRun], anything else is a run of one. A
+// body that trims away to nothing leaves the wrapper empty rather than removing
+// it, so `#strong[ ]` on an edge is still a strong.
 func trimBody(c value.Content, left, right bool) value.Content {
 	if seq, ok := c.(*value.Sequence); ok {
 		return &value.Sequence{Children: trimRun(seq.Children, left, right), Label: seq.Label}
@@ -527,9 +527,9 @@ func mergeable(c value.Content) (*value.Text, bool) {
 	return text, true
 }
 
-// breaksLine reports whether c ends the line it sits on, making adjacent
-// whitespace pointless. That is every block element, plus the two breaks, which
-// end a line without being content on it.
+// breaksLine reports whether c ends the line it is on, so that whitespace next
+// to it separates nothing. That covers every block element, plus the two breaks,
+// which end a line without being content on it.
 func breaksLine(c value.Content) bool {
 	return breakKinds.Contains(c.Kind()) || c.IsBlock()
 }
@@ -549,28 +549,27 @@ func trimRightSpace(s string) string { return strings.TrimRightFunc(s, unicode.I
 
 func isParbreak(c value.Content) bool { return c.Kind() == value.KindParbreak }
 
-// isVisible reports whether c is an element a reader can see. The introspection
-// elements are not: they ride the document to be found again — by
-// znkr.io/markst.Query, or by whatever comes to resolve state — and produce no
-// output where they sit.
+// isVisible reports whether c produces output a reader can see. The
+// introspection elements do not: they are carried through the document so they
+// can be found later, by znkr.io/markst.Query or by state resolution.
 func isVisible(c value.Content) bool {
 	if introspectionKinds.Contains(c.Kind()) {
 		return false
 	}
-	// Whitespace is not visible on its own account: it is only ever there to
-	// separate what is around it. Two metadata on consecutive lines have a
+	// Whitespace is only ever there to separate what surrounds it, so it is
+	// not visible on its own. Two metadata on consecutive lines have a
 	// markup space between them that separates nothing.
 	return !spaceOnly(c)
 }
 
-// introspectionKinds are the elements that ride the document to be found
-// again rather than to be read.
+// introspectionKinds are the elements carried through the document to be found
+// later rather than read.
 var introspectionKinds = value.SetOf(value.KindMetadata, value.KindStateUpdate)
 
 // isItem reports whether c is one of the item elements. Items are block content
-// like any other ([value.Content.IsBlock]); this narrower question is only
-// [groupContent]'s, which must gather a run of them into a container instead of
-// emitting them one by one, and so asks it first.
+// like any other ([value.Content.IsBlock]); only [groupContent] needs this
+// narrower test, to gather a run of them into a container rather than emit them
+// one by one.
 func isItem(c value.Content) bool { return itemKinds.Contains(c.Kind()) }
 
 // itemKinds are the elements a run of which groups into a container.
@@ -596,26 +595,25 @@ func (s *session) resolveStyled(t *value.Styled, realize func(value.Content) val
 	return body
 }
 
-// applySet applies a set rule to realized content. Two kinds take effect: a
+// applySet applies a set rule to realized content. Two kinds have an effect: a
 // `document` set, whose properties are hoisted into the session, and the math
-// font styles, which are folded into the math leaves they reach (see
-// applyMathStyle). Other element sets (e.g. `set heading(level: …)`) are
-// realized away with no effect: our content model tracks no "unset" state for
-// their properties and styles don't propagate top-down, so applying a default
-// would wrongly overwrite explicit values (and nest in the wrong order). See
-// IDEAS.md.
+// font styles, which are applied to the math leaves below them (see
+// applyMathStyle). Other element sets, such as `set heading(level: …)`, are
+// discarded: the content model has no "unset" state for their properties and
+// styles do not propagate downwards, so applying a default would overwrite
+// explicit values, and in the wrong order. See IDEAS.md.
 //
-// The root is a single element, so a `set document` is never scoped to the block
-// it appears in. When two rules name the same property, the one in the outer
-// scope wins: a set rule scopes over its following siblings, so a later rule
-// nests inside an earlier one, and resolveStyled realizes a body before applying
-// its own sets. That is the order `set document(title:)` has always had.
+// The root is a single element, so a `set document` is never scoped to the
+// block it appears in. When two rules set the same property, the one in the
+// outer scope takes effect: a set rule applies to its following siblings, so a
+// later rule is nested inside an earlier one, and resolveStyled realizes a body
+// before applying its own sets.
 func (s *session) applySet(c value.Content, set *value.Set) value.Content {
 	switch set.Element.Name {
 	case "document":
 		// The argument types were checked when the set rule was bound, so a
-		// value of the wrong shape here is a bug rather than bad input, and
-		// there is no span left to report it against: leave the field alone.
+		// value of the wrong shape here is a bug, not bad input. There is no
+		// span left to report it against, so leave the field alone.
 		if v, ok := set.Fields.Get(names.Title); ok {
 			if title, ok := v.(value.Str); ok {
 				s.doc.Title = string(title)
@@ -647,14 +645,14 @@ func documentDate(set *value.Set, n name.Name) (value.Datetime, bool) {
 	return value.Datetime{}, false
 }
 
-// applyMathStyle folds the font-style properties of a `math.equation` set into
-// every [value.MathText] in c — the leaves that carry a math font style. This is
-// what makes `$bold(x)$` observable; the equation's other properties (block) are
-// left to the general set behaviour described on applySet.
+// applyMathStyle copies the font-style properties of a `math.equation` set onto
+// every [value.MathText] in c, the leaves that hold a math font style. This is
+// what makes `$bold(x)$` render as bold. The equation's other properties, such
+// as block, follow the general set behavior described on applySet.
 //
-// A property already set on a leaf is left alone, so the nearest style function
-// wins: resolveStyled realizes a body before applying its own sets, so in
-// `sans(frak(x))` the inner frak lands first.
+// A property already set on a leaf is left alone, so the innermost style
+// function takes effect: resolveStyled realizes a body before applying its own
+// sets, so in `sans(frak(x))` frak is applied first.
 func applyMathStyle(c value.Content, set *value.Set) value.Content {
 	bold, hasBold := set.Fields.Get(names.Bold)
 	italic, hasItalic := set.Fields.Get(names.Italic)
@@ -711,8 +709,8 @@ func (s *session) applyTransform(node value.Content, transform value.Value) valu
 
 func (s *session) callTransform(fn *value.Function, node value.Content) value.Content {
 	// Realization has no spans left to point at, so there is no call site to
-	// push; Runtime still has to be set, or a show rule whose transform is a
-	// user closure would have no session to run against. Refs stays nil: see
+	// push. Runtime must still be set, or a show rule whose transform is a
+	// user closure would have no session to run against. Refs stays nil; see
 	// [value.FunctionCallContext.Refs].
 	fcc := value.FunctionCallContext{Now: s.now, Runtime: s}
 	res, err := fn.Apply(&fcc, &value.Arguments{Positional: []value.Value{node}})
@@ -753,9 +751,9 @@ func mapChildren(c value.Content, f func(value.Content) value.Content) value.Con
 		}
 		return &value.HTMLElem{Tag: c.Tag, Attrs: c.Attrs, Body: f(c.Body), Block: c.Block, Label: c.Label}
 	case *value.Document:
-		// Copied wholesale rather than field by field: the root carries
-		// document properties that have nothing to do with the rewrite, and a
-		// property added later must not go missing here.
+		// Copied whole rather than field by field. The root holds document
+		// properties unrelated to this rewrite, and a property added later
+		// must not be dropped here.
 		d := *c
 		d.Body = f(c.Body)
 		return &d

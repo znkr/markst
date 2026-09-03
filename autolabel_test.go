@@ -117,7 +117,7 @@ func TestAutoHeadingLabels(t *testing.T) {
 // TestAutoHeadingLabelIsNotAReference pins the one thing a generated label is
 // not: part of the document's namespace. `@ref` resolves what the source wrote,
 // and nothing else — a document that means to reference a section says so by
-// labelling it.
+// labeling it.
 func TestAutoHeadingLabelIsNotAReference(t *testing.T) {
 	_, _, err := markst.Compile([]byte("= Hello World\n\nSee @hello-world.\n"))
 	if err == nil {

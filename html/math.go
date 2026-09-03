@@ -1,9 +1,8 @@
 package html
 
-// Math is rendered as MathML, which browsers lay out themselves. That makes
-// the job here a translation rather than a typesetting: pick the element that
-// carries the meaning, and leave spacing and sizing to the browser's own math
-// rules.
+// Math is rendered as MathML, which the browser lays out. This file therefore
+// translates rather than typesets: it picks the MathML element with the right
+// meaning and leaves spacing and sizing to the browser's math rules.
 
 import (
 	"strconv"
@@ -42,7 +41,7 @@ func (e *Encoder) renderEquation(c *value.Equation) {
 // renderMathTable lays items out as rows split at linebreaks and columns split
 // at alignment points. Where there are alignment points the column alignment
 // alternates, starting right, so that `x &= y` puts the = at the left of its
-// column; rows with nothing to align against are centred, as the equation
+// column; rows with nothing to align against are centered, as the equation
 // itself would be.
 func (e *Encoder) renderMathTable(items []value.Content) {
 	isLinebreak := func(c value.Content) bool { _, ok := c.(*value.Linebreak); return ok }
@@ -88,8 +87,8 @@ func (e *Encoder) renderMathRow(items []value.Content) {
 	e.End("mrow")
 }
 
-// renderMathGroup writes c as a single MathML element, which is what every
-// slot of a script, fraction, or root needs.
+// renderMathGroup writes c as a single MathML element, as each slot of a
+// script, fraction, or root requires.
 func (e *Encoder) renderMathGroup(c value.Content) {
 	e.renderMathRow(flattenMath(c))
 }
@@ -102,15 +101,15 @@ func (e *Encoder) renderMath(c value.Content) {
 	case *value.Sequence:
 		e.renderMathRow(flattenMath(c))
 	case *value.Equation:
-		// An equation nested in another one is the same equation: MathML has
-		// one <math> per formula, and a second would start a new one.
+		// A nested equation is part of the same formula. MathML has one <math>
+		// per formula, so a second would start another.
 		e.renderMathRow(flattenMath(c.Body))
 	case *value.MathText:
 		e.renderMathText(c)
 	case *value.MathOp:
-		// <mo> is what an operator is in MathML, and writing one keeps `sin x`
-		// from setting as `sinx`. The spacing is stated rather than left to the
-		// operator dictionary, which knows nothing about a word like "sin".
+		// An operator is <mo> in MathML, which prevents `sin x` from setting
+		// as `sinx`. The spacing is given explicitly rather than left to the
+		// operator dictionary, which has no entry for a word like "sin".
 		e.Start("mo", Attr{"lspace", "0.1667em"}, Attr{"rspace", "0.1667em"})
 		e.Text(mathTextContent(c.Text))
 		e.End("mo")
@@ -142,8 +141,8 @@ func (e *Encoder) renderMath(c value.Content) {
 	case *value.MathLr:
 		e.renderMathLr(c)
 	case *value.MathMid:
-		// A mid scales with the group it sits in, so it follows the same
-		// decision the enclosing delimiters were given.
+		// A mid scales with its enclosing group, so it takes the same stretch
+		// setting as that group's delimiters.
 		e.renderMathDelim(c.Body, e.mathStretch)
 	case *value.MathUnderline:
 		e.Start("munder", Attr{"accentunder", "true"})
@@ -160,8 +159,8 @@ func (e *Encoder) renderMath(c value.Content) {
 		e.End("mo")
 		e.End("mover")
 	case *value.MathCancel:
-		// MathML Core dropped <menclose>, so the line is drawn with CSS. The
-		// angle is not expressible either way and is dropped.
+		// MathML Core removed <menclose>, so the line is drawn with CSS. The
+		// angle cannot be expressed either way and is dropped.
 		e.Start("mrow", Attr{"style", "text-decoration:line-through"})
 		e.renderMathGroup(c.Body)
 		e.End("mrow")
@@ -173,8 +172,8 @@ func (e *Encoder) renderMath(c value.Content) {
 		e.renderMathMatrix("(", ")", "center", c.Rows)
 	case *value.MathAlignPoint:
 		// Only a block equation lays its rows out in a table, where alignment
-		// points become the column breaks; anywhere else there is nothing to
-		// align against.
+		// points become the column breaks. Elsewhere there is nothing to align
+		// against.
 		e.HTML("<mspace></mspace>")
 	case *value.Linebreak:
 		e.Start("mspace", Attr{"linebreak", "newline"})
@@ -191,9 +190,9 @@ func (e *Encoder) renderMath(c value.Content) {
 		e.Text(c.Text)
 		e.End("mtext")
 	default:
-		// Ordinary markup inside an equation — a link, an image, a custom
-		// element. <mtext> is where MathML takes text and the phrasing content
-		// around it, so that is where it goes.
+		// Ordinary markup inside an equation: a link, an image, a custom
+		// element. <mtext> is the MathML element for text and the phrasing
+		// content around it.
 		e.Start("mtext")
 		e.render(c)
 		e.End("mtext")
@@ -229,7 +228,8 @@ func (e *Encoder) renderMathAttach(c *value.MathAttach) {
 
 	e.Start(tag)
 	e.renderMathGroup(c.Base)
-	// Under before over, sub before sup: both orders are the same one.
+	// Under before over, and sub before sup; MathML expects both in that
+	// order.
 	if c.Bottom != nil {
 		e.renderMathGroup(c.Bottom)
 	}
@@ -242,9 +242,9 @@ func (e *Encoder) renderMathAttach(c *value.MathAttach) {
 // renderMathLr writes a delimited group as one row, with the delimiter at
 // either end written as an operator that stretches to what it encloses.
 func (e *Encoder) renderMathLr(c *value.MathLr) {
-	// The delimiters sit in the body along with what they wrap, so they have to
-	// be picked out of it. c.Size is dropped: MathML has no way to state a
-	// delimiter size, and the browser sizes one to its contents regardless.
+	// The delimiters are in the body along with what they wrap, so they have to
+	// be separated out of it. c.Size is dropped: MathML cannot express a
+	// delimiter size, and the browser sizes delimiters to their contents.
 	items := flattenMath(c.Body)
 	var open, closing value.Content
 	if len(items) > 0 && isMathDelim(items[0]) {
@@ -274,15 +274,15 @@ func (e *Encoder) renderMathLr(c *value.MathLr) {
 }
 
 // tallMath reports whether any of items is taller than a line of ordinary
-// symbols, and so whether delimiters around them have to grow.
+// symbols, and so whether delimiters around them should stretch.
 //
-// The question has to be asked at all because a stretchy delimiter is never
-// drawn as the plain glyph: a browser enlarges it to sit symmetrically about
-// the math axis even when what it encloses is a single letter, which around `x`
-// is visibly too big. Only the constructs that are genuinely taller than a line
-// — a fraction, a root, a matrix — call for a delimiter that grows.
-// tallKinds are the constructs that grow taller than a line, which is what
-// makes a delimiter around them a stretchy one.
+// This has to be decided rather than always stretching, because a browser draws
+// a stretchy delimiter enlarged and centered on the math axis even around a
+// single letter, which around `x` is visibly too large. Only constructs that
+// really are taller than a line, such as a fraction, a root, or a matrix, need
+// a delimiter that grows.
+// tallKinds are the constructs taller than a line, and so the ones whose
+// delimiters stretch.
 var tallKinds = value.SetOf(
 	value.KindMathFrac,
 	value.KindMathRoot,
@@ -336,7 +336,7 @@ func (e *Encoder) renderMathMatrix(open, closing, align string, rows [][]value.C
 
 // renderMathDelim writes a delimiter of a delimited group. stretch says whether
 // it grows to the height of what it encloses; see [tallMath] for why that is
-// not simply always.
+// not always wanted.
 func (e *Encoder) renderMathDelim(c value.Content, stretch bool) {
 	t, ok := c.(*value.MathText)
 	if !ok {
@@ -392,9 +392,9 @@ func (e *Encoder) renderMathText(c *value.MathText) {
 	e.End(tag)
 }
 
-// mathTextTag picks the MathML element for a math leaf. The three kinds carry
-// different spacing, which is why the distinction matters at all: <mn> for
-// numbers, <mi> for names, <mo> for everything that operates on them.
+// mathTextTag picks the MathML element for a math leaf: <mn> for numbers, <mi>
+// for names, <mo> for operators. The browser spaces the three differently, so
+// the distinction affects the output.
 func mathTextTag(s string) string {
 	digits, letters, hasDigit := true, true, false
 	for _, r := range s {
@@ -403,14 +403,14 @@ func mathTextTag(s string) string {
 			hasDigit = true
 			letters = false
 		case r == '.' || r == ',':
-			// Part of a number only with digits around it; on its own, a
-			// separator is punctuation.
+			// A separator is part of a number only with digits on both sides;
+			// on its own it is punctuation.
 			letters = false
 		case unicode.IsLetter(r):
 			digits = false
 		case r == ' ':
-			// A space keeps a name together, so that an operator spelled with
-			// two words ("lim inf") stays one <mi>.
+			// A space is allowed inside a name, so an operator spelled as two
+			// words ("lim inf") stays a single <mi>.
 			digits = false
 		default:
 			digits, letters = false, false
@@ -426,20 +426,20 @@ func mathTextTag(s string) string {
 	}
 }
 
-// styledMathText applies the font style folded into a math leaf, mapping each
-// letter to its counterpart in the Mathematical Alphanumeric Symbols block.
-// That block is how MathML expresses these styles: mathvariant was dropped from
-// MathML Core for everything but "normal", which is the second return — the one
-// style with no character of its own.
+// styledMathText applies a math leaf's font style by mapping each letter to its
+// counterpart in the Mathematical Alphanumeric Symbols block. That block is how
+// MathML Core expresses these styles, mathvariant having been removed for
+// everything but "normal". The second return reports that remaining case, the
+// one style with no characters of its own.
 func styledMathText(c *value.MathText) (text string, normal bool) {
 	bold := c.Bold == value.Bool(true)
 	variant := ""
 	if s, ok := c.Variant.(value.Str); ok {
 		variant = string(s)
 	}
-	// A lone letter is italicized and anything longer left upright, which is
-	// also what MathML does with <mi> on its own. So the unstyled case needs no
-	// work at all.
+	// A single letter is italicized and anything longer left upright, which
+	// is what MathML already does with a bare <mi>, so the unstyled case
+	// needs no work.
 	italic, explicit := c.Italic.(value.Bool)
 	if !explicit {
 		italic = value.Bool(autoItalic(c.Text))
@@ -523,7 +523,7 @@ func styledRune(r rune, bold, italic bool, variant string) rune {
 		return r
 	}
 	if hole, ok := mathAlphanumericHoles[styled]; ok {
-		// The block has gaps where a letter was already encoded elsewhere.
+		// The block has gaps where a letter is already encoded elsewhere.
 		return hole
 	}
 	return styled

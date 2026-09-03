@@ -9,9 +9,9 @@ import (
 	"znkr.io/markst/syntax"
 )
 
-// FormatContent returns a human-readable string representation of document
-// content, used in test golden files. The output format mirrors Typst's
-// repr() output for content values.
+// FormatContent returns c written back as markst source, in the form Typst's
+// repr() gives content. It is the form golden tests compare against; for a
+// value rather than content, use [FormatValue].
 func FormatContent(c Content) string {
 	f := formatter.New(syntax.ModeMarkup)
 	c.Format(f)
@@ -21,7 +21,7 @@ func FormatContent(c Content) string {
 	return f.String()
 }
 
-// FormatValue returns a string representation of a single value in code mode.
+// FormatValue returns a value written back as markst source, in code mode.
 func FormatValue(value Value) string {
 	f := formatter.New(syntax.ModeCode)
 	value.Format(f)
@@ -164,7 +164,8 @@ func (n *Array) Format(f *formatter.Formatter) {
 		item.Format(f)
 	}
 	if len(n.Elems) == 1 {
-		// trailing comma for single-element arrays
+		// A one-element array needs the trailing comma, or it reads as a
+		// parenthesized expression.
 		f.Str(",")
 	}
 	f.Str(")")
@@ -615,10 +616,9 @@ func (n *HTMLElem) Format(f *formatter.Formatter) {
 	f.FuncCall("html.elem", args, contentBlock{n.Body})
 }
 
-// Format renders metadata with its label, which no other element does: a label
-// elsewhere is styling and reference bookkeeping, but a metadata value is
-// *identified* by its label — without it there is no telling one entry from
-// another.
+// Format writes the metadata with its label, which no other element's Format
+// does. A label elsewhere is for styling and references, but a metadata entry
+// is identified by its label, so without it two entries are indistinguishable.
 func (n *Metadata) Format(f *formatter.Formatter) {
 	// Content carried as data still reads best as content, the way it does
 	// everywhere else; anything else is a code-mode value.

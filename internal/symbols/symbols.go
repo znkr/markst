@@ -1,4 +1,9 @@
-// Package symbols provides human readable unicode symbols.
+// Package symbols provides the Unicode symbols Markst source can name, such as
+// `sym.arrow.r` for →.
+//
+// A symbol is written as a base name plus zero or more modifiers. One name can
+// stand for several characters, so a [Variants] holds all of them and
+// [Variants.Resolve] narrows the set one modifier at a time.
 package symbols
 
 import (
@@ -10,10 +15,13 @@ import (
 //go:generate go tool znkr.io/markst/internal/symbols/symbolsgen Symbols data/sym.txt
 //go:generate go tool znkr.io/markst/internal/symbols/symbolsgen Emoji data/emoji.txt
 
+// Module is a group of named bindings, such as `sym` or `emoji`. Modules
+// nest, so a Module is itself a [Binding].
 type Module struct {
 	bindings map[name.Name]Binding
 }
 
+// Get returns the binding under n and reports whether there is one.
 func (m Module) Get(n name.Name) (Binding, bool) {
 	b, ok := m.bindings[n]
 	return b, ok
@@ -21,12 +29,19 @@ func (m Module) Get(n name.Name) (Binding, bool) {
 
 func (m Module) aBinding() {}
 
+// Binding is what a name in a symbol module stands for: either a nested
+// [Module] or the [Variants] of one symbol.
 type Binding interface {
 	aBinding()
 }
 
+// Variants is every character one symbol name can stand for, each with the
+// modifiers that select it.
 type Variants []Symbol
 
+// Resolve narrows v to the variants carrying the modifier mod, with that
+// modifier removed, and reports whether any did. Applying every modifier a
+// name was written with leaves the characters that name can mean.
 func (v Variants) Resolve(mod name.Name) (Variants, bool) {
 	var result Variants
 	for _, s := range v {
@@ -45,6 +60,7 @@ func (v Variants) Resolve(mod name.Name) (Variants, bool) {
 
 func (v Variants) aBinding() {}
 
+// Symbol is one character together with the modifiers that select it.
 type Symbol struct {
 	Mods  []name.Name
 	Value string

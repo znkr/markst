@@ -103,7 +103,7 @@ func (pc *patternCtx) bindLeaf(n syntax.Node, rhs expr.Ref) {
 
 // compileDestructure handles a KindDestructuring node. It first walks the
 // children to classify the pattern (array vs dict), validate
-// duplicates/sinks, and collect a normalised item list, then emits the
+// duplicates/sinks, and collect a normalized item list, then emits the
 // right IR.
 func (pc *patternCtx) compileDestructure(n syntax.Node, rhs expr.Ref) {
 	a := pc.a

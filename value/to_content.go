@@ -11,7 +11,8 @@ import (
 // would produce it. A [None] shows as nothing at all, which is a nil Content
 // rather than an empty one.
 //
-// Use [CastContent] where only real content will do.
+// In math, use [ToMathContent] instead: it shows a value with no element of
+// its own differently.
 func ToContent(v Value) Content {
 	switch v := v.(type) {
 	case Content:
@@ -53,12 +54,11 @@ func ToContent(v Value) Content {
 	return &Raw{Text: Repr(v)}
 }
 
-// ToMathContent is [ToContent] in math context: symbols, strings and numbers
-// become [MathText] rather than the upright [Text] / [Raw] that ToContent
-// produces, so that the same character written as a letter, as a symbol, or as
-// an argument to a math element renders the same way — `$sym.alpha + 1$`,
-// `$alpha + 1$` and `#math.frac(alpha, 1)` all agree. Every other value is
-// left to ToContent.
+// ToMathContent is [ToContent] in math. Symbols, strings and numbers become
+// [MathText] rather than the upright [Text] or [Raw] ToContent gives, so a
+// character renders the same however it was written: `$sym.alpha + 1$`,
+// `$alpha + 1$` and `#math.frac(alpha, 1)` all agree. Anything else goes to
+// ToContent.
 func ToMathContent(v Value) Content {
 	switch v := v.(type) {
 	case *Symbol:
@@ -82,10 +82,10 @@ func floatText(v Float) string {
 	return "nan"
 }
 
-// CastMathContent is [ToMathContent] where only real content will do — an
-// element parameter typed `content`, as opposed to a place that shows whatever
-// it is handed. Strings and symbols still convert: they are text. Everything
-// else is an error rather than a rendering of the value's source.
+// CastMathContent is [ToMathContent] for a place that accepts only real
+// content, such as a parameter typed `content`. Strings and symbols still
+// convert, being text; anything else is an error rather than a rendering of the
+// value's source.
 func CastMathContent(v Value) (Content, error) {
 	switch v.(type) {
 	case Content, Str, *Symbol, None:

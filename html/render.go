@@ -7,13 +7,13 @@ import (
 	"znkr.io/markst/value"
 )
 
-// render writes c the built-in way. Every content element has a case here:
-// value.Content is closed, so this switch can be — and is — complete.
+// render writes c the built-in way. value.Content is a closed interface, so
+// this switch has a case for every element and is exhaustive.
 func (e *Encoder) render(c value.Content) {
 	switch c := c.(type) {
 	case *value.Document:
-		// The list of endnotes is not part of the body; Render appends it once
-		// the whole document has been written.
+		// The endnote list is not part of the body. Render appends it after the
+		// whole document has been written.
 		e.Content(c.Body)
 	case *value.Sequence:
 		e.tagless(c, func() {
@@ -51,8 +51,8 @@ func (e *Encoder) render(c value.Content) {
 	case *value.Enum:
 		e.itemList("ol", c, len(c.Children), func(i int) { e.Content(c.Children[i]) })
 	case *value.EnumItem:
-		// A number the document wrote itself (`3. third`); the rest of the list
-		// carries on from it, which is what <ol> does with value.
+		// A number written in the document (`3. third`). <ol> continues
+		// numbering from a value attribute, which is the behavior wanted here.
 		if c.Number >= 0 {
 			e.Start("li", Attr{"value", strconv.Itoa(c.Number)}, idAttr(c))
 			e.itemBody(c.Body)
@@ -76,9 +76,8 @@ func (e *Encoder) render(c value.Content) {
 	case *value.Table:
 		e.renderTable(c)
 	case *value.TableHeader:
-		// Reached only when a header sits outside a table, which markst allows
-		// to be built even though it means nothing there. Its cells are all
-		// that is left of it.
+		// Reached only for a header outside a table, which markst allows to be
+		// built even though it has no meaning there. Render its cells alone.
 		for _, child := range c.Children {
 			e.Content(child)
 		}
@@ -110,10 +109,10 @@ func (e *Encoder) render(c value.Content) {
 		e.fail(fmt.Errorf("html: no rendering for custom element %q: pass a WithElement hook that handles it", c.Elem))
 
 	case *value.Metadata, *value.StateUpdate, *value.StyleUpdate:
-		// Invisible: they carry data through the document, not output.
+		// These produce no output; they carry data through the document.
 	case *value.Parbreak:
 		// Realization drops these while grouping content into paragraphs, so
-		// one only reaches here from content built by hand.
+		// one reaches here only from content built by hand.
 	case *value.Styled:
 		// Realization resolves these away too. What it wraps is still content.
 		e.Content(c.Body)
@@ -121,15 +120,15 @@ func (e *Encoder) render(c value.Content) {
 	case *value.Equation:
 		e.renderEquation(c)
 	default:
-		// The math elements, which mean nothing outside an equation but are
-		// content all the same: render each as an equation of its own.
+		// The math elements have no meaning outside an equation but are content
+		// all the same, so render each as an equation of its own.
 		e.renderMath(c)
 	}
 }
 
-// tagless writes an element that has no tag of its own. A label on one still
-// has to give the document an anchor, so it is written as a <span> carrying
-// the id; without a label there is nothing to write but the content.
+// tagless writes an element that has no tag of its own. A label on it still
+// needs an anchor, so a labeled element becomes a <span> carrying the id.
+// Without a label, only the content is written.
 func (e *Encoder) tagless(c value.Content, body func()) {
 	id := idAttr(c)
 	if id.Name == "" {
@@ -158,7 +157,7 @@ func (e *Encoder) blockTag(tag string, c value.Content, body value.Content) {
 }
 
 // inlineTag writes an inline element, which shares its line with its
-// neighbours and so ends without a newline.
+// neighbors and so ends without a newline.
 func (e *Encoder) inlineTag(tag string, c value.Content, body value.Content) {
 	e.Start(tag, idAttr(c))
 	e.Content(body)
@@ -188,7 +187,7 @@ func (e *Encoder) item(tag string, c value.Content, body value.Content) {
 // endnote. A body holding a single paragraph is written without the <p> around
 // it: such an entry reads as a plain one, and only an entry with several
 // paragraphs needs them marked off. An item with a nested list under its text
-// counts as one, which is what keeps a nested list from spacing its parent out.
+// counts as one, so a nested list does not space its parent out.
 func (e *Encoder) itemBody(body value.Content) {
 	switch b := body.(type) {
 	case *value.Par:
@@ -219,9 +218,9 @@ func (e *Encoder) unwrapPar(par *value.Par) {
 	e.Content(par.Body)
 }
 
-// solePar returns the one unlabelled paragraph among children, or nil when
-// there is none, more than one, or one carrying a label — a label needs an
-// element to sit on.
+// solePar returns the single unlabeled paragraph among children, or nil when
+// there is none, more than one, or one that carries a label. A labeled
+// paragraph is kept, since the label needs an element to attach to.
 func solePar(children []value.Content) *value.Par {
 	var found *value.Par
 	for _, child := range children {
@@ -303,9 +302,8 @@ func (e *Encoder) renderHTMLElem(c *value.HTMLElem) {
 			attrs = append(attrs, Attr{string(k), string(s)})
 		}
 	}
-	// A label is how the rest of the document points at this element, which in
-	// HTML is the id. An explicit id attribute wins: a document that wrote one
-	// meant it.
+	// A label is how the rest of the document refers to this element, which in
+	// HTML is the id. An explicit id attribute takes precedence over it.
 	if !hasID {
 		attrs = append(attrs, idAttr(c))
 	}
@@ -399,8 +397,8 @@ func tableRows(t *value.Table) []tableRow {
 	return rows
 }
 
-// url applies one of the rewriting hooks, or hands back what the document
-// wrote when there is none.
+// url applies one of the rewriting hooks, or returns what the document wrote
+// when there is none.
 func (c *config) url(f func(string) (string, error), s string) (string, error) {
 	if f == nil {
 		return s, nil
@@ -409,8 +407,8 @@ func (c *config) url(f func(string) (string, error), s string) (string, error) {
 }
 
 // cssLength writes a markst length as a CSS one. The two components are
-// independent — points are absolute, ems follow the font — so a length with
-// both needs calc to add them.
+// independent, points being absolute and ems relative to the font size, so a
+// length with both needs calc to add them.
 func cssLength(l value.Length) string {
 	switch {
 	case l.Pt == 0 && l.Em == 0:

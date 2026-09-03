@@ -28,7 +28,7 @@ var (
 )
 
 // durationUnitFunc builds a method returning the whole duration expressed in
-// the given unit, counted in seconds. The answer is generally fractional — a
+// the given unit, computed from seconds. The result is usually fractional: a
 // 90-minute duration is 1.5 hours.
 func durationUnitFunc(fname string, unitSeconds float64) *value.Function {
 	return &value.Function{

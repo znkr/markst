@@ -106,6 +106,9 @@ func strImpl(_ *value.FunctionCallContext, args []value.Value, named value.Named
 	}
 }
 
+// StrAtImpl implements str.at: the character at a byte offset, or the
+// `default` argument if the offset is past the end or does not start a
+// character.
 func StrAtImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	s := string(args[0].(value.Str))
 	index := int(args[1].(value.Int))
@@ -155,6 +158,8 @@ func strTrimImpl(_ *value.FunctionCallContext, args []value.Value, named value.N
 	}
 }
 
+// StrSplitImpl implements str.split: the string cut at each occurrence of the
+// separator, or at runs of whitespace if the separator is none.
 func StrSplitImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
 	s := string(args[0].(value.Str))
 	switch pat := args[1].(type) {

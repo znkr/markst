@@ -8,6 +8,9 @@ import (
 	"znkr.io/markst/types"
 )
 
+// Symbol is a named Unicode character, such as `arrow.r` for →. A name can
+// stand for several characters, so a Symbol holds every variant still
+// possible after the modifiers written so far.
 type Symbol struct {
 	Variants symbols.Variants
 }
@@ -25,10 +28,9 @@ func (n *Symbol) Equal(other Value) bool {
 	})
 }
 
-// String returns the character the symbol stands for: of the variants left
-// after the modifiers written so far, the one carrying the fewest more. Both
-// ⊆ and ⫑ (subset.closed.eq) answer to `subset.eq`, and the one that needs no
-// further modifier is the one that was asked for.
+// String returns the character the symbol stands for: the variant needing the
+// fewest further modifiers. Both ⊆ and ⫑ answer to `subset.eq`, and ⊆, which
+// needs nothing more, is the one that was asked for.
 func (n *Symbol) String() string {
 	best := n.Variants[0]
 	for _, v := range n.Variants[1:] {
@@ -39,6 +41,8 @@ func (n *Symbol) String() string {
 	return best.Value
 }
 
+// Resolve returns the symbol narrowed to the variants carrying the modifier
+// mod, and reports whether any did. `arrow` resolved with `r` is `arrow.r`.
 func (n *Symbol) Resolve(mod name.Name) (*Symbol, bool) {
 	nvs, ok := n.Variants.Resolve(mod)
 	if !ok {

@@ -6,27 +6,26 @@ import (
 	"znkr.io/markst/value"
 )
 
-// applyCallback calls fn with args and separates the two ways a user callback
-// can fail.
+// applyCallback calls fn with args and distinguishes the two ways a user
+// callback can fail.
 //
-// poison is a [*value.Error] the callback evaluated to: the diagnostic is
-// already on the session, and the value is the evaluator's poison marker. A
-// builtin that gets one must return it as its own result rather than carry on
-// with a plausible-looking value — an Error operand travels through the SSA
-// value table without being re-recorded, which is what keeps a failed
-// predicate from also being reported as, say, a non-content value at the end
-// of the document. Continuing instead hands downstream code something that
-// looks fine and earns a second, misleading diagnostic.
+// poison is a [*value.Error] the callback evaluated to. Its diagnostic is
+// already recorded on the session, and a builtin that receives one must return
+// it as its own result rather than continue with some other value. An Error
+// flows through evaluation without being recorded again, so a failed predicate
+// is reported once; continuing would give later code a value that looks valid
+// and produce a second, misleading diagnostic.
 //
-// err is the other kind: a failure that is not yet recorded anywhere, to be
-// wrapped and returned by the builtin in the usual way.
-// call is the context of the builtin invoking the callback, forwarded rather
-// than replaced with a fresh one. It carries the evaluator state the callback
-// must run against ([value.FunctionCallContext.Runtime]) and the instant the
-// document is rendered at, both of which a callback can observe — a closure
-// records its diagnostics on the running session, and `datetime.today()` reads
-// Now. It also means the callback reports against the builtin's call site,
-// which is the nearest span there is.
+// err is the other kind: a failure not recorded anywhere yet, which the builtin
+// wraps and returns as usual.
+//
+// call is the calling builtin's own context, passed through rather than
+// replaced. It supplies the evaluator state the callback runs against
+// ([value.FunctionCallContext.Runtime]) and the instant the document is
+// rendered at, both of which a callback can observe: a closure records its
+// diagnostics on the running session, and `datetime.today()` reads Now. It also
+// means the callback reports against the builtin's call site, the nearest span
+// available.
 func applyCallback(call *value.FunctionCallContext, fn *value.Function, args ...value.Value) (res value.Value, poison *value.Error, err error) {
 	fcc := *call
 	fcc.Setter = nil // the callback's result is not a place; see value.Function.Accessor

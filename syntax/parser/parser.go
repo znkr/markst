@@ -1,27 +1,14 @@
-// Package parser implements a recursive descent parser for Markst source code.
+// Package parser turns Markst source into a syntax tree.
 //
-// The entry point is [Parse], which takes a source string and returns a
-// [syntax.RootNode] — the root of an untyped concrete syntax tree (CST).
-// Every node in the tree is a [syntax.Node] whose role is determined by its
-// [syntax.Kind]. The tree preserves all source text including whitespace and
-// comments, making it suitable for formatting and error reporting.
+// [Parse] returns a [syntax.RootNode] covering the whole source, whitespace and
+// comments included, so the tree can be formatted back out as well as read.
 //
-// The parser drives the [scanner.Scanner], switching its lexical mode between
-// markup, math, and code as it enters and exits different syntactic contexts.
-// It also manages newline sensitivity: in markup mode, indentation determines
-// heading and list structure, while in code mode, newlines can terminate
-// expressions depending on context.
+// The parser drives the scanner, switching its mode between markup, math, and
+// code as it enters and leaves each construct, and tracks newlines, which are
+// significant in markup and sometimes end an expression in code.
 //
-// # Error Recovery
-//
-// The parser produces a tree even for invalid input by inserting [syntax.Error]
-// nodes. Key error-handling strategies:
-//   - [parser.expect] creates an error from the current token without consuming
-//     it, allowing the caller to recover.
-//   - [parser.expected] creates a zero-width error; it deduplicates if there
-//     is already an error at the same position.
-//   - [parser.expectClosing] converts an opening delimiter to an "unclosed
-//     delimiter" error when the matching close is missing.
+// Invalid input never stops a parse. The parser puts [syntax.Error] nodes in
+// the tree where it could not make sense of the source, and carries on.
 package parser
 
 import (
@@ -35,13 +22,11 @@ import (
 
 var stopParse = syntax.SetOf(syntax.KindEnd)
 
-// Parse parses src as a Markst document and returns the root of the concrete
-// syntax tree. The returned [syntax.RootNode] always has kind
-// [syntax.KindMarkup] and carries a [syntax.Source] for offset-to-position
-// mapping.
+// Parse parses src as a Markst document. The root node is always of kind
+// [syntax.KindMarkup] and carries the source, so any span in the tree resolves
+// to text and to a line and column.
 //
-// Parse never returns an error; invalid input is represented by [syntax.Error]
-// nodes in the tree.
+// Parse never fails. Invalid input appears in the tree as [syntax.Error] nodes.
 func Parse(src []byte) syntax.RootNode {
 	p := newParser(src)
 	p.parseMarkup(stopParse, mfAtStart|mfWrapTrivia)
@@ -118,9 +103,9 @@ type parser struct {
 	depth int
 
 	// errAnchor is the node index of the error most recently produced by
-	// [parser.expected] or [parser.errorf], or noAnchor when the last such call
-	// only reused an error node that was already there. Read through
-	// [parser.errorMarker]; meaningful only immediately after the call.
+	// [parser.expected] or [parser.errorf], or noAnchor when that call reused
+	// an error node already present. Read it through [parser.errorMarker]; it
+	// is meaningful only immediately after the call.
 	errAnchor int
 }
 
@@ -145,10 +130,10 @@ func newParser(src []byte) *parser {
 		src: src,
 		a:   s.Arena(),
 		// The working stack holds every node parsed but not yet wrapped, which
-		// at the top level is the whole document. Sizing it off the source
-		// spares it the doubling of growing there from nothing: the article
-		// the benchmarks parse peaks at one entry per 23 source bytes, and
-		// one per 16 leaves room without much waste.
+		// at the top level is the whole document. Sizing it from the source
+		// avoids repeatedly doubling it from nothing: the article the
+		// benchmarks parse peaks at one entry per 23 source bytes, so one per
+		// 16 leaves room without much waste.
 		nodes:     make([]syntax.Node, 0, min(len(src)/16+16, 4096)),
 		memos:     make(map[int]memo),
 		errAnchor: noAnchor,
@@ -257,13 +242,13 @@ func (p *parser) expected(expected string) *syntax.Error {
 
 // errorMarker re-anchors a wrap marker after an error-recovery call.
 //
-// [parser.expected] inserts its zero-width error *before* the trivia that
-// [parser.next] already appended, which shifts every index at or after it — so
-// a marker taken at entry to the current construct no longer points at that
-// construct's first node. When a fresh error node was produced it is the only
+// [parser.expected] inserts its zero-width error before the trivia
+// [parser.next] already appended, which shifts every index at or after it, so a
+// marker taken on entry to the current construct no longer points at that
+// construct's first node. When a fresh error node was produced, it is the only
 // thing the construct parsed, so the marker moves onto it and the error ends up
-// inside the wrapped node. When [parser.expected] merely reused an error that
-// was already there, that error belongs to an earlier construct and m is kept.
+// inside the wrapped node. When [parser.expected] reused an error already
+// present, that error belongs to an earlier construct and m is kept.
 func (p *parser) errorMarker(m int) int {
 	if p.errAnchor == noAnchor {
 		return m
@@ -322,9 +307,9 @@ func (p *parser) expect(kind syntax.Kind) bool {
 
 // expectedAt replaces the node at index i with an error node, reporting that
 // the given construct was expected but the existing node was found instead. This
-// is used for retroactive errors — when we parsed something speculatively and
-// later determined it was invalid (e.g., a complex expression where only an
-// identifier was allowed). The error inherits the span of the replaced node.
+// is for an error found after the fact: something parsed speculatively that
+// turned out to be invalid, such as a complex expression where only an
+// identifier is allowed. The error takes the replaced node's span.
 func (p *parser) expectedAt(i int, expected string) *syntax.Error {
 	cur := p.nodes[i]
 	n := p.asErrorNode(cur, "expected %s, found %s", expected, cur.Kind().Name())
@@ -386,9 +371,9 @@ func (p *parser) wrap(start int, kind syntax.Kind) {
 	from := min(start, to)
 	var wrapped syntax.Node
 	if from == to {
-		// Nothing to wrap: the node sits between the node before it and the
-		// trivia after, so it spans nothing there. It needs the offset handed
-		// to it — a node with no children has none to derive a span from.
+		// Nothing to wrap. The node goes between the preceding node and the
+		// trivia after it, so it spans nothing. It needs the offset passed in,
+		// since a node with no children has nothing to derive a span from.
 		var pos uint32
 		if from > 0 {
 			pos = p.nodes[from-1].Span().End
@@ -407,8 +392,8 @@ func (p *parser) withMode(mode syntax.Mode, nlmode nlMode, fn func()) {
 	p.withNewlineMode(nlmode, fn)
 	if mode != prev {
 		p.s.SetMode(prev)
-		// Rescan last token to make sure we continue with the correct token (scanning might be
-		// different in the previous mode).
+		// Rescan the last token: the mode just changed, and the same characters
+		// may tokenize differently in the new one.
 		p.s.Seek(p.cur.prevEnd)
 		p.nodes = p.nodes[:len(p.nodes)-p.cur.trivia]
 		p.next()
@@ -494,11 +479,11 @@ const (
 func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 	start := len(p.nodes)
 	if flags&mfWrapTrivia != 0 || p.cur.parbreak {
-		// A parbreak is markup content, not trivia. When one was buffered
-		// before the body even starts — a list or enum item whose content
-		// begins on a later line, as in "- \n\n  x" — it belongs inside the
-		// body rather than beside it, where the analyzer would find it in
-		// place of the body's Markup node.
+		// A parbreak is markup content, not trivia. One buffered before the
+		// body starts, as in a list or enum item whose content begins on a
+		// later line ("- \n\n  x"), belongs inside the body rather than
+		// beside it, where the analyzer would find it instead of the body's
+		// Markup node.
 		start -= p.cur.trivia
 	}
 	p.parseMarkupExprs(stops, flags&mfAtStart != 0)
@@ -508,9 +493,9 @@ func (p *parser) parseMarkup(stops syntax.Set, flags markupFlags) {
 	p.wrap(start, syntax.KindMarkup)
 }
 
-// parseMarkupExprs parses markup expressions until a token in stops. Nesting
-// is counted here rather than per expression, because every markup construct
-// that holds markup comes back through it.
+// parseMarkupExprs parses markup expressions until a token in stops. Nesting is
+// counted here rather than per expression, because every markup construct
+// containing markup passes through it.
 func (p *parser) parseMarkupExprs(stops syntax.Set, atStart bool) {
 	if !p.enterDepth(stops) {
 		return
@@ -572,8 +557,9 @@ func (p *parser) parseMarkupExprs(stops syntax.Set, atStart bool) {
 
 func (p *parser) parseCode(stops syntax.Set) {
 	start := len(p.nodes) - p.cur.trivia
-	// Nesting is counted in parseCodeExprPrec; the check here only keeps a
-	// parse that is already too deep from erroring once per expression.
+	// Nesting is counted in parseCodeExprPrec. The check here only stops a
+	// parse that is already too deep from reporting one error per
+	// expression.
 	if p.checkDepth(stops) {
 		for !p.atSet(stops) {
 			p.withNewlineMode(nlContextualContinue, func() {
@@ -718,10 +704,10 @@ func (p *parser) parseMath(stops syntax.Set) {
 // parseMathExprs parses a sequence of math expressions, returning the count
 // parsed (including errors).
 func (p *parser) parseMathExprs(stops syntax.Set) int {
-	// Nesting is counted in parseMathExprPrec; the check here only keeps a
-	// parse that is already too deep from erroring once per expression. The
-	// count it reports is 1 so that the caller treats the error node it left
-	// behind as the single expression it stands for.
+	// Nesting is counted in parseMathExprPrec. The check here only stops a
+	// parse that is already too deep from reporting one error per
+	// expression. It reports a count of 1 so the caller treats the error
+	// node left behind as the single expression it stands for.
 	if !p.checkDepth(stops) {
 		return 1
 	}
@@ -849,9 +835,9 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 		m = p.errorMarker(m)
 	}
 
-	// Recognize an implicit function call: a 'continuable' token directly
-	// followed by delimiters groups with function precedence. E.g. `a(b)/c`
-	// parses as `(a(b))/c` when `a` is continuable.
+	// An implicit function call: a continuable token directly followed by
+	// delimiters groups with function precedence, so `a(b)/c` parses as
+	// `(a(b))/c` when `a` is continuable.
 	if continuable && mathFuncPrec >= minPrec && p.cur.trivia == 0 &&
 		(p.at(syntax.KindLeftBrace) || p.at(syntax.KindLeftParen)) {
 		p.parseMathDelimited()
@@ -895,8 +881,8 @@ func (p *parser) parseMathExprPrec(minPrec int, stopSet syntax.Set) {
 			p.mathUnparen(mRhs)
 		}
 
-		// Avoid interrupting a chain when initially parsing a prime: for
-		// `a^b'_c^d` the grouping is `(a^(b')_c)^d`, not `a^(b'_c^d)`.
+		// Do not interrupt a chain when first parsing a prime: `a^b'_c^d`
+		// groups as `(a^(b')_c)^d`, not `a^(b'_c^d)`.
 		if !(opKind == syntax.KindMathPrimes && p.atSet(stopSet)) {
 			for p.atSet(chainSet) {
 				chainSet = chainSet.Remove(p.cur.kind)
@@ -1102,8 +1088,9 @@ func (p *parser) parseCodeExprPrec(atomic bool, minPrec int) {
 			continue
 		}
 
-		// In atomic mode, only continue with field access if followed by an identifier. Otherwise,
-		// the dot might be punctuation in markup mode (e.g., "foo." at end of sentence).
+		// In atomic mode, continue with a field access only when an identifier
+		// follows. Otherwise the dot may be punctuation in markup, as in "foo."
+		// at the end of a sentence.
 		if atomic {
 			if !p.directlyAt(syntax.KindDot) {
 				break
@@ -1268,39 +1255,35 @@ func (p *parser) parseSingleParamClosure(start int) {
 // parseExprWithParen parses an expression starting with a '('.
 func (p *parser) parseExprWithParen(atomic bool) {
 	if atomic {
-		// Atomic expressions aren't modified by operators that follow them, so our first guess of
-		// array/dict will be correct.
+		// An atomic expression is not changed by whatever follows it, so the
+		// first guess of array or dict is always right.
 		p.parseParenthesizedOrArrayOrDict()
 		return
 	}
 
-	// If we've seen this position before and have a memoized result, restore it and return.
-	// Otherwise, get a key to this position and a checkpoint to restart from in case we make a
-	// wrong prediction.
+	// A memoized result for this position means the guess below has already
+	// been made and corrected once; restore it rather than repeating the work.
+	// Otherwise take a key and a checkpoint to come back to if the guess is
+	// wrong.
 	if p.restoreMemo(p.s.Offset()) {
 		return
 	}
 	key, cp := p.s.Offset(), p.checkpoint()
 
-	// When we reach a '(', we can't be sure what it is. First, we attempt to parse as a simple
-	// parenthesized expression, array, or dictionary as these are the most likely things. We can
-	// handle all of those in a single pass.
+	// A '(' can start several things. Try the likely ones first — a
+	// parenthesized expression, an array, a dictionary — which one pass
+	// handles together.
 	kind := p.parseParenthesizedOrArrayOrDict()
 
-	// If, however, '=>' or '=' follows, we must backtrack and reparse as either a parameter list or
-	// a destructuring. To be able to do that, we created a parser checkpoint before our speculative
-	// parse, which we can restore.
+	// A following '=>' or '=' means it was a parameter list or a destructuring
+	// after all, so restore the checkpoint and parse it again as that.
 	//
-	// However, naive backtracking has a fatal flaw: It can lead to exponential parsing time if we
-	// are constantly getting things wrong in a nested scenario. The particular failure case for
-	// parameter parsing is the following: `(x: (x: (x) => y) => y) => y`
-	//
-	// Such a structure will reparse over and over again recursively, leading to a running time of
-	// O(2^n) for nesting depth n. To prevent this, we perform a simple trick: When we have done the
-	// mistake of picking the wrong path once and have subsequently parsed correctly, we save the
-	// result of that correct parsing in the `p.memo` map. When we reach the same position again, we
-	// can then just restore this result. In this way, no parenthesized expression is parsed more
-	// than twice, leading to a worst case running time of O(2n).
+	// Backtracking on its own would be exponential: in a nest like
+	// `(x: (x: (x) => y) => y) => y` every level guesses wrong and reparses
+	// the levels inside it, which is O(2^n) for depth n. The memo map stops
+	// that. Once a position has been parsed correctly, its result is saved,
+	// and reaching that position again restores the result instead of parsing
+	// it. No parenthesized expression is parsed more than twice.
 	if p.at(syntax.KindArrow) {
 		p.restore(cp)
 		start := len(p.nodes)
@@ -1379,8 +1362,8 @@ func (p *parser) parseParam(sink *bool) {
 }
 
 // parsePattern parses a binding or reassignment pattern.
-// If reassignment is true, we're parsing a reassignment pattern and expressions are allowed.
-// If reassignment is false, we're parsing a binding pattern and only identifiers are allowed.
+// A reassignment pattern allows expressions; a binding pattern allows only
+// identifiers.
 func (p *parser) parsePattern(reassignment bool) {
 	// Destructuring nests without going through parseCodeExprPrec, so it is
 	// counted here as well.
@@ -1393,10 +1376,11 @@ func (p *parser) parsePattern(reassignment bool) {
 	case syntax.KindUnderscore:
 		p.consume()
 	case syntax.KindLeftParen:
-		// isDestruct=false: a lone parenthesised ident in a pattern position
-		// (e.g. the key in `((x): v)` or the inner of `((a, b))`) is a
-		// grouping, not a destructure. The outer caller already wraps real
-		// destructures via parseLetBinding / destructure-assignment recovery.
+		// isDestruct is false: a lone parenthesised identifier in a pattern
+		// position, such as the key in `((x): v)` or the inside of `((a, b))`,
+		// is a grouping rather than a destructure. The caller already wraps
+		// real destructures, in parseLetBinding or destructuring-assignment
+		// recovery.
 		p.parseDestructuringOrParenthesized(reassignment, false)
 	default:
 		p.parsePatternLeaf(reassignment)
@@ -1454,8 +1438,8 @@ func (p *parser) parseDestructuringItem(reassignment bool, notJustParens *bool, 
 	// Parse a normal positional pattern or a destructuring key.
 	wasAtPattern := p.atSet(syntax.Pattern)
 
-	// Use a full checkpoint because there may be trivia between the identifier
-	// and the colon that we need to skip over when backtracking.
+	// A full checkpoint, because there may be trivia between the identifier and
+	// the colon to skip back over.
 	cp := p.checkpoint()
 	if !p.consumeIf(syntax.KindIdent) || !p.at(syntax.KindColon) {
 		p.restore(cp)
@@ -1490,9 +1474,9 @@ func (p *parser) parsePatternLeaf(reassignment bool) {
 
 	start := len(p.nodes)
 
-	// We parse an atomic expression even though we only want an identifier for
-	// better error recovery. We can mark the whole expression as unexpected
-	// instead of going through its pieces one by one.
+	// Parse a whole atomic expression even though only an identifier is
+	// wanted: that way the error can name the whole expression, rather than
+	// picking through its pieces one at a time.
 	p.parseCodeExprPrec(true, 0)
 
 	if !reassignment {
@@ -1519,9 +1503,9 @@ func (p *parser) parseParenthesizedOrArrayOrDict() syntax.Kind {
 	p.withNewlineMode(nlContinue, func() {
 		p.assert(syntax.KindLeftParen)
 		if p.consumeIf(syntax.KindColon) {
-			// `(:` opens a dictionary by construction, so it must never be
-			// downgraded to a parenthesized expression below — that would leave
-			// the bare `:` as a child of the parenthesized node (e.g. `(:0)`).
+			// `(:` always opens a dictionary, so it must not be downgraded to a
+			// parenthesized expression below. That would leave the bare `:` as a
+			// child of the parenthesized node, as in `(:0)`.
 			state.kind = syntax.KindDict
 			state.notJustParens = true
 		}
@@ -1579,8 +1563,8 @@ func (p *parser) parseArrayOrDictItem(state *groupState) {
 		state.notJustParens = true
 
 		if state.kind == syntax.KindArray {
-			// Dictionary syntax in an array. This is an error, but we're handling it in the
-			// analyzer instead of here.
+			// Dictionary syntax inside an array. It is an error, but the
+			// analyzer reports it, not the parser.
 			return
 		} else {
 			state.kind = syntax.KindDict
@@ -1732,7 +1716,7 @@ func (p *parser) parseShowRule() {
 		p.parseCodeExpr()
 	} else {
 		p.parseCodeExpr()
-		// Index of the selector, taken *after* parsing it: parseCodeExpr wraps
+		// Index of the selector, taken after parsing it: parseCodeExpr wraps
 		// its result into a single node and error recovery may insert nodes, so
 		// a marker taken beforehand would point at the wrong node — or past the
 		// end. It is the last node before any pending trivia.
@@ -1807,8 +1791,8 @@ func (p *parser) parseForLoop() {
 	if hasPatternError {
 		p.consumeIf(syntax.KindIn)
 	} else if !p.expect(syntax.KindIn) {
-		// Bail early if we're at a terminator or an error token (like unclosed string)
-		// to avoid cascading errors. Otherwise, try to continue recovery.
+		// Stop at a terminator or an error token, such as an unclosed string, so
+		// the errors do not cascade. Otherwise carry on recovering.
 		if p.atSet(syntax.Terminator) || p.cur.kind == syntax.KindError {
 			p.wrap(start, syntax.KindForLoop)
 			return

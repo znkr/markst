@@ -9,16 +9,16 @@ import (
 	"znkr.io/markst/value"
 )
 
-// assignHeadingLabels labels every heading the source left unlabelled, deriving
-// the label from the heading's own text, so that a presenter always has an
-// anchor to link a section by. It runs once over a realized document, in
-// document order; see [session.realizeDocument] for why it runs after
-// realization rather than during it, and why it takes a [value.Tree] rather
-// than the document itself.
+// assignHeadingLabels gives every heading the source left unlabeled a label
+// derived from its own text, so a presenter always has an anchor to link a
+// section by. It runs once over a realized document in document order. See
+// [session.realizeDocument] for why it runs after realization rather than
+// during it, and why it takes a [value.Tree] rather than the document.
 //
-// The labels it hands out are marked [value.Label.Auto] and are deliberately
-// not registered on the session: the document's namespace — what `@ref` and
-// `#show <x>:` see — is what the source wrote, and settled long before this.
+// The labels it assigns are marked [value.Label.Auto] and are not registered on
+// the session. The document's namespace, which is what `@ref` and `#show <x>:`
+// resolve against, holds only what the source wrote and is already fixed by
+// this point.
 func (s *session) assignHeadingLabels(t value.Tree) {
 	ids := newIDPool(s.labels)
 	for c := range t.Preorder(value.SetOf(value.KindHeading)) {
@@ -30,7 +30,7 @@ func (s *session) assignHeadingLabels(t value.Tree) {
 	}
 }
 
-// idPool hands out unique label names, disambiguating a name already taken by
+// idPool returns unique label names, disambiguating a name already taken by
 // appending -1, -2, … until one is free.
 type idPool struct {
 	taken map[string]bool
@@ -39,7 +39,7 @@ type idPool struct {
 // newIDPool returns a pool with every label the document already carries
 // reserved, so that a generated name can never collide with one the source
 // wrote — including one written further down the document than the heading
-// being labelled. (goldmark reserves only the ids it has already walked past.)
+// being labeled. (goldmark reserves only the ids it has already walked past.)
 func newIDPool(labels map[name.Name]struct{}) *idPool {
 	p := &idPool{taken: make(map[string]bool, len(labels))}
 	for n := range labels {
@@ -74,8 +74,8 @@ func (p *idPool) claim(id string) string {
 // outright (`Über uns` is `ber-uns` to it, and `日本語` is `heading`).
 func slug(text string) string {
 	var b strings.Builder
-	// A slug is never longer than the text it comes from: every rune is kept as
-	// itself, replaced by one byte, or dropped.
+	// A slug is never longer than the text it comes from: each rune is kept,
+	// replaced by one byte, or dropped.
 	b.Grow(len(text))
 	for _, r := range strings.TrimSpace(text) {
 		switch {
@@ -91,12 +91,12 @@ func slug(text string) string {
 	return b.String()
 }
 
-// headingText is the plain text a heading reads as: the text of the elements
-// that carry any, in document order, with everything that renders as markup
-// rather than characters contributing nothing. Emphasis and links contribute
-// the text inside them; a smart quote contributes nothing, which is how
-// `What's new` slugs to `whats-new` — the same answer goldmark reaches by
-// dropping the apostrophe from the source line.
+// headingText is the plain text of a heading: the text of every element that
+// has any, in document order. Elements that render as markup rather than
+// characters contribute nothing, while emphasis and links contribute the text
+// inside them. A smart quote contributes nothing, which is why `What's new`
+// slugs to `whats-new`, the same result goldmark reaches by dropping the
+// apostrophe from the source.
 func headingText(h *value.Heading) string {
 	var b strings.Builder
 	for c := range value.Preorder(h.Body, headingTextKinds) {
@@ -110,7 +110,7 @@ func headingText(h *value.Heading) string {
 		case *value.Linebreak:
 			b.WriteByte(' ')
 		case *value.Footnote:
-			// A footnote's text is not part of the title it hangs off of.
+			// A footnote's text is not part of the heading that cites it.
 			c.SkipChildren()
 		}
 	}

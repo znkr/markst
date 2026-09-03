@@ -6,8 +6,8 @@ import (
 	"znkr.io/markst/types"
 )
 
-// State is a document state handle created by the state() function. It carries
-// a key that identifies the state across the document and an initial value.
+// State is a handle on one piece of document state, as `state()` returns. Key
+// identifies it across the whole document; Init is its value before any update.
 type State struct {
 	Key  string
 	Init Value
@@ -29,8 +29,8 @@ func (n *State) Format(f *formatter.Formatter) {
 	f.FuncCall("state", args)
 }
 
-// StateUpdate is content produced by state.update. It represents a pending
-// change to a state's value and must reach the document to take effect.
+// StateUpdate is the content `state.update` produces: a change to a state's
+// value, which takes effect only once the content reaches the document.
 type StateUpdate struct {
 	Key    string
 	Update Value

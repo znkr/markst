@@ -14,8 +14,12 @@ import (
 	"znkr.io/markst/types"
 )
 
+// ErrValueTooLarge is returned when an operation would build a value larger
+// than the implementation allows, such as repeating a string past [maxRepeat].
 var ErrValueTooLarge = errors.New("value is too large")
 
+// UnaryOp applies a unary operator to x. It returns an error if the operator
+// does not apply to x's type.
 func UnaryOp(op syntax.UnaryOp, x Value) (Value, error) {
 	fn, ok := unaryops[unaryopKey{op, x.Type()}]
 	if !ok {
@@ -29,10 +33,9 @@ func UnaryOp(op syntax.UnaryOp, x Value) (Value, error) {
 }
 
 // maxRepeat bounds how large `n * str` and `arr * n` may grow. Without it a
-// constant like `#(70007000 * 70007000 * "00")` asks for a petabyte-sized
-// allocation, which the Go runtime answers with a `makeslice: len out of range`
-// panic — and it does so during analysis, since the IR builder folds constant
-// operands as it emits them.
+// constant like `#(70007000 * 70007000 * "00")` requests a petabyte-sized
+// allocation and panics with `makeslice: len out of range`. That happens during
+// analysis, since the IR builder folds constant operands as it emits them.
 const maxRepeat = 1 << 31
 
 // repeatFits reports whether repeating something of the given size that many
@@ -45,6 +48,9 @@ func repeatFits(size int, times Int) bool {
 	return int64(times) <= maxRepeat/int64(size)
 }
 
+// BinaryOp applies a binary operator to x and y, promoting the operands to a
+// common type first — an Int and a Float compare and add as two Floats. It
+// returns an error if the operator does not apply to the promoted types.
 func BinaryOp(op syntax.BinaryOp, x, y Value) (Value, error) {
 	xt, yt := x.Type(), y.Type()
 	switch {
@@ -129,6 +135,9 @@ func BinaryOp(op syntax.BinaryOp, x, y Value) (Value, error) {
 	return fn(x, y)
 }
 
+// Compare orders x against y, returning -1, 0, or 1 as [cmp.Compare] does. It
+// returns an error unless both values have the same type and that type is
+// ordered.
 func Compare(x, y Value) (int, error) {
 	if x.Type() != y.Type() {
 		return 0, fmt.Errorf("cannot compare %v and %v", x.Type(), y.Type())
@@ -313,8 +322,8 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 	},
 	{syntax.Mul, types.Float, types.Length}: func(x, y Value) (Value, error) {
 		f, l := float64(x.(Float)), y.(Length)
-		// If only one of the units is present, we can just multiply that one, to handle Inf and
-		// NaN correctly (Inf * 0 = NaN).
+		// With only one unit present, multiply that one alone, so Inf and NaN
+		// come out right: Inf * 0 is NaN.
 		if l.Pt != 0 && l.Em == 0 {
 			return Length{Pt: f * l.Pt}, nil
 		} else if l.Pt == 0 && l.Em != 0 {
@@ -326,8 +335,8 @@ var binops = map[binopKey]func(x, y Value) (Value, error){
 	{syntax.Div, types.Length, types.Float}: func(x, y Value) (Value, error) {
 		l, f := x.(Length), float64(y.(Float))
 		var r Length
-		// If only one of the units is present, we can just multiply that one, to handle Inf, NaN
-		// and Zero correctly (Inf * 0 = NaN).
+		// With only one unit present, multiply that one alone, so Inf, NaN and
+		// zero come out right: Inf * 0 is NaN.
 		if l.Pt != 0 && l.Em == 0 {
 			r = Length{Pt: l.Pt / f}
 		} else if l.Pt == 0 && l.Em != 0 {
@@ -765,8 +774,8 @@ func shiftDatetime(d Datetime, by Duration) (Value, error) {
 	// it into T keeps two datetimes that print the same comparing equal.
 	by.Time = by.Time.Truncate(time.Second)
 	t := d.T.AddDate(0, 0, int(by.Days)).Add(by.Time)
-	// time.Time wraps silently at the far ends of its range, and a shift that
-	// moved the wrong way is the tell.
+	// time.Time wraps silently at the extremes of its range. A shift that
+	// moved in the wrong direction detects that.
 	if by != (Duration{}) && (by.Days > 0 || (by.Days == 0 && by.Time > 0)) != t.After(d.T) {
 		return nil, ErrValueTooLarge
 	}

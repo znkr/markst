@@ -7,25 +7,24 @@ import (
 	"znkr.io/markst/types"
 )
 
-// This file implements the value-layer machinery for `#set` and `#show` rules.
-// During evaluation a rule is *recorded* in the content tree rather than folded
-// into element fields; the realization pass (eval/realize.go) later resolves the
-// wrappers — applying show recipes and hoisting `set document(title:)` — so they
-// don't survive into final output.
+// This file holds the value types behind `#set` and `#show`.
 //
-// Element, Set, Recipe, and the Selector variants are plain values. The two
-// content nodes — StyleUpdate and Styled — are hand-written like [StateUpdate]
-// and opt out of the fieldaccessgen generator.
+// Evaluating a rule records it in the content tree instead of applying it. The
+// realization pass in eval/realize.go resolves the recorded rules afterwards,
+// so none of these types reach the output.
+//
+// [StyleUpdate] and [Styled] are content and are written by hand, not by the
+// fieldaccessgen generator. Everything else here is an ordinary value.
 
-// Element is a constructor function for elements and a set/show target such as
-// `heading` or `text`.
+// Element is the constructor function for one kind of content, such as
+// `heading` or `text`. It is also what a set or show rule names as its target.
 type Element struct {
 	Function
 	produces func(Content) bool
 }
 
-// NewElement builds an element whose constructor is fn and whose content is the
-// Go type T. T is the single source of truth for what the element matches.
+// NewElement returns an element whose constructor is fn and whose content is
+// the Go type T. Which content the element matches follows from T alone.
 func NewElement[T Content](fn Function) *Element {
 	return &Element{
 		Function: fn,
@@ -53,13 +52,11 @@ func (n *Element) produced(c Content) bool {
 	return n.produces != nil && n.produces(c)
 }
 
-// BindStyleSet validates a set-rule's arguments against the element's own
-// signature and, on success, collects the named arguments into a [Set]. It uses
-// [Function.bind] — which rejects unknown arguments and type mismatches but,
-// unlike [Function.Apply], does not require the missing parameters — because a
-// set rule overrides only a subset of an element's properties. Positional
-// arguments are dropped from the recorded [Set]: an element's properties are its
-// named parameters.
+// BindStyleSet checks args against the element's signature and returns the
+// named ones as a [Set]. Unknown arguments and type mismatches are errors, but
+// missing ones are not: a set rule overrides some of an element's properties,
+// not all of them. Positional arguments are dropped, since an element's
+// properties are its named parameters.
 func (n *Element) BindStyleSet(args *Arguments) (*Set, error) {
 	if _, _, err := n.Function.bind(args); err != nil {
 		return nil, err
@@ -71,8 +68,8 @@ func (n *Element) BindStyleSet(args *Arguments) (*Set, error) {
 	return set, nil
 }
 
-// Set is one resolved set-rule effect: the element being styled and the
-// property values it assigns.
+// Set is what a set rule does: the element it styles, and the properties it
+// assigns.
 type Set struct {
 	Element *Element
 	Fields  NamedArgs
@@ -108,10 +105,10 @@ func (n *Set) equal(o *Set) bool {
 	return true
 }
 
-// Recipe is one resolved show-rule effect: a selector (nil for a bare
-// `show: transform`) and the transform applied to matching content by the
-// realization pass. Transform is a *Function, Content, *Element, or
-// *StyleUpdate.
+// Recipe is what a show rule does: which content it applies to, and what it
+// replaces that content with. Selector is nil for a bare `show: transform`,
+// which applies to everything. Transform is a [Function], [Content], [Element],
+// or [StyleUpdate].
 type Recipe struct {
 	Selector  Selector
 	Transform Value
@@ -137,8 +134,7 @@ func (n *Recipe) equal(o *Recipe) bool {
 	return n.Transform.Equal(o.Transform)
 }
 
-// Selector identifies the content a show recipe applies to. Every selector is a
-// [Value], so equality goes through the usual [Value.Equal].
+// Selector picks out the content a show recipe applies to.
 type Selector interface {
 	Value
 	aSelector()
@@ -220,10 +216,9 @@ func (n *WhereSelector) Match(v Value) bool {
 	return ok && n.Element.produced(c) && contentHasLabel(c, n.Label)
 }
 
-// StyleUpdate is the transient content node a set/show rule evaluates to. It
-// rides the content sequence — analogous to [StateUpdate] — and is consumed by
-// the assembly step (folded into a [Styled] wrapper), never surviving into
-// final output.
+// StyleUpdate is what a set or show rule evaluates to. It sits in the content
+// sequence until realization folds it into a [Styled] wrapper, and never
+// reaches the output.
 type StyleUpdate struct {
 	Set    *Set
 	Recipe *Recipe
@@ -277,10 +272,11 @@ func (n *StyleUpdate) GetLabel() *Label {
 	return n.Label
 }
 
-// Styled is the reified style scope: one wrapper per set/show scope,
-// recording the rules that apply to Body (the remaining siblings after the
-// rule). Mirrors Typst's StyledElem. The realization pass (eval/realize.go)
-// resolves it — applying recipes to Body and dropping the wrapper.
+// Styled is a style scope: the set and show rules in force, wrapped around the
+// content they apply to. Realization applies the rules to Body and drops the
+// wrapper, so a Styled never reaches the output.
+//
+// Corresponds to StyledElem in Typst.
 type Styled struct {
 	Sets    []*Set
 	Recipes []*Recipe

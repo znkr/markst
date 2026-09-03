@@ -2,41 +2,37 @@ package value
 
 import "iter"
 
-// Tree is a content tree to walk: a [Document], or an [Index] built over one.
-// A function takes a Tree rather than a [Content] when the caller may already
-// have an index to spend — the two walk the same elements in the same order, so
-// which one is passed changes only what the walk costs.
+// Tree is a walkable content tree: a [Document], or an [Index] over one. A
+// function takes a Tree rather than a [Content] so that a caller holding an
+// index can pass it instead. Both walk the same elements in the same order and
+// differ only in cost.
 type Tree interface {
 	// Preorder walks the tree; see [Preorder] and [Index.Preorder].
 	Preorder(kinds KindSet) iter.Seq[Cursor]
 }
 
-// Index is a content tree recorded flat, in document order: one entry per
-// element, holding the element, how deep it sits, where its subtree ends, and
-// the union of the kinds that subtree holds.
+// Index is a flat record of a content tree in document order: one entry per
+// element, holding the element, its depth, where its subtree ends, and the set
+// of kinds in that subtree.
 //
-// It walks like the tree itself — [Index.Preorder] yields the same cursors in
-// the same order as [Preorder] — and adds the one thing a walk cannot do: a
-// subtree whose kinds miss the mask is stepped over whole, rather than
-// descended into and filtered out. That is worth having when a caller walks the
-// same document more than once, since the index is built once and every walk
-// after that reads it.
+// [Index.Preorder] yields the same cursors in the same order as [Preorder], but
+// skips a subtree containing none of the requested kinds instead of descending
+// into it and filtering. Building the index costs one traversal, so it pays off
+// when a document is walked more than once.
 //
-// An index records the tree as it was when it was built. Nothing detects a tree
-// that has changed since: an index of a modified tree walks elements that are
-// no longer in it and misses the ones that are. Fields that carry no structure
-// — a label, a heading's depth — may be written through a cursor as usual; it
-// is adding, removing or replacing content that invalidates the index. Build a
-// new one after that.
+// An index describes the tree as it was when the index was built. A change to
+// the tree is not detected: the index will then visit elements that have been
+// removed and miss ones that have been added. Writing a field that carries no
+// structure, such as a label or a heading's depth, is safe; adding, removing,
+// or replacing content is not, and requires a new index.
 //
-// The zero Index is empty and walks nothing. Build one with [NewIndex], or fill
-// one in place with [Index.Init].
+// The zero Index is empty. Build one with [NewIndex], or fill one in place with
+// [Index.Init].
 type Index struct {
 	nodes []indexNode
 }
 
-// indexNode is one element's record. It is 40 bytes, so an index of a document
-// costs about as much as the document's own spine.
+// indexNode is one element's record, 40 bytes.
 type indexNode struct {
 	c       Content
 	end     int32   // one past the last element of this element's subtree
@@ -53,14 +49,13 @@ func NewIndex(c Content) Index {
 	return x
 }
 
-// Init fills x with an index of c, reusing whatever x already allocated. It is
-// how a caller that holds an index across documents avoids building a new one
-// each time.
+// Init fills x with an index of c, reusing memory x has already allocated. Use
+// it to hold one index across several documents.
 func (x *Index) Init(c Content) {
 	x.nodes = x.nodes[:0]
 	// open holds the elements whose subtrees are still being read, outermost
-	// first: each is closed — its end and its subtree's kinds settled — once
-	// the walk comes back out to a depth it no longer covers.
+	// first. An element is closed, fixing its end and its subtree's kinds, when
+	// the walk returns to a depth at or above it.
 	var open []int32
 	closeTop := func() {
 		i := open[len(open)-1]
@@ -99,11 +94,11 @@ func (x *Index) Root() Content {
 	return x.nodes[0].c
 }
 
-// Preorder walks the indexed tree, yielding a cursor for each element whose kind
-// is in kinds. It is [Preorder] over the same content: the same elements in the
-// same order, the same cursors, the same break and [Cursor.SkipChildren]. What
-// it does differently is invisible — a subtree holding none of the kinds asked
-// for is stepped over rather than walked through.
+// Preorder walks the indexed tree, yielding a cursor for each element whose
+// kind is in kinds. It matches [Preorder] over the same content in every
+// observable way: the same elements, the same order, the same cursors, and the
+// same handling of break and [Cursor.SkipChildren]. It differs only in speed,
+// by skipping subtrees that contain none of the requested kinds.
 func (x *Index) Preorder(kinds KindSet) iter.Seq[Cursor] {
 	return func(yield func(Cursor) bool) {
 		w := &walker{yield: yield, kinds: kinds}
@@ -114,7 +109,7 @@ func (x *Index) Preorder(kinds KindSet) iter.Seq[Cursor] {
 				i = int(n.end)
 				continue
 			}
-			// Everything still open below this element's depth is behind us.
+			// Any element open at or below this depth is complete.
 			for len(w.stack) > int(n.depth) {
 				w.pop()
 			}

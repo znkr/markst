@@ -8,31 +8,31 @@ import (
 	"znkr.io/markst/value"
 )
 
-// This file holds the join-scope and escape machinery the analyzer uses to
-// give blocks, loops, and closures their joined value and to let break/
-// continue/return recover the value built so far. See the "Escapes" section
-// of the package doc in analyzer.go for the overview.
+// This file holds the join scopes and escape handling the analyzer uses to give
+// a block, loop, or closure its joined value, and to let break, continue, and
+// return take the value built so far with them. See the "Escapes" section of
+// the package doc in analyzer.go.
 
-// A joinScope is one level of the frame's join stack ([frame.joinScopes]). A
-// block scope collects the values a block produces, so the block's value —
-// the join of its statement values — can be built: items are gathered as refs
-// in source order (no IR per statement; see [analyzer.lowerJoinedBlock]) and
-// combined into one static [expr.CodeJoin]/[expr.ContentResult] when the
-// block completes (see [analyzer.joinScopeValue]).
+// A joinScope is one level of the frame's join stack ([frame.joinScopes]).
 //
-// A loop contributes a second flavor of entry: an accumulator scope (acc set)
-// standing for the iterations the loop has completed so far. Their values
-// live in the runtime accumulator accVar rather than in static items;
-// [analyzer.partialJoin] reads them from there. Keeping accumulator entries
-// on the same stack keeps everything an escape recovers in one list, in
-// source order.
+// A block scope collects the values a block's statements produce, which
+// together make the block's value. The items are gathered as refs in source
+// order, with no IR emitted per statement (see [analyzer.lowerJoinedBlock]),
+// and combined into a single [expr.CodeJoin] or [expr.ContentResult] when the
+// block ends (see [analyzer.joinScopeValue]).
+//
+// A loop adds a second kind of entry: an accumulator scope, with acc set,
+// standing for the iterations completed so far. Its values are in the runtime
+// accumulator accVar rather than in static items, and [analyzer.partialJoin]
+// reads them from there. Both kinds share one stack so that everything an
+// escape takes with it is in a single list, in source order.
 type joinScope struct {
 	items   []expr.Ref
 	spans   []syntax.Span
 	content bool
 
-	// acc marks a loop-accumulator entry, whose value lives in accVar.
-	// Accumulator entries never carry items.
+	// acc marks a loop-accumulator entry, whose value is in accVar. An
+	// accumulator entry never has items.
 	acc    bool
 	accVar expr.Var
 }
@@ -126,16 +126,17 @@ func (a *analyzer) appendJoin(accVar expr.Var, span syntax.Span, item expr.Ref) 
 	a.b.WriteVar(accVar, a.b.CurrentBlock(), next)
 }
 
-// partialJoin builds the in-flight value an escape recovers: the join of
-// everything the frame's join scopes from fromScope upward have produced so
-// far, in source order — block scopes contribute their collected items, loop
-// accumulator entries the iterations completed so far. extra, when not NoRef,
-// is appended last: the natural join value of a construct body whose scope is
-// already popped (see [analyzer.firePending]). The first block scope's items
-// spread directly and carry the finalizer; every other entry folds to a
-// single value. Because the join operator is associative this is one static
-// join, not one per scope. An empty join (an expression-bodied closure)
-// yields none.
+// partialJoin builds the value an escape takes with it: the join of everything
+// the frame's join scopes from fromScope upward have produced so far, in source
+// order. A block scope contributes its collected items, a loop accumulator
+// entry the iterations completed so far. extra, when not NoRef, is appended
+// last; it is the join value of a construct body whose scope has already been
+// popped (see [analyzer.firePending]).
+//
+// The first block scope's items spread directly and carry the finalizer, and
+// every other entry folds to a single value. The join operator is associative,
+// so this is one static join rather than one per scope. An empty join, as in an
+// expression-bodied closure, yields none.
 func (a *analyzer) partialJoin(fromScope int, extra expr.Ref, span syntax.Span) expr.Ref {
 	f := a.frame()
 	var items []expr.Ref
@@ -170,29 +171,30 @@ func (a *analyzer) partialJoin(fromScope int, extra expr.Ref, span syntax.Span) 
 
 // Pending escapes ////////////////////////////////////////////////////////////
 
-// pendingEscape records a lowered break/continue/return whose control transfer
-// has not been emitted yet. Escapes are flow events in Typst: the statement
-// containing the escape is still evaluated to its end (sibling arguments,
-// enclosing calls), and only then does control leave. Lowering mirrors that by
-// deferring the terminator: the escape site records the event
-// ([analyzer.setPending]) and evaluates to none; the statement sequence stops
-// lowering further statements once an escape is pending ([analyzer.eachCodeItem],
-// [analyzer.eachMarkupItem]); and the innermost enclosing catch point — a
-// conditional branch, a loop body, or the closure body — emits the actual
-// terminator ([analyzer.firePending]).
+// pendingEscape records a lowered break, continue, or return whose control
+// transfer has not been emitted yet.
 //
-// Catch points fire only escapes that arose within their own construct
-// (detected by comparing against the pending state at entry), so an escape
-// pending from an earlier sibling argument passes through a nested construct
-// untouched and the construct lowers as regular live code. This works because
-// a pending escape never survives past a control-flow merge: every construct
-// catches its own escapes before merging, so a pending escape at any
-// statement boundary was unconditional within that statement.
+// In Typst the statement containing an escape is evaluated to its end,
+// including sibling arguments and enclosing calls, before control leaves.
+// Lowering matches that by deferring the terminator. The escape site records
+// the escape ([analyzer.setPending]) and lowers to none; the statement sequence
+// stops lowering further statements while an escape is pending
+// ([analyzer.eachCodeItem], [analyzer.eachMarkupItem]); and the innermost
+// construct that can catch it — a conditional branch, a loop body, or the
+// closure body — emits the terminator ([analyzer.firePending]).
+//
+// A catch point fires only the escapes that arose inside its own construct,
+// which it detects by comparing against the pending state at entry. An escape
+// left pending by an earlier sibling argument therefore passes through a nested
+// construct, and that construct lowers as ordinary live code. This is sound
+// because a pending escape never survives a control-flow merge: every construct
+// catches its own escapes first, so an escape pending at a statement boundary
+// was unconditional within that statement.
 type pendingEscape struct {
 	kind escapeKind
 	span syntax.Span
-	// val is the explicit `return value`; NoRef for a bare return (which
-	// yields the joined body value) and for break/continue.
+	// val is the value of an explicit `return value`. It is NoRef for a bare
+	// return, which yields the joined body value, and for break and continue.
 	val expr.Ref
 }
 
@@ -216,12 +218,12 @@ func (a *analyzer) setPending(p pendingEscape) {
 	}
 }
 
-// catchEscapes lowers a construct body via lower and, if an escape became
-// pending inside it, fires it here — on the body's own path, before any
-// control-flow merge (see [pendingEscape]). An escape already pending at
-// entry passes through untouched, so a construct lowered after a sibling
-// escape in the same statement stays regular live code. warnDiscard is
-// forwarded to [analyzer.firePending].
+// catchEscapes lowers a construct body with lower and, if an escape became
+// pending inside it, fires that escape here: on the body's own path, before any
+// control-flow merge (see [pendingEscape]). An escape already pending at entry
+// passes through, so a construct lowered after a sibling escape in the same
+// statement remains ordinary live code. warnDiscard is passed on to
+// [analyzer.firePending].
 func (a *analyzer) catchEscapes(warnDiscard bool, lower func() expr.Ref) expr.Ref {
 	entry := a.frame().pending
 	ref := lower()
@@ -253,9 +255,9 @@ func (a *analyzer) firePending(body expr.Ref, warnDiscard bool) {
 	f.pending = nil
 	switch p.kind {
 	case escapeBreak, escapeContinue:
-		// The innermost loop is the target. Recovery starts at its first
-		// inner scope — one past the loop's own accumulator entry, which is
-		// what the escape flushes into rather than a value it recovers.
+		// The innermost loop is the target. The recovered value starts at the
+		// loop's first inner scope, one past its own accumulator entry, which
+		// the escape appends to rather than reads.
 		l := f.loops[len(f.loops)-1]
 		a.appendJoin(l.accVar, p.span, a.partialJoin(l.bodyScope, body, p.span))
 		if p.kind == escapeBreak {
@@ -266,9 +268,9 @@ func (a *analyzer) firePending(body expr.Ref, warnDiscard bool) {
 	case escapeReturn:
 		val := p.val
 		if val == expr.NoRef {
-			// Bare return: yield the function body's joined-so-far value.
-			// Loops the return crosses contribute their completed iterations
-			// via their accumulator entries on the join stack.
+			// A bare return yields the function body's value so far. Each loop
+			// the return passes through contributes its completed iterations
+			// from its accumulator entry on the join stack.
 			val = a.partialJoin(0, body, p.span)
 		} else if warnDiscard {
 			a.b.DiscardCheck(p.span, body)

@@ -41,9 +41,8 @@ func (*Custom) aValue()          {}
 func (*Custom) aContent()        {}
 func (*Custom) Type() types.Type { return types.Content }
 
-// Equal reports whether other is this very element. The payload is opaque, so
-// what it means for two of them to be equal is not markst's to decide; identity
-// is the one answer that is right without knowing.
+// Equal reports whether other is this same element. The payload is opaque, so
+// markst cannot compare two of them; identity is the only answer it can give.
 func (n *Custom) Equal(other Value) bool {
 	o, ok := other.(*Custom)
 	return ok && n == o

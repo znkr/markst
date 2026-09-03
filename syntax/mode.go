@@ -1,9 +1,8 @@
 package syntax
 
-// Mode represents the current lexical mode of the scanner. Markst source code
-// is lexed differently depending on whether the scanner is in markup, math,
-// or code context. The parser switches modes by calling [scanner.Scanner.SetMode]
-// as it enters and exits different syntactic constructs.
+// Mode is one of the three ways Markst source can be read: as markup, as math,
+// or as code. The same characters tokenize differently in each, so the parser
+// switches the scanner's mode as it enters and leaves each construct.
 type Mode int
 
 const (

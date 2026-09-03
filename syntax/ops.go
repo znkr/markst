@@ -2,10 +2,7 @@ package syntax
 
 import "fmt"
 
-// UnaryOp represents a unary operator in Markst's expression syntax.
-//
-// Each operator has a [Precedence] level used by the parser to resolve
-// ambiguity in expressions like -x + y.
+// UnaryOp is one of Markst's prefix operators.
 type UnaryOp int
 
 const (
@@ -14,9 +11,8 @@ const (
 	Not                // The boolean 'not'.
 )
 
-// UnaryOpFromKind converts a token [Kind] to its corresponding UnaryOp.
-//
-// It panics if kind is not a unary operator token.
+// UnaryOpFromKind returns the operator a token stands for. It panics if kind
+// is not a unary operator token.
 func UnaryOpFromKind(kind Kind) UnaryOp {
 	switch kind {
 	case KindPlus:
@@ -30,8 +26,7 @@ func UnaryOpFromKind(kind Kind) UnaryOp {
 	}
 }
 
-// Precedence returns the operator's binding strength. Higher values bind more
-// tightly.
+// Precedence returns how tightly the operator binds. Higher binds tighter.
 func (op UnaryOp) Precedence() int {
 	switch op {
 	case Pos, Neg:
@@ -43,6 +38,7 @@ func (op UnaryOp) Precedence() int {
 	}
 }
 
+// String returns the operator as it is written in source.
 func (op UnaryOp) String() string {
 	switch op {
 	case Pos:
@@ -56,7 +52,7 @@ func (op UnaryOp) String() string {
 	}
 }
 
-// Assoc represents operator associativity.
+// Assoc is which way a run of same-precedence operators groups.
 type Assoc int
 
 const (
@@ -64,9 +60,8 @@ const (
 	AssocRight              // Right-to-left associativity.
 )
 
-// BinaryOp represents a binary operator in Markst's expression syntax. Each
-// operator has a [Precedence] level and [Assoc] (associativity) that the parser
-// uses to build the correct expression tree.
+// BinaryOp is one of Markst's infix operators. [BinaryOp.Precedence] and
+// [BinaryOp.Assoc] are what the parser groups an expression by.
 type BinaryOp int
 
 const (
@@ -91,9 +86,9 @@ const (
 	DivAssign                 // The divide-assign operator: /=
 )
 
-// BinaryOpFromKind converts a token [Kind] to its corresponding BinaryOp.
-// It panics if kind is not a binary operator token. Note that [KindNot] +
-// [KindIn] (the "not in" operator) is handled by the parser, not here.
+// BinaryOpFromKind returns the operator a token stands for. It panics if kind
+// is not a binary operator token. `not in` is two tokens, so the parser
+// recognizes it rather than this function.
 func BinaryOpFromKind(kind Kind) BinaryOp {
 	switch kind {
 	case KindPlus:
@@ -137,8 +132,7 @@ func BinaryOpFromKind(kind Kind) BinaryOp {
 	}
 }
 
-// Precedence returns the operator's binding strength. Higher values bind more
-// tightly.
+// Precedence returns how tightly the operator binds. Higher binds tighter.
 func (op BinaryOp) Precedence() int {
 	switch op {
 	case Mul, Div:
@@ -158,8 +152,8 @@ func (op BinaryOp) Precedence() int {
 	}
 }
 
-// Assoc returns the associativity of the operator. Assignment operators are
-// right-associative; all others are left-associative.
+// Assoc returns which way a run of this operator groups. Assignment groups to
+// the right, everything else to the left.
 func (op BinaryOp) Assoc() Assoc {
 	switch op {
 	case Assign, AddAssign, SubAssign, MulAssign, DivAssign:
@@ -179,9 +173,8 @@ func (op BinaryOp) IsAssign() bool {
 	}
 }
 
-// StripAssign converts a compound assignment operator to its arithmetic
-// counterpart (e.g. AddAssign → Add). Non-assignment operators are returned
-// unchanged.
+// StripAssign returns the arithmetic operator behind a compound assignment,
+// so [AddAssign] becomes [Add]. Any other operator is returned unchanged.
 func (op BinaryOp) StripAssign() BinaryOp {
 	switch op {
 	case AddAssign:
@@ -208,6 +201,7 @@ func (op BinaryOp) IsComparison() bool {
 	}
 }
 
+// String returns the operator as it is written in source.
 func (op BinaryOp) String() string {
 	switch op {
 	case Add:

@@ -17,7 +17,7 @@ func article(sections int) Content {
 			&Text{Text: "Section"},
 			&Footnote{Body: &Par{Body: &Sequence{Children: []Content{
 				&Text{Text: "a note that is not part of the title"},
-				&Emph{Body: &Text{Text: "emphasised"}},
+				&Emph{Body: &Text{Text: "emphasized"}},
 			}}}},
 		}}})
 		for j := 0; j < 4; j++ {

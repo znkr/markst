@@ -12,17 +12,17 @@ import (
 // This file implements the format descriptions `datetime.display` takes, the
 // same ones Typst inherits from the Rust `time` crate: literal text with
 // components in square brackets, each optionally carrying `key:value`
-// modifiers — `"[year]-[month repr:long]"`. A literal `[` is written `[[`.
+// modifiers, as in `"[year]-[month repr:long]"`. A literal `[` is written `[[`.
 //
-// Two kinds of failure come out of here, and they are reported at different
-// places. A malformed description is the caller's argument being wrong, so it
-// is an [value.ArgErrorPosf] against the pattern (positional index 1, since
-// `self` is pre-bound on a method call). Asking for a component the value
-// doesn't have — the hour of a date — is a property of the call as a whole and
-// reported as a plain error against the whole expression.
+// Two kinds of failure arise here, reported in different places. A malformed
+// description means the caller's argument is wrong, so it is a
+// [value.ArgErrorPosf] against the pattern, at positional index 1 since `self`
+// is pre-bound on a method call. Requesting a component the value does not
+// have, such as the hour of a date, is a property of the call as a whole and is
+// reported against the whole expression.
 
-// errInsufficient is returned when the format description asks for a component
-// the datetime does not carry.
+// errInsufficient is returned when the format description requests a component
+// the datetime does not have.
 var errInsufficient = fmt.Errorf("failed to format datetime (insufficient information)")
 
 // patternErrorf builds a diagnostic pointing at the format description itself.
@@ -105,7 +105,7 @@ func formatComponent(d value.Datetime, body string, open int) (string, error) {
 		return "", err
 	}
 
-	// Every modifier the component didn't ask about is one it doesn't know.
+	// A modifier the component did not consume is one it does not accept.
 	for _, m := range mods {
 		if !m.used {
 			return "", patternErrorf("invalid modifier '%s' at index %d", m.key, m.keyIdx)
@@ -222,10 +222,10 @@ func formatYear(d value.Datetime, mods []*modifier) (string, error) {
 		year, _ = d.T.ISOWeek()
 	}
 	if repr == "last_two" {
-		// The last two digits stand on their own: the century they came from
-		// is gone, so a sign in front of them would name nothing. The `time`
-		// crate this format language follows suppresses it here too — printing
-		// one would turn 44 BC into "+44".
+		// The last two digits stand alone, without the century, so a sign in
+		// front of them would refer to nothing. The `time` crate this format
+		// language follows also suppresses it: printing one would render 44 BC
+		// as "+44".
 		return pad(abs(year)%100, 2, style), nil
 	}
 	s := pad(year, 4, style)
@@ -287,8 +287,8 @@ func formatWeekday(d value.Datetime, mods []*modifier) (string, error) {
 	case "short":
 		return d.T.Weekday().String()[:3], nil
 	}
-	// The numeric representations name the day the week starts on, so the
-	// count runs from there.
+	// The numeric representations specify which day the week starts on, so
+	// the count runs from that day.
 	n := int(d.T.Weekday())
 	if repr == "monday" {
 		n = (n + 6) % 7

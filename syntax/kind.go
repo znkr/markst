@@ -1,19 +1,14 @@
 package syntax
 
-// Kind classifies tokens and syntax tree nodes. It serves a dual role: the
-// scanner produces (Kind, text) pairs for individual tokens, and the parser
-// groups those tokens into inner nodes that also carry a Kind. For example,
-// [KindStar] is a token produced by the scanner, while [KindStrong] is a
-// composite node assembled by the parser from a pair of KindStar tokens and
-// the markup between them.
+// Kind says what a token or a syntax tree node is. Tokens and nodes share the
+// enum: [KindStar] is the `*` the scanner reads, and [KindStrong] is the node
+// the parser builds from two of them and the markup between.
 //
-// Kinds are organized into groups: markup elements, math constructs,
-// punctuation and operators, keywords, and code-level constructs. Each
-// constant carries a comment describing its syntax.
+// The constants below are grouped by what they belong to — markup, math,
+// punctuation and operators, keywords, code — and each carries the syntax it
+// stands for.
 //
-// The [Name] method returns a human-readable name for use in diagnostics.
-//
-// Corresponds to SyntaxKind in the upstream Typst implementation.
+// Corresponds to SyntaxKind in Typst.
 //
 //go:generate go tool golang.org/x/tools/cmd/stringer -type=Kind
 type Kind int
@@ -165,10 +160,9 @@ const (
 	numKinds
 )
 
-// Name returns the human-readable name of the kind, suitable for use in
-// error messages and diagnostics. For operators it returns the symbol (e.g.
-// "=="), for keywords the keyword text (e.g. "let"), and for composite nodes
-// a descriptive label (e.g. "function call").
+// Name returns what a diagnostic should call this kind: the symbol for an
+// operator ("=="), the word for a keyword ("let"), and a description for a
+// node ("function call").
 func (k Kind) Name() string { return kinds[k] }
 
 var kinds = [...]string{

@@ -5,18 +5,17 @@ import (
 	"slices"
 )
 
-// Preorder iterates c and everything below it in document order — c first, then
-// its children depth-first, left to right — yielding a [Cursor] for each element
-// whose kind is in kinds. Elements outside kinds are still descended into; the
-// mask decides what is handed to the caller, not what is walked.
+// Preorder iterates c and everything below it in document order: c first, then
+// its children depth-first, left to right. It yields a [Cursor] for each
+// element whose kind is in kinds. Elements outside kinds are still descended
+// into; kinds selects what the caller is given, not what is traversed.
 //
-// It is the walk introspection is built on, and it reaches every element of a
-// realized document, invisible ones ([Metadata], [StateUpdate]) included. What
-// it does not descend into is a value that merely happens to be content:
-// [Metadata.Value] is data the document carries, not part of the document, so
-// metadata nested in another metadata's value stays out of reach.
+// Every element of a realized document is visited, including the ones that
+// produce no output ([Metadata], [StateUpdate]). [Metadata.Value] is not
+// descended into: it is a value the document carries, not part of the document,
+// so metadata inside another metadata's value is not visited.
 //
-// Breaking out of the loop stops the walk. To skip one subtree and carry on,
+// Breaking out of the loop stops the walk. To skip one subtree and continue,
 // call [Cursor.SkipChildren]:
 //
 //	for c := range value.Preorder(body, kinds) {
@@ -27,9 +26,7 @@ import (
 //		…
 //	}
 //
-// The walk allocates nothing per element — each element's generated descent
-// hands the same walker down rather than collecting anything along the way — so
-// its cost grows with the document only in the elements it touches.
+// The walk allocates nothing per element.
 func Preorder(c Content, kinds KindSet) iter.Seq[Cursor] {
 	return func(yield func(Cursor) bool) {
 		if c == nil {
@@ -41,34 +38,35 @@ func Preorder(c Content, kinds KindSet) iter.Seq[Cursor] {
 	}
 }
 
-// walker carries one Preorder walk: the caller's yield function, the kind mask
-// it filters on, and the chain of elements currently open, which is what gives a
-// cursor its ancestors.
+// walker holds the state of one Preorder walk: the caller's yield function, the
+// kinds to select, and the stack of open elements that a cursor reports as its
+// ancestors.
 type walker struct {
 	yield func(Cursor) bool
 	kinds KindSet
 	stack []Content
-	// inline is the stack's initial storage, so a walk over a document of
-	// ordinary depth allocates only the walker itself.
+	// inline is the stack's initial storage. A walk over a document less than
+	// 8 levels deep allocates only the walker.
 	inline  [8]Content
 	stopped bool
 	skip    bool
 }
 
-// push opens an element: it becomes the one a cursor is on, and an ancestor of
-// everything visited until it is popped. Every element is pushed, whether or not
-// the mask yields it, because the mask decides what the caller sees and not what
-// the chain it sits in is.
+// push opens an element, making it the current one and an ancestor of
+// everything visited before it is popped. Every element is pushed, including
+// those kinds does not select: kinds controls what the caller is given, not
+// what an element's ancestors are.
 func (w *walker) push(n Content) { w.stack = append(w.stack, n) }
 
 // pop closes the element on top of the stack, once its children are done.
 func (w *walker) pop() { w.stack = w.stack[:len(w.stack)-1] }
 
-// visit offers the element on top of the stack to the caller and reports whether
-// to descend into it. It is false both when the caller stopped the walk and when
-// it pruned this subtree; [walker.live] tells the two apart. The generated
-// descent calls it only when the mask matches, which is why the mask test is not
-// here: the kind is a constant there, and the test folds into a single bit test.
+// visit yields the element on top of the stack and reports whether to descend
+// into it. False covers two cases, stopping the walk and pruning this subtree;
+// [walker.live] distinguishes them.
+//
+// The kind test is in the generated descent rather than here, where the kind is
+// a constant and the test compiles to one bit test.
 func (w *walker) visit() bool {
 	if !w.yield(Cursor{w, len(w.stack) - 1}) {
 		w.stopped = true
@@ -81,17 +79,17 @@ func (w *walker) visit() bool {
 	return true
 }
 
-// live reports whether the walk is still running, which is what an element
-// whose subtree was pruned returns to its parent.
+// live reports whether the walk is still running. An element whose subtree was
+// pruned returns this to its parent.
 func (w *walker) live() bool { return !w.stopped }
 
-// Cursor is one element of a walk, together with the chain of elements it sits
-// under. [Preorder] yields one per visited element.
+// Cursor is one visited element together with its ancestors. [Preorder] yields
+// one per visited element.
 //
-// A cursor is valid only inside the loop body it was yielded to: the ancestors
-// it reports live on the walk's own stack, and that stack unwinds as the walk
-// moves on. [Cursor.Path] is the escape for a caller that needs to keep the
-// chain; [Cursor.Node] is safe to keep on its own, being just the element.
+// A cursor is valid only inside the loop body it was yielded to: its ancestors
+// are read from the walk's stack, which unwinds as the walk continues. Use
+// [Cursor.Path] to copy the ancestors out. The element from [Cursor.Node] is
+// safe to retain.
 type Cursor struct {
 	w *walker
 	i int
@@ -100,18 +98,18 @@ type Cursor struct {
 // Node returns the element the cursor is on.
 func (c Cursor) Node() Content { return c.at(c.i) }
 
-// Kind returns the element's kind, without the type switch [Cursor.Node] would
-// need.
+// Kind returns the element's kind, avoiding the type switch [Cursor.Node] would
+// require.
 func (c Cursor) Kind() ElemKind { return c.at(c.i).Kind() }
 
-// Depth returns how many elements the cursor sits under: 0 for the element the
-// walk started at, 1 for its children, and so on. It counts every enclosing
-// element, whether or not the walk's mask yielded it.
+// Depth returns the number of enclosing elements: 0 for the element the walk
+// started at, 1 for its children, and so on. All enclosing elements count,
+// including those the walk's kinds did not select.
 func (c Cursor) Depth() int { return c.i }
 
-// Parent returns the element the cursor's element sits directly in, and false
-// at the element the walk started at. The parent is reported whether or not the
-// walk's mask matches it, so it may be an element the loop never saw.
+// Parent returns the enclosing element, and false at the element the walk
+// started at. The parent need not be one of the kinds the walk selected, so it
+// may be an element the loop was never given.
 func (c Cursor) Parent() (Cursor, bool) {
 	if c.i == 0 {
 		return Cursor{}, false
@@ -119,10 +117,10 @@ func (c Cursor) Parent() (Cursor, bool) {
 	return Cursor{c.w, c.i - 1}, true
 }
 
-// Enclosing iterates the cursor's element and the elements it sits in, from the
-// element itself outwards, keeping those whose kind is in kinds. It answers
-// questions about context — which heading a piece of content belongs to, whether
-// anything above it is a footnote — that document order alone cannot.
+// Enclosing iterates the cursor's element and its ancestors, innermost first,
+// keeping those whose kind is in kinds. Use it for questions about context that
+// document order cannot answer: which heading some content is under, or whether
+// it is inside a footnote.
 func (c Cursor) Enclosing(kinds KindSet) iter.Seq[Cursor] {
 	return func(yield func(Cursor) bool) {
 		for i := c.i; i >= 0; i-- {
@@ -136,16 +134,16 @@ func (c Cursor) Enclosing(kinds KindSet) iter.Seq[Cursor] {
 	}
 }
 
-// Path returns the chain of elements from the one the walk started at down to
-// and including the cursor's own, as a slice the caller owns. Unlike the cursor
-// it is taken from, it stays valid after the walk has moved on.
+// Path returns the elements from the one the walk started at down to the
+// cursor's own, as a slice the caller owns. Unlike the cursor, it stays valid
+// after the walk continues.
 func (c Cursor) Path() []Content {
 	return slices.Clone(c.w.stack[:c.i+1])
 }
 
-// SkipChildren prunes the cursor's element: the walk does not descend into it
-// and carries on with what follows. It applies to the element being visited, so
-// it panics on a cursor obtained from [Cursor.Parent] or kept past its loop body.
+// SkipChildren stops the walk descending into the cursor's element; it
+// continues with what follows. It applies only to the element being visited, so
+// it panics on a cursor from [Cursor.Parent] or one kept past its loop body.
 func (c Cursor) SkipChildren() {
 	if c.i != len(c.w.stack)-1 {
 		panic("value: SkipChildren called on a cursor other than the one being visited")
@@ -160,9 +158,8 @@ func (c Cursor) at(i int) Content {
 	return c.w.stack[i]
 }
 
-// Preorder walks the document: the document element itself, then everything in
-// its body, in document order. It is [Preorder] over n, and it makes a document
-// a [Tree], so that a function walking one can take an [Index] of it instead.
+// Preorder walks the document element and then its body, in document order. It
+// is [Preorder] over n, and it is what makes a [Document] a [Tree].
 func (n *Document) Preorder(kinds KindSet) iter.Seq[Cursor] {
 	if n == nil {
 		return func(func(Cursor) bool) {}
@@ -171,8 +168,9 @@ func (n *Document) Preorder(kinds KindSet) iter.Seq[Cursor] {
 }
 
 // The hand-written content nodes ([StateUpdate], [StyleUpdate], [Styled],
-// [Custom]) opt out of the generator, so they carry their own kind and descent.
-// All but Styled are leaves; a Styled wraps the content it scopes over.
+// [Custom]) are not produced by the generator, so their kind and descent are
+// written here. All but Styled are leaves; Styled has the content it applies
+// to as its child.
 
 func (n *StateUpdate) Kind() ElemKind { return KindStateUpdate }
 func (n *StyleUpdate) Kind() ElemKind { return KindStyleUpdate }

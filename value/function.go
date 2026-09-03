@@ -10,9 +10,8 @@ import (
 	"znkr.io/markst/types"
 )
 
-// Function represents a Markst function value, encompassing both user-defined
-// closures and built-in functions. It describes the parameter signature and
-// holds the implementation.
+// Function is a Markst function: a closure written in a document, or a
+// builtin. It holds the parameter signature and the implementation.
 type Function struct {
 	// Name is the function's name.
 	Name string
@@ -23,12 +22,12 @@ type Function struct {
 	// and unmatched named args.
 	Positional []Param
 
-	// Sink, if set, marks Positional[*Sink] as a sink parameter. Pre-sink
-	// params consume from the front of call args, post-sink params from the
-	// back, and everything in between (plus unmatched named args) is packed
-	// into a *Arguments passed at that index. A function whose sink should not
-	// silently swallow stray named args inspects the sink's Named itself (see
-	// e.g. math.vec/mat/cases and array.zip).
+	// Sink, if set, marks Positional[*Sink] as the sink parameter. Parameters
+	// before it take arguments from the front, parameters after it from the
+	// back, and everything remaining, together with any unmatched named
+	// arguments, is collected into an *Arguments passed at that index. A
+	// function that should reject stray named arguments checks the sink's
+	// Named itself; math.vec, math.mat, math.cases and array.zip do.
 	Sink *int
 
 	// Named describes the allowed named parameters.
@@ -43,30 +42,30 @@ type Function struct {
 	// an error.
 	F func(call *FunctionCallContext, args []Value, named NamedArgsWithDefaults) (Value, error)
 
-	// Validate, if set, runs after the generic bind checks succeed, receiving
-	// the merged named arguments. It performs value-level validation the coarse
-	// type system can't express (e.g. a `delim` that must be a single valid
-	// delimiter character) and returns a spanned error on failure. It runs for
-	// both direct calls and `#set` rules, since both bind through [bind].
+	// Validate, if set, runs on the merged named arguments after the generic
+	// bind checks pass. It checks what the type system cannot express, such as
+	// a `delim` that must be a single valid delimiter character, and returns
+	// an error located at the offending argument. It runs for both direct
+	// calls and `#set` rules, since both bind through [bind].
 	Validate func(named NamedArgs) *FunctionCallError
 
-	// Impure marks the function as having observable side effects beyond its
-	// return value (mutating an operand, touching session-global state, etc.).
-	// The default — false — means the function is pure.
+	// Impure marks a function with observable effects beyond its return
+	// value, such as mutating an operand or changing session state. The zero
+	// value, false, means the function is pure.
 	Impure bool
 
-	// Accessor marks a method whose result is a mutable place into its receiver
-	// rather than a fresh value — i.e. it registers a
-	// [FunctionCallContext.Setter] (array/dict `at`, `first`, `last`). A mutating
-	// method may be chained onto an accessor's result (`m.at(1).at(0).push(5)`)
-	// without hitting "cannot mutate a temporary value"; the method-call
-	// place check consults this flag on the resolved method rather than matching
-	// method names.
+	// Accessor marks a method whose result is a mutable place into its
+	// receiver rather than a fresh value, meaning it sets a
+	// [FunctionCallContext.Setter]. `at`, `first` and `last` on an array or
+	// dict are the cases. A mutating method may be chained onto an accessor's
+	// result, as in `m.at(1).at(0).push(5)`, without reporting "cannot mutate
+	// a temporary value". The place check reads this flag on the resolved
+	// method rather than comparing method names.
 	Accessor bool
 
-	// Scope holds associated functions reachable via field access on the
-	// function value itself (e.g. assert.eq). Only built-in functions populate
-	// it; it is nil for plain functions and user-defined closures.
+	// Scope holds the functions reachable by field access on the function
+	// value itself, such as assert.eq. Only builtins have one; it is nil for
+	// plain functions and user-defined closures.
 	Scope map[name.Name]Value
 
 	// Closure reports whether this value is a user-defined closure (as opposed
@@ -74,37 +73,38 @@ type Function struct {
 	Closure bool
 }
 
-// NamedParams maps interned parameter names to their definitions.
+// NamedParams is a function's named parameters, by name.
 type NamedParams map[name.Name]Param
 
-// Param describes a function parameter: its name, accepted types, and
-// optional default value (nil means required).
+// Param is one function parameter: its name, the types it accepts, and its
+// default. A nil default means the parameter is required.
 type Param struct {
 	Name    string
 	Type    types.Set
 	Default Value
 }
 
-// NamedArgsWithDefaults pairs call-site named arguments with the function's
-// default values, providing [Get] and [Lookup] for convenient access.
+// NamedArgsWithDefaults is what a call passed by name, together with the
+// defaults for what it did not pass. An implementation reads it with
+// [NamedArgsWithDefaults.Get].
 type NamedArgsWithDefaults struct {
 	Args     NamedArgs
 	Defaults NamedParams
 }
 
-// Get returns the value of a named argument, falling back to its default
-// value if not explicitly provided, or [None] if there is no default.
+// Get returns the named argument the call passed, or the parameter's default
+// if it passed none, or [None] if there is no default either.
 func (n NamedArgsWithDefaults) Get(name name.Name) Value {
 	v, _ := n.Lookup(name)
 	return v
 }
 
-// Lookup returns the value of a named argument: the call-site argument if one
-// was given, otherwise the parameter's declared default. ok is false when
-// neither exists, and the value is then [None].
+// Lookup returns what [NamedArgsWithDefaults.Get] would, and reports whether
+// there was a value at all — false only when the call passed nothing and the
+// parameter has no default, in which case the value is [None].
 //
-// ok is not "written at the call site" — a parameter left at a declared
-// default reports true. Read Args directly to ask that.
+// It does not report whether the call itself passed the argument: a parameter
+// left at its default reports true. Read Args for that.
 func (n NamedArgsWithDefaults) Lookup(name name.Name) (Value, bool) {
 	if v, ok := n.Args.Get(name); ok {
 		return v, true
@@ -115,9 +115,9 @@ func (n NamedArgsWithDefaults) Lookup(name name.Name) (Value, bool) {
 	return None{}, false
 }
 
-// With returns a copy of the function with args pre-bound (partial application).
-// This is used for method calls where the receiver is bound as the first
-// positional argument.
+// With returns a copy of the function with args already supplied, so calling
+// the copy passes them ahead of whatever the call site passes. It is how a
+// method call binds its receiver as the first argument.
 func (n *Function) With(args *Arguments) (*Function, error) {
 	merged, _, err := n.bind(args)
 	if err != nil {
@@ -191,26 +191,24 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	if sinkIdx < 0 && m > len(n.Positional) {
 		return nil, nil, ArgErrorPosf(len(n.Positional), "unexpected argument")
 	}
-	// When there are too few args to fill the required non-sink params, the
-	// detailed "missing argument" error is raised by Apply for the unfilled
-	// (-2) slots.
+	// With too few arguments to fill the required non-sink params, Apply
+	// reports "missing argument" for each slot still at -2.
 
 	mapping := slices.Repeat([]int{-2}, len(n.Positional))
 	if sinkIdx >= 0 {
 		mapping[sinkIdx] = -3 // sentinel: handled by Apply
 	}
 
-	// Positional args are consumed strictly front-to-back: pre-sink params
-	// first, then the sink absorbs the surplus (args beyond all non-sink
-	// params), then post-sink params. When there are too few args, the
-	// trailing post-sink params are the ones left unfilled.
+	// Positional arguments are consumed front to back: parameters before the
+	// sink first, then the sink takes everything beyond the non-sink
+	// parameters, then the parameters after it. With too few arguments, the
+	// trailing post-sink parameters are the ones left unfilled.
 	sinkSize := 0
 	if sinkIdx >= 0 {
 		sinkSize = max(0, m-nonSinkParamCount)
 	}
 
-	// Pre-sink params consume from the front, using the existing type-matching
-	// algorithm.
+	// Pre-sink params consume from the front, matching on type.
 	preSinkArgCount := min(m, len(preSink))
 
 	lo := 0
@@ -233,10 +231,9 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 			if coerced, ok := callableAsFunction(preSink[slot].Type, arg); ok {
 				merged.Positional[i] = coerced
 				for j := lo; j < slot; j++ {
-					// Only an optional parameter is filled from its default by
-					// being passed over. A required one that nothing matched
-					// stays -2, so Apply reports the missing argument instead
-					// of handing the builtin a nil.
+					// Only an optional parameter takes its default when nothing
+					// matches it. A required one stays -2, so Apply reports the
+					// missing argument rather than passing the builtin a nil.
 					if preSink[j].Default != nil {
 						mapping[preSinkSlots[j]] = -1
 					}
@@ -302,8 +299,8 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 				}
 				return nil, nil, ArgErrorNamedPairf(name, "unexpected argument: %s", name)
 			}
-			// When a sink exists, unknown named args go to the sink; a function
-			// that doesn't want to accept them rejects them from the sink itself.
+			// With a sink present, unknown named arguments go into it. A function
+			// that should not accept them rejects them from the sink itself.
 			continue
 		}
 		coerced, ok := callableAsFunction(n.Named[name].Type, val)
@@ -325,58 +322,60 @@ func (n *Function) bind(args *Arguments) (*Arguments, []int, error) {
 	return merged, mapping, nil
 }
 
-// FunctionCallContext carries call-site information passed to function
-// implementations.
+// FunctionCallContext is what the evaluator hands an implementation about the
+// call it is running: where it was written, and the hooks it may use.
 type FunctionCallContext struct {
 	Span syntax.Span
 
 	// Now is the instant the document is being rendered at, which
-	// `datetime.today` reads the current date off. It is threaded through the
+	// `datetime.today` reads the current date from. It is passed through the
 	// call context rather than read from the clock so that a render is
 	// reproducible: two evaluations of the same source with the same Now
-	// produce the same document. A zero value means "read the clock".
+	// produce the same document. A zero value means read the clock.
 	Now time.Time
 
-	// Setter can be set by the function to support assignment to the result of
-	// a function call, e.g. array.at(). This is a bit of a hack and there's
-	// probably better ways to support this, but it works for now.
+	// Setter is how a function makes its result assignable, as `array.at()`
+	// is. A function that returns a place into its receiver sets this, and the
+	// evaluator calls it to perform the write.
 	Setter *func(Value)
 
-	// Runtime is the evaluator state this call is running under, set by the
-	// evaluator and opaque to everything else. A closure needs it because it
-	// outlives the evaluation that created it: a function defined in a library
-	// and called while compiling a document must record its diagnostics,
-	// labels and document properties on the *document* being compiled, not on
-	// the long-finished evaluation of the library.
+	// Runtime is the evaluator state this call runs under. The evaluator sets
+	// it; nothing else interprets it. A closure needs it because it outlives
+	// the evaluation that created it: a function defined in a library and
+	// called while compiling a document must record its diagnostics, labels
+	// and document properties on the document being compiled, not on the
+	// library's finished evaluation.
 	//
-	// Builtins ignore it, but must pass it on: a builtin that invokes a user
-	// callback forwards the whole context (see the builtin package's
-	// applyCallback), so the callback lands in the same runtime as its caller.
+	// Builtins do not use it but must pass it on. A builtin that invokes a
+	// user callback forwards the whole context (see the builtin package's
+	// applyCallback) so the callback runs in the same runtime as its caller.
 	Runtime any
 
-	// Refs is where a builtin that builds a [Ref] says which label the
-	// document has to define. A reference cannot be answered where it is
-	// built — the label it names may be attached further down — so the
-	// evaluation collects them and asks once the document is complete.
+	// Refs is where a builtin that builds a [Ref] reports which label the
+	// document must define. A reference cannot be resolved where it is built,
+	// since the label it names may be attached further down, so the
+	// evaluation collects them and resolves them once the document is
+	// complete.
 	//
-	// It is set by the evaluator on every call it makes. It is nil for a call
-	// made outside an evaluation, and for the show-rule transforms realization
-	// calls directly — where a builtin building a reference cannot arise,
-	// since a transform is handed content and `ref` takes a label.
+	// The evaluator sets it on every call it makes. It is nil for a call made
+	// outside an evaluation, and for the show-rule transforms realization
+	// calls directly, where a builtin cannot build a reference: a transform
+	// receives content, and `ref` takes a label.
 	Refs RefRecorder
 }
 
-// RefRecorder collects the references built during an evaluation, to be
-// answered against the document's labels once it is complete. See
-// [FunctionCallContext.Refs].
+// RefRecorder collects the references an evaluation builds, so they can be
+// resolved against the document's labels once it is finished. A reference may
+// name a label written anywhere, so none of them can be answered before then.
+// See [FunctionCallContext.Refs].
 type RefRecorder interface {
 	// RecordRef records a reference to target, built at span.
 	RecordRef(target name.Name, span syntax.Span)
 }
 
-// Apply calls the function with the given arguments. It merges WithArgs,
-// validates and maps positional arguments to parameter slots, fills defaults
-// for optional parameters, and invokes F.
+// Apply calls the function with args, on top of anything [Function.With]
+// already bound. It returns an error if the arguments do not fit the
+// signature.
 func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, error) {
 	merged, mapping, err := n.bind(args)
 	if err != nil {
@@ -389,8 +388,9 @@ func (n *Function) Apply(call *FunctionCallContext, args *Arguments) (Value, err
 		case -3:
 			// Sink slot — filled below.
 		case -2:
-			// An anonymous positional param (underscore or destructuring
-			// pattern) is named "_"; report it as a pattern parameter.
+			// An anonymous positional parameter, an underscore or a
+			// destructuring pattern, is named "_". Report it as a pattern
+			// parameter.
 			pname := n.Positional[i].Name
 			if pname == "_" {
 				pname = "pattern parameter"

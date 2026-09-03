@@ -8,28 +8,27 @@ type Section struct {
 	Children []*Section
 }
 
-// Outline returns a document's headings as a tree, nested by depth — a table of
-// contents, in whatever form the caller renders one.
+// Outline returns a document's headings as a tree, nested by depth: a table of
+// contents, for the caller to render however it likes.
 //
 // Pass the [value.Document] that [Compile] returned, or a [value.Index] of one
-// ([WithIndex]) to read the headings off the index rather than walking the
-// document for them.
+// ([WithIndex]) to read the headings from the index instead of traversing the
+// document.
 //
-// Every heading carries a [value.Label], so there is always an anchor to link
-// a section by; [value.Label.Auto] tells a generated one from a label the
-// source wrote.
+// Every heading has a [value.Label] to link the section by, and
+// [value.Label.Auto] distinguishes a generated label from one the source wrote.
 //
-// A skipped level nests under the nearest shallower heading rather than
-// inventing one to sit in: `=` followed by `===` gives a section holding a
-// section, and nothing in between. A document that opens at `==` has that
-// heading at the top level, because there is no `=` for it to belong to.
+// A skipped level nests under the nearest shallower heading; no intermediate
+// section is invented. So `=` followed by `===` gives one section containing
+// another, with nothing between them, and a document that opens at `==` has
+// that heading at the top level, there being no `=` to nest it under.
 func Outline(t value.Tree) []*Section {
 	if t == nil {
 		return nil
 	}
 
 	var top []*Section
-	// path is the chain of sections currently open, outermost first. A heading
+	// path holds the sections currently open, outermost first. A heading
 	// belongs to the deepest one shallower than itself.
 	var path []*Section
 	for c := range t.Preorder(value.SetOf(value.KindHeading)) {

@@ -98,6 +98,8 @@ func (d Datetime) HasDate() bool { return d.Kind != TimeOnly }
 // HasTime reports whether the value carries a time of day.
 func (d Datetime) HasTime() bool { return d.Kind != DateOnly }
 
+// String returns the value as the call that would construct it, such as
+// `datetime(year: 2024, month: 3, day: 1)`.
 func (d Datetime) String() string {
 	var args []string
 	if d.HasDate() {
@@ -242,6 +244,8 @@ func subNoOverflow(a, b int64) (int64, bool) {
 	return a - b, true
 }
 
+// String returns the value as the call that would construct it, such as
+// `duration(days: 3, hours: 2)`, with zero components left out.
 func (d Duration) String() string {
 	var args []string
 	unit := func(name string, n int64) {

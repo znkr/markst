@@ -55,7 +55,7 @@ Body.
 // When two rules name the same property, the one in the outer scope wins — a
 // set rule scopes over its following siblings, so the second rule below sits
 // inside the first's scope, and realization applies the inner scope first. This
-// is long-standing `set document(title:)` behaviour, not new to the property
+// is long-standing `set document(title:)` behavior, not new to the property
 // beside it.
 #set document(title: "First")
 #set document(title: "Second")

@@ -7,15 +7,14 @@ import (
 	"znkr.io/markst/value"
 )
 
-// Footnotes returns the footnotes in c, numbered by their place in it — the
-// first is 1.
+// Footnotes returns the footnotes in c, in document order; the first is
+// numbered 1.
 //
-// A footnote reached twice — from a binding used in two places — is one
-// footnote and appears here once. That is what makes its number stable across
-// the citations of it, and it is why numbering is a property of the document
-// rather than of a walk over it.
+// One footnote reached from two places — through a binding used twice — is a
+// single footnote and appears here once, so every citation of it shows the same
+// number.
 //
-// Hand the result to [WithFootnotes] to render a piece of a document whose
+// Pass the result to [WithFootnotes] to render a piece of a document whose
 // citations keep the numbers they have in the whole.
 func Footnotes(c value.Content) []*value.Footnote {
 	return collect(nil, c)
@@ -76,9 +75,9 @@ func index(list []*value.Footnote) *notes {
 func (e *Encoder) renderFootnote(c *value.Footnote) {
 	n, ok := e.notes.byNote[c]
 	if !ok {
-		// A footnote that was not part of the content the render started from
-		// — one a hook built and handed back. It has no endnote to point at,
-		// so all that is honest is its body, where it stands.
+		// A footnote that was not in the content the render started from, such
+		// as one a hook built. There is no endnote to link to, so write the
+		// body where it stands.
 		e.itemBody(c.Body)
 		return
 	}

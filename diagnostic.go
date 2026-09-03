@@ -22,6 +22,7 @@ const (
 	Error
 )
 
+// String returns the severity's name, "warning" or "error".
 func (s Severity) String() string {
 	switch s {
 	case Warning:
@@ -32,15 +33,13 @@ func (s Severity) String() string {
 	return fmt.Sprintf("Severity(%d)", int(s))
 }
 
-// Diagnostic is a single message about a document, located in the source it
-// was compiled from. It is self-describing: [Diagnostic.Loc] carries both the
-// byte offsets and the line/column positions they resolve to, so a caller
-// holding one needs neither the source bytes nor a [syntax.Source] to say
-// where the problem is.
+// Diagnostic is one message about a document. [Diagnostic.Loc] carries both the
+// byte offsets and the line and column they resolve to, so a caller holding a
+// diagnostic can say where the problem is without the source.
 //
-// A diagnostic produced during realization has nothing to point at — that
-// stage works on content that has lost every link back to the syntax it came
-// from — and its Loc reports false from [syntax.Location.IsValid].
+// Realization works on content that has lost its link back to the syntax, so a
+// diagnostic from that stage has nothing to point at and its Loc reports false
+// from [syntax.Location.IsValid].
 type Diagnostic struct {
 	Severity Severity
 
@@ -83,10 +82,9 @@ type Frame struct {
 	Callee string
 }
 
-// Error returns the diagnostic prefixed with its position, so a bare %v of a
-// diagnostic still says where it happened. It exists so Diagnostic satisfies
-// the standard library error interface; the parts are reachable individually
-// through the fields.
+// Error returns the message prefixed with the source name, line and column, so
+// that printing a diagnostic still says where it happened. The parts are
+// available separately through the fields.
 func (d Diagnostic) Error() string {
 	if pos := d.position(); pos != "" {
 		return pos + ": " + d.Msg
@@ -108,10 +106,11 @@ func (d Diagnostic) position() string {
 }
 
 // DiagnosticList is the error [Compile] returns when a document fails to
-// compile. Its Error method names every diagnostic in the list, so the default
-// formatting of a compile failure does not hide all but the first.
+// compile.
 type DiagnosticList []Diagnostic
 
+// Error returns every diagnostic in the list, one per line, so that printing a
+// compile failure does not hide all but the first.
 func (l DiagnosticList) Error() string {
 	if len(l) == 0 {
 		return "no errors"
@@ -126,6 +125,8 @@ func (l DiagnosticList) Error() string {
 	return sb.String()
 }
 
+// Unwrap returns the diagnostics as errors, so [errors.As] and [errors.Is] can
+// reach an individual one.
 func (l DiagnosticList) Unwrap() []error {
 	r := make([]error, 0, len(l))
 	for _, d := range l {
@@ -153,12 +154,12 @@ const (
 //	cannot convert integer to content
 //
 // Each diagnostic names its own source, so a compile that reached into a
-// library reports the library's failures against the library's text — see
-// [Diagnostic.Origin]. A diagnostic with neither a name nor a location prints
-// bare, as the last line above shows.
+// library reports the library's failures against the library's text; see
+// [Diagnostic.Origin]. One with neither a name nor a location prints bare, as
+// the last line above shows.
 //
-// Errors print bare, as a compiler's do; a warning is labelled, so a list
-// holding both stays readable.
+// Errors print without a label, as a compiler's do. Warnings are labeled, so
+// that a list holding both stays readable.
 func FormatDiagnostics(w io.Writer, diags []Diagnostic) error {
 	for _, d := range diags {
 		var sb strings.Builder

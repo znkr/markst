@@ -1,25 +1,18 @@
-// Package syntax defines the core types shared across all stages of the Markst
-// compilation pipeline: scanning, parsing, and semantic analysis.
+// Package syntax defines the types the scanner, parser, and analyzer share.
 //
-// It provides the fundamental building blocks for representing Markst source
-// code as a concrete syntax tree (CST).
+//   - [Kind] says what a token or node is; there are about 150 of them,
+//     covering markup, math, code, operators, and keywords.
+//   - [Node] is a node of the syntax tree: a [Leaf] token, an [Inner] node with
+//     children, or an [Error] standing for invalid source.
+//   - [Span] locates a node by byte offset, [Position] by line and column, and
+//     [Source] converts between the two.
+//   - [Mode] is one of the three ways Markst source can be read: markup, math,
+//     or code.
+//   - [Set] is a bitset of [Kind]s, which is how the parser looks ahead.
 //
-//   - [Kind] classifies every token and node (~150 variants covering markup,
-//     math, code, operators, and keywords).
-//   - [Node] is the interface implemented by all tree nodes: [Leaf] (terminal
-//     tokens), [Inner] (non-terminal nodes with children), and [Error] (invalid
-//     syntax with an attached diagnostic message).
-//   - [Span] and [Position] locate nodes in source text by byte offset and
-//     line/column respectively. [Source] maps between the two.
-//   - [Mode] distinguishes the three lexical modes of Markst: Markup, Math, and
-//     Code.
-//   - [Set] is a compact bitset over [Kind] values, used by the parser for
-//     efficient lookahead and synchronization.
+// The tree is untyped: every node is a [Node], and its [Kind] is what says what
+// it means. Package znkr.io/markst/syntax/analyzer lowers it to the SSA IR in
+// package znkr.io/markst/expr.
 //
-// The tree produced by [parser.Parse] is untyped: every node is a [Node] whose
-// meaning is determined by its [Kind]. The [analyzer] package converts this
-// untyped tree into the typed IR defined in package [ir].
-//
-// This package corresponds to the typst-syntax crate in the upstream Typst
-// implementation.
+// This package corresponds to the typst-syntax crate in Typst.
 package syntax

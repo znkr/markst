@@ -162,7 +162,8 @@ func calcRoundImpl(_ *value.FunctionCallContext, args []value.Value, named value
 		if digits >= 0 {
 			return v, nil
 		}
-		// Round to nearest 10^(-digits)
+		// A negative digit count rounds to a power of ten above the units
+		// place: -2 rounds to the nearest hundred.
 		factor := int64(math.Pow(10, float64(-digits)))
 		n := int64(v)
 		return value.Int((n + factor/2) / factor * factor), nil

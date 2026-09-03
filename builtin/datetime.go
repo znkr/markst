@@ -149,9 +149,9 @@ func datetimeImpl(_ *value.FunctionCallContext, _ []value.Value, named value.Nam
 	minute, hasMinute := datetimeArg(named, names.Minute)
 	second, hasSecond := datetimeArg(named, names.Second)
 
-	// The two halves are validated separately and in this order — time first,
-	// then date — so that a call that leaves both half-specified is reported
-	// against its time arguments, matching Typst.
+	// The two halves are validated separately, time first and date second, so
+	// that a call leaving both half-specified is reported against its time
+	// arguments, as in Typst.
 	hasTime := hasHour || hasMinute || hasSecond
 	if hasTime && !(hasHour && hasMinute && hasSecond) {
 		return nil, incompleteErr("time", []string{"hour", "minute", "second"},
@@ -167,8 +167,8 @@ func datetimeImpl(_ *value.FunctionCallContext, _ []value.Value, named value.Nam
 	case hasDate && hasTime:
 		d, ok := value.NewDatetime(year, month, day, hour, minute, second)
 		if !ok {
-			// A datetime is invalid for one of two reasons; naming the half at
-			// fault is more useful than a combined message.
+			// A datetime is invalid for one of two reasons. Naming the half at fault
+			// is more useful than a combined message.
 			if _, ok := value.NewDate(year, month, day); !ok {
 				return nil, value.ArgErrorPosf(0, "date is invalid")
 			}
@@ -250,21 +250,21 @@ func datetimeTodayImpl(call *value.FunctionCallContext, _ []value.Value, named v
 		now = time.Now()
 	}
 
-	// Without an offset the current date is read in the local time zone;
-	// with one, in the zone that many hours (or that much time) ahead of UTC.
+	// Without an offset the current date is read in the local time zone. With
+	// one, it is read in the zone that far ahead of UTC.
 	local := now
 	switch off := named.Get(names.Offset).(type) {
 	case value.Auto:
 	case value.Int:
-		// Offsets are wall-clock offsets, so a full day or more never names a
-		// real time zone.
+		// These are wall-clock offsets, so a full day or more is not a real time
+		// zone.
 		if off <= -24 || off >= 24 {
 			return nil, fmt.Errorf("unable to get the current date")
 		}
 		local = now.UTC().Add(time.Duration(off) * time.Hour)
 	case value.Duration:
-		// A duration is canonical, so a non-zero day count already means the
-		// offset is a day or more wide.
+		// A duration is canonical, so a non-zero day count means the offset is
+		// already a day or more.
 		if off.Days != 0 {
 			return nil, fmt.Errorf("unable to get the current date")
 		}

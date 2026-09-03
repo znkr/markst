@@ -8,15 +8,13 @@ import (
 	"znkr.io/markst/value"
 )
 
-// FormatModule returns a textual SSA dump of mod. The format is informally
-// modelled on LLVM IR / Cranelift CLIF: each [Function] becomes a labelled
-// block, with one [BasicBlock] per `bN:` (or `bN(vX, vY):`) section.
-// Instructions print as `vN = <opcode> <operands…>`. Block parameters
-// appear in the header; terminators carry args targeting the successor's
-// parameters (e.g. `jump b1(v0)`, `branch v, b1(v2), b2(v3, v4)`).
+// FormatModule returns mod as a textual SSA dump, in the manner of LLVM IR:
+// each function is labeled, each block is a `bN:` section — `bN(vX, vY):`
+// when it has params — and each instruction prints as `vN = opcode operands…`.
+// A terminator carries the args going to its successor's params, as in
+// `jump b1(v0)` or `branch v, b1(v2), b2(v3, v4)`.
 //
-// This is the format consumed by analyzer golden tests under the new IR. It
-// is not pretty-printed markst source — see the migration plan for why.
+// This is what the analyzer's golden tests compare against.
 func FormatModule(mod *Module) string {
 	f := formatter{mod: mod}
 	f.formatFunction("$top", mod.Top)
@@ -27,10 +25,9 @@ func FormatModule(mod *Module) string {
 	return f.sb.String()
 }
 
-// FormatFunction returns the SSA dump of a single function with the given
-// label (e.g. "$top", "$fn_0"). Module-constant refs render as `c<id>` since
-// the pool isn't reachable without the enclosing module; use [FormatModule]
-// for inline-literal rendering.
+// FormatFunction returns the SSA dump of one function under the given label,
+// such as "$top" or "$fn_0". Without the module there is no constant pool to
+// read, so constants print as `c<id>`; [FormatModule] prints their values.
 func FormatFunction(label string, fn *Function) string {
 	f := formatter{}
 	f.formatFunction(label, fn)
@@ -500,9 +497,9 @@ func formatConst(v any) string {
 	case *value.Module:
 		return "<module " + v.Name + ">"
 	case value.Content:
-		// Content that has no dedicated spelling above (a math operator, a
-		// sequence, …) prints as its element name; the pointer %v would print
-		// is not stable across runs.
+		// Content with no dedicated spelling above, such as a math operator or
+		// a sequence, prints as its element name. The pointer %v would print
+		// instead is not stable across runs.
 		return "<" + v.Name() + ">"
 	case fmt.Stringer:
 		return v.String()

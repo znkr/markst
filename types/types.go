@@ -1,10 +1,7 @@
-// Package types defines the Markst type system as an enumeration of value
-// types.
+// Package types enumerates the Markst value types.
 //
-// Each [Type] constant corresponds to a Markst value type (e.g. Int for
-// integers, Str for strings, Content for document content). [Set] provides a
-// compact bitset representation for expressing which types a function parameter
-// accepts.
+// Each [Type] is one type a value can have. A [Set] is a group of them, which
+// is how a function parameter says what it accepts.
 package types
 
 import (
@@ -13,8 +10,7 @@ import (
 	"strings"
 )
 
-// Type identifies a Markst value type. The [String] method returns the
-// human-readable name used in error messages (e.g. "integer", "string").
+// Type is one Markst value type.
 type Type int
 
 const (
@@ -77,6 +73,8 @@ var types = [...]string{
 	Duration:      "duration",
 }
 
+// String returns the type's name as diagnostics spell it: "integer", "string",
+// "dictionary". It panics if t is not a defined type.
 func (t Type) String() string {
 	if int(t) < 0 || int(t) >= len(types) {
 		panic(fmt.Sprintf("invalid type: %d", t))
@@ -84,12 +82,11 @@ func (t Type) String() string {
 	return types[t]
 }
 
-// Set is a bitset of [Type] values, used to specify which types a function
-// parameter accepts. Its [String] method formats the set as a human-readable
-// list (e.g. "integer, string, or array").
+// Set is a group of [Type]s, as a bitset. A function parameter uses one to say
+// which types it accepts.
 type Set uint32
 
-// Any is a set containing all defined types.
+// Any is the set of every defined type.
 var Any = SetOf(
 	None,
 	ReflectedType,
@@ -119,7 +116,7 @@ var Any = SetOf(
 	Duration,
 )
 
-// SetOf creates a Set containing the given types.
+// SetOf returns the set holding exactly the given types.
 func SetOf(types ...Type) Set {
 	var s Set
 	for _, t := range types {
@@ -128,11 +125,13 @@ func SetOf(types ...Type) Set {
 	return s
 }
 
-// Contains reports whether the set contains the given type.
+// Contains reports whether t is in the set.
 func (s Set) Contains(t Type) bool {
 	return s&(1<<t) != 0
 }
 
+// String returns the types as diagnostics list them: "integer",
+// "integer or string", "integer, string, or array".
 func (s Set) String() string {
 	n := bits.OnesCount32(uint32(s))
 	var sb strings.Builder

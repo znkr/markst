@@ -14,11 +14,14 @@ type Arguments struct {
 	Named      NamedArgs
 }
 
-// NamedArgs maps argument names to their values at a call site, preserving
-// insertion order (named args are emitted in source order, with dict-spread
-// entries inserted in dict order at the spread position).
+// NamedArgs maps argument names to their values at a call site, in the order
+// they were written. A spread dict contributes its entries in dict order, at
+// the point the spread appears.
 type NamedArgs = ordered.Map[name.Name, Value]
 
+// Merge returns the arguments of n followed by those of args: positional
+// arguments concatenated, named arguments merged with args winning a
+// collision. Either receiver or argument may be nil.
 func (n *Arguments) Merge(args *Arguments) *Arguments {
 	if args == nil {
 		return n

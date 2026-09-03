@@ -56,8 +56,8 @@ func (m mathModuleDef) Get(n name.Name) value.Value {
 		return v
 	}
 	if spec, ok := mathOps[n]; ok {
-		// A fresh element per lookup: a label attaches to the value itself, so
-		// one shared element would carry a label written in another document.
+		// A fresh element per lookup. A label attaches to the value itself, so a
+		// shared element would carry a label written in another document.
 		return &value.MathOp{Text: &value.MathText{Text: spec.text}, Limits: spec.limits}
 	}
 	if v, ok := mathSpacing[n]; ok {
@@ -102,7 +102,7 @@ func buildMathOps() map[name.Name]mathOpSpec {
 	} {
 		ops[name.Make(op)] = mathOpSpec{text: op, limits: true}
 	}
-	// The two that are spelled with a space between the words.
+	// The two operators spelled with a space between the words.
 	ops[name.Make("liminf")] = mathOpSpec{text: "lim inf", limits: true}
 	ops[name.Make("limsup")] = mathOpSpec{text: "lim sup", limits: true}
 	return ops
@@ -120,13 +120,13 @@ var mathContentType = types.SetOf(types.Content, types.Symbol, types.Str, types.
 
 // mathContent coerces an argument of a math element to content. Symbols,
 // strings and numbers become [value.MathText] rather than the upright
-// [value.Text] / [value.Raw] that [value.ToContent] would produce, so that a
-// letter and a symbol resolving to the same character agree — the same rule the
-// evaluator applies to math operands (see frame.mathContentOf). The math
-// elements are math-only whichever mode they are called from, so no context is
-// needed to decide this.
+// [value.Text] or [value.Raw] that [value.ToContent] would produce, so a letter
+// and a symbol resolving to the same character render alike. That is the rule
+// the evaluator applies to math operands; see frame.mathContentOf. The math
+// elements are math-only whichever mode they are called from, so this needs no
+// context to decide.
 //
-// The result is never nil: none becomes empty content, matching frame.contentOf.
+// The result is never nil: none becomes empty content, as in frame.contentOf.
 func mathContent(v value.Value) (value.Content, error) {
 	c := value.ToMathContent(v)
 	if c == nil {
@@ -368,10 +368,10 @@ var Equation = value.NewElement[*value.Equation](value.Function{
 	Named: value.NamedParams{
 		names.Block: {Name: "block", Type: types.SetOf(types.Bool), Default: value.Bool(false)},
 		// The font-style properties the math style functions set on a scope (see
-		// mathStyle). Typst marks these internal: they are declared so that `#set
-		// math.equation(bold: true)` — which never runs equationImpl — can carry
-		// them, but an equation has nowhere to keep a style of its own, so the
-		// constructor rejects them (see equationImpl).
+		// mathStyle). Typst marks these internal. They are declared so that `#set
+		// math.equation(bold: true)`, which never runs equationImpl, can carry them,
+		// but an equation has no field to store a style in, so the constructor
+		// rejects them (see equationImpl).
 		names.Bold:    {Name: "bold", Type: types.SetOf(types.Bool)},
 		names.Italic:  {Name: "italic", Type: types.SetOf(types.Bool)},
 		names.Variant: {Name: "variant", Type: types.SetOf(types.Str)},
@@ -380,9 +380,9 @@ var Equation = value.NewElement[*value.Equation](value.Function{
 })
 
 func equationImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedArgsWithDefaults) (value.Value, error) {
-	// The font-style properties only mean something as a set rule, which the
-	// realization pass folds into the math leaves it covers. Constructing an
-	// equation with one would silently drop it, so it is an error instead.
+	// The font-style properties have meaning only as a set rule, which
+	// realization applies to the math leaves below it. Constructing an equation
+	// with one would discard it without notice, so it is an error instead.
 	for _, field := range mathStyleFields {
 		if _, ok := named.Args.Get(field); ok {
 			return nil, value.ArgErrorNamedPairf(field, "%s is only settable with a set rule", field)
@@ -440,12 +440,13 @@ func rootImpl(_ *value.FunctionCallContext, args []value.Value, _ value.NamedArg
 	return &value.MathRoot{Index: index, Radicand: radicand}, nil
 }
 
-// Sqrt is the `sqrt(radicand)` math function; it builds an index-less
-// [value.MathRoot]. It is a plain function, not an element: the content it
-// produces *is* a `math.root`, so [Root] is the set/show target for it, exactly
-// as in Typst. Making it an element too would give two elements the same
-// content type, and [value.Element] matches on that type alone — `#show
-// math.sqrt:` would then also rewrite `$root(3, x)$`.
+// Sqrt is `sqrt(radicand)`, which builds a [value.MathRoot] with no index.
+//
+// It is a plain function rather than an element, as in Typst: what it produces
+// is a `math.root`, so a set or show rule targets [Root] instead. Making it an
+// element too would give two elements the same content type, and
+// [value.Element] matches on that type alone, so `#show math.sqrt:` would also
+// rewrite `$root(3, x)$`.
 var Sqrt = &value.Function{
 	Name: "math.sqrt",
 	Positional: []value.Param{
@@ -482,8 +483,8 @@ func lrImpl(_ *value.FunctionCallContext, args []value.Value, named value.NamedA
 	if err != nil {
 		return nil, err
 	}
-	// A single argument is the body as it stands: `lr(x).body` has to equal the
-	// `x` that went in, so there is no sequence to wrap it in.
+	// A single argument is the body itself: `lr(x).body` must equal the `x` that
+	// was passed in, so it is not wrapped in a sequence.
 	if len(parts) == 1 {
 		return newLr(parts[0], named), nil
 	}
@@ -551,7 +552,7 @@ var (
 
 // Cancel is the `cancel(body, angle: ...)` math element; it builds a
 // [value.MathCancel]. Only the subset of fields exercised so far is modeled:
-// the cancelled body and the `angle` field (retained for field access).
+// the canceled body and the `angle` field (retained for field access).
 var Cancel = value.NewElement[*value.MathCancel](value.Function{
 	Name: "math.cancel",
 	Positional: []value.Param{

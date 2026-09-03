@@ -24,7 +24,7 @@ import (
 	"testing"
 )
 
-// Test represents a single test case from a golden test file.
+// Test is one case from a golden test file.
 type Test struct {
 	Name  string // Test name from the header line.
 	Skip  string // Skip reason, if any.
@@ -35,8 +35,8 @@ type Test struct {
 var testcase = regexp.MustCompile(`^--- (.+) ---$`)
 var header = regexp.MustCompile(`^([a-z][a-z0-9-]*)(?: +\(skip: (.*)\))?$`)
 
-// Read parses a golden test file at path and returns the test cases.
-// It calls t.Fatal on I/O errors or invalid file format.
+// Read returns the test cases in the golden file at path. It fails the test on
+// an unreadable file or a malformed one.
 func Read(t testing.TB, path string) []Test {
 	t.Helper()
 	var tests []Test
@@ -96,9 +96,9 @@ func Read(t testing.TB, path string) []Test {
 	return tests
 }
 
-// Update rewrites the golden test file at path with updated expected output
-// from the given tests. Test names must match the existing file; only the
-// expected output sections are replaced. Preamble comments are preserved.
+// Update writes the expected output of tests back into the golden file at
+// path, leaving the inputs and the preamble as they were. The test names must
+// be the ones already in the file.
 func Update(t testing.TB, path string, tests []Test) {
 	t.Helper()
 	var buf bytes.Buffer

@@ -2,49 +2,45 @@ package syntax
 
 import "fmt"
 
-// Node is the interface implemented by all nodes in the untyped syntax tree.
-// Every node carries a [Kind] that determines its role and a [Span] locating it
-// in the source text.
+// Node is implemented by every node in the untyped syntax tree.
 //
-// A node holds no text of its own: its text is the source it spans, so [Text]
-// reads it off the source rather than every node carrying a copy or a slice of
-// it. That keeps a leaf down to a kind and a span, which is what makes a tree
-// of them cheap — scanning a document produces one per token.
+// A node holds no text of its own. Its text is exactly the source it spans, so
+// [Text] reads the text off the source instead. That keeps a node down to a
+// kind and a span, which matters because parsing a document produces one node
+// per token.
 //
-// There are three concrete implementations:
-//   - [Leaf]: a terminal token (e.g. an identifier, keyword, or operator).
-//   - [Inner]: a non-terminal node with child nodes (e.g. a function call
-//     or heading).
-//   - [Error]: an invalid token or construct, carrying a diagnostic message.
+// There are three implementations:
+//   - [Leaf]: a single token, such as an identifier, keyword, or operator.
+//   - [Inner]: a node with children, such as a function call or a heading.
+//   - [Error]: invalid source, carrying a diagnostic message.
 type Node interface {
+	// Kind returns what this node is.
 	Kind() Kind
+
+	// Span returns the range of source the node covers.
 	Span() Span
+
 	aNode()
 }
 
-// Text returns the source n covers. A node's text is exactly the source it
-// spans: the scanner reads every token out of src, and an inner node runs from
-// the start of its first child to the end of its last.
+// Text returns the slice of src that n covers. src must be the source n was
+// parsed from.
 func Text(src []byte, n Node) []byte {
 	span := n.Span()
 	return src[span.Start:span.End]
 }
 
-// RootNode is the top-level node returned by [parser.Parse]. It embeds the root
-// [Inner] node (always of [KindMarkup]) and carries the [Source] needed to
-// convert byte offsets to line/column positions.
+// RootNode is a parsed document: the tree, plus the source it was parsed from.
+// The embedded [Inner] is the root node, always of [KindMarkup]. Carrying the
+// source along means a caller holding a RootNode can turn any span in the tree
+// into text or a line and column.
 type RootNode struct {
-	// Src is the source the tree was parsed from. Every node's text is a slice
-	// of it, so a caller holding this can turn any span into text without
-	// going back to the node.
 	Src    []byte
 	Source Source
 	*Inner
 }
 
-// Leaf is a terminal node in the syntax tree, representing a single token
-// produced by the scanner. It stores the token's kind and source span; its text
-// is [Text] of that span.
+// Leaf is a node with no children: one token, as the scanner produced it.
 type Leaf struct {
 	kind Kind
 	span Span
@@ -52,7 +48,7 @@ type Leaf struct {
 
 var _ Node = (*Leaf)(nil)
 
-// NewLeaf creates a new terminal node with the given kind and span.
+// NewLeaf returns a leaf node of the given kind covering span.
 func NewLeaf(kind Kind, span Span) *Leaf {
 	return &Leaf{kind: kind, span: span}
 }
@@ -60,9 +56,8 @@ func (v *Leaf) Kind() Kind { return v.kind }
 func (v *Leaf) Span() Span { return v.span }
 func (v *Leaf) aNode()     {}
 
-// Inner is a non-terminal node in the syntax tree, containing an ordered
-// sequence of child nodes. Its [Span] runs from the start of its first child to
-// the end of its last, which is also the source it covers.
+// Inner is a node with children. Its [Span] runs from the start of its first
+// child to the end of its last, which is the source it covers.
 type Inner struct {
 	kind     Kind
 	span     Span
@@ -71,12 +66,14 @@ type Inner struct {
 
 var _ Node = (*Inner)(nil)
 
-// NewInner creates a new non-terminal node with the given kind and children,
-// which must not be empty — use [NewEmptyInner] for that. The children must not
-// be mutated afterwards: the node's span is derived from them once, here, rather
-// than on every [Inner.Span] call — recomputing it would recurse into both the
-// first and the last child, which costs 2^depth for a deeply nested tree.
+// NewInner returns a node of the given kind with the given children, which
+// must not be empty; use [NewEmptyInner] for a node with none. The node takes
+// ownership of the slice, and its span is fixed at this point, so the children
+// must not change afterwards.
 func NewInner(kind Kind, children []Node) *Inner {
+	// The span is derived once here rather than on every Span call: walking to
+	// the first and last child on demand would recurse into both, costing
+	// 2^depth on a deeply nested tree.
 	return &Inner{
 		kind:     kind,
 		span:     spanOf(children),
@@ -84,18 +81,18 @@ func NewInner(kind Kind, children []Node) *Inner {
 	}
 }
 
-// NewEmptyInner creates a new non-terminal node with no children, spanning
+// NewEmptyInner returns a node of the given kind with no children, spanning
 // nothing at offset pos.
 func NewEmptyInner(kind Kind, pos uint32) *Inner {
 	return &Inner{kind: kind, span: Span{Start: pos, End: pos}}
 }
 
-// spanOf is the span an inner node covers: from the start of its first child to
-// the end of its last. It panics on no children, which have no span to derive:
-// a childless node must be built by [NewEmptyInner] or [Arena.EmptyInner],
-// which take the offset it sits at. Deriving Span{0, 0} instead would put the
-// node at the start of the file and drag any parent whose last child it is down
-// with it, leaving a parent span that runs backwards.
+// spanOf is the span an inner node covers, from the start of its first child to
+// the end of its last. It panics when there are no children, since there is
+// then no span to derive: a childless node must be built by [NewEmptyInner] or
+// [Arena.EmptyInner], which take the offset explicitly. Returning Span{0, 0}
+// instead would place the node at the start of the file, and any parent whose
+// last child it is would end up with a span that runs backwards.
 func spanOf(children []Node) Span {
 	if len(children) == 0 {
 		panic("syntax: inner node with no children has no span to derive")
@@ -108,16 +105,18 @@ func spanOf(children []Node) Span {
 func (v *Inner) Kind() Kind { return v.kind }
 func (v *Inner) Span() Span { return v.span }
 
+// Children returns the node's children, in source order. The slice belongs to
+// the node and must not be modified.
 func (v *Inner) Children() []Node { return v.children }
-func (v *Inner) aNode()           {}
 
-// Error is a syntax tree node representing invalid source text. It implements
-// both [Node] (so it can appear in the tree) and the built-in error interface
-// (so it can be used as a Go error value). Its [Kind] is always [KindError].
+func (v *Inner) aNode() {}
+
+// Error is a node standing for invalid source. Its [Kind] is always
+// [KindError], and it is a Go error as well as a [Node], so it can both sit in
+// the tree and be returned.
 //
-// Error nodes carry a diagnostic message and optional hints for the user.
-// They are created by the scanner for invalid tokens and by the parser for
-// structural errors (e.g. unclosed delimiters, unexpected tokens).
+// The scanner creates one for an invalid token, the parser for a structural
+// problem such as an unclosed delimiter.
 type Error struct {
 	span    Span
 	message string
@@ -127,23 +126,33 @@ type Error struct {
 var _ Node = (*Error)(nil)
 var _ error = (*Error)(nil)
 
-// NewError creates a new error node with the given span, diagnostic message,
-// and optional hints.
+// NewError returns an error node covering span, reporting message with the
+// given hints.
 func NewError(span Span, message string, hints ...string) *Error {
 	return &Error{span: span, message: message, hints: hints}
 }
 
-func (n *Error) Span() Span       { return n.span }
-func (n *Error) Kind() Kind       { return KindError }
-func (n *Error) Message() string  { return n.message }
-func (n *Error) Hint(hint string) { n.hints = append(n.hints, hint) }
-func (n *Error) Hints() []string  { return n.hints }
-func (n *Error) Error() string    { return n.message }
-func (n *Error) aNode()           {}
+func (n *Error) Span() Span { return n.span }
+func (n *Error) Kind() Kind { return KindError }
 
-// ConvertNode creates a copy of node with a different kind, preserving its span
-// and, for an [Inner], its children. It panics if node is an Error, since error
-// nodes should not be reinterpreted.
+// Message returns the diagnostic message, the same string [Error.Error]
+// returns.
+func (n *Error) Message() string { return n.message }
+
+// Hint adds a hint to the diagnostic, shown alongside the message.
+func (n *Error) Hint(hint string) { n.hints = append(n.hints, hint) }
+
+// Hints returns the hints added so far, in the order they were added.
+func (n *Error) Hints() []string { return n.hints }
+
+// Error returns the diagnostic message.
+func (n *Error) Error() string { return n.message }
+
+func (n *Error) aNode() {}
+
+// ConvertNode returns a copy of node with a different kind, keeping its span
+// and, for an [Inner], its children. It panics if node is an [Error]: what an
+// error node covers is not a construct of some other kind.
 func ConvertNode(node Node, kind Kind) Node {
 	switch v := node.(type) {
 	case *Leaf:

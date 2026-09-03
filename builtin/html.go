@@ -8,25 +8,24 @@ import (
 	"znkr.io/markst/value"
 )
 
-// Html is the `html` module: the way a document writes markup markst has no
+// HTML is the `html` module: the way a document writes markup markst has no
 // element of its own for.
-var Html = &value.Module{
+var HTML = &value.Module{
 	Name: "html",
 	Def: value.SimpleModuleDef{
-		names.Elem: HtmlElem,
+		names.Elem: HTMLElem,
 	},
 }
 
-// HtmlElem is an HTML element; it builds a [value.HTMLElem]. The body is
-// ordinary content, so what is written inside an element is realized like the
-// rest of the document — `html.elem("div")[Some *text*.]` holds a paragraph
-// with emphasis in it, not an opaque blob.
+// HTMLElem builds a [value.HTMLElem]. Its body is ordinary content and is
+// realized like the rest of the document, so `html.elem("div")[Some *text*.]`
+// contains a paragraph with emphasis in it rather than uninterpreted text.
 //
 // Whether the element occupies a line of its own defaults to what the tag
-// implies and can be overridden with `block:`. What its body may contain
-// cannot: that follows from the tag alone, because it is the tag that decides
-// whether a paragraph inside would be legal markup.
-var HtmlElem = value.NewElement[*value.HTMLElem](value.Function{
+// implies and can be overridden with `block:`. What the body may contain
+// cannot be overridden: that follows from the tag, which determines whether a
+// paragraph inside would be legal markup.
+var HTMLElem = value.NewElement[*value.HTMLElem](value.Function{
 	Name: "html.elem",
 	Positional: []value.Param{
 		{Name: "tag", Type: types.SetOf(types.Str)},
@@ -64,9 +63,8 @@ func htmlElemImpl(_ *value.FunctionCallContext, args []value.Value, named value.
 }
 
 // htmlAttrs validates an attribute dict and returns it, or nil when it is
-// empty — an element without attributes carries none rather than an empty dict,
-// so that `html.elem("br")` and `html.elem("br", attrs: (:))` are the same
-// element.
+// empty. An element without attributes holds nil rather than an empty dict, so
+// `html.elem("br")` and `html.elem("br", attrs: (:))` produce the same element.
 func htmlAttrs(attrs *value.Dict) (*value.Dict, error) {
 	if attrs.Elems.Len() == 0 {
 		return nil, nil

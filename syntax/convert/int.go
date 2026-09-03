@@ -1,4 +1,4 @@
-// Package convert provides conversion utilities for Markst literal values.
+// Package convert reads the values Markst literals stand for.
 package convert
 
 import (
@@ -6,8 +6,8 @@ import (
 	"strconv"
 )
 
-// ParseInt parses a Markst integer literal string, supporting decimal, binary
-// (0b), octal (0o), and hexadecimal (0x) prefixes.
+// ParseInt returns the value of a Markst integer literal, written in decimal
+// or with a 0b, 0o, or 0x prefix.
 func ParseInt(s string) (int, error) {
 	base := 10
 	if len(s) >= 2 && s[0] == '0' {

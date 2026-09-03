@@ -9,25 +9,19 @@ import (
 	"znkr.io/markst/types"
 )
 
-// Error is a runtime value representing a failed computation. Unlike
-// [FunctionCallError] (a Go error type used inside builtin call sites), Error
-// is both a [Value] (so it can flow through the SSA value table like any
-// other runtime value) and a Go `error` (so it can satisfy the diagnostic
-// interfaces consumed by callers of the evaluator). Evaluation continues
-// past Error values rather than tearing down the whole program.
+// Error is a failed computation, as a value. It is a [Value], so it flows
+// through evaluation like any other, and a Go error, so callers can report it.
 //
-// Instructions whose operands include an Error propagate it as their result
-// without re-recording on the session error list; operations that genuinely
-// require a non-error operand skip silently because the upstream Error is
-// already in the list.
+// Evaluation does not stop at an Error. An instruction handed one produces it
+// as its own result and records nothing new, so a single failure is reported
+// once no matter how far its value travels.
 type Error struct {
 	Span syntax.Span
 
-	// Origin is the source Span points into. It is what makes a diagnostic
-	// self-locating once more than one source is in play: a failure inside a
-	// library function is raised while a *document* is being compiled, but its
-	// span indexes the library's bytes, so resolving it against the document
-	// would name the wrong line.
+	// Origin is the source Span points into. An error carries it because more
+	// than one source can be in play: a failure inside a library function
+	// happens while a document is being compiled, but its span indexes the
+	// library's bytes, not the document's.
 	Origin syntax.Origin
 
 	Msg   string
@@ -39,18 +33,18 @@ type Error struct {
 	Trace []syntax.Frame
 }
 
-// Hint is a suggestion attached to a diagnostic. Span points at what the
-// suggestion is about, which is not always where the diagnostic itself points:
-// "`phi` is not a function" belongs on the callee, while the error it explains
-// belongs on the argument. It is [syntax.NoSpan] for a hint with nothing of its
-// own to point at, which is then about the diagnostic's own span.
+// Hint is a suggestion attached to a diagnostic. Span points at what the hint
+// is about, which need not be where the diagnostic points: "`phi` is not a
+// function" belongs on the callee, while the error it explains belongs on the
+// argument. A hint with nothing of its own to point at uses [syntax.NoSpan]
+// and is taken to be about the diagnostic's own span.
 type Hint struct {
 	Span syntax.Span
 	Msg  string
 }
 
-// Hints wraps plain messages as hints pointing at the diagnostic they belong
-// to, which is what all but a few of them want.
+// Hints turns plain messages into hints with no span of their own, so each one
+// points at the diagnostic it is attached to. That is what most hints want.
 func Hints(msgs ...string) []Hint {
 	if len(msgs) == 0 {
 		return nil
@@ -75,40 +69,53 @@ func (e *Error) Format(f *formatter.Formatter) {
 	f.Printf("<error: %s>", e.Msg)
 }
 
-// Error returns the diagnostic message. It exists so *Error satisfies the
-// standard library `error` interface; the underlying data lives in [Msg].
+// Error returns the diagnostic message, so that an *Error is a Go error.
 func (e *Error) Error() string { return e.Msg }
 
-// IsError reports whether v is a [*Error] value.
+// IsError returns v as an [Error] and reports whether it is one.
 func IsError(v Value) (*Error, bool) {
 	e, ok := v.(*Error)
 	return e, ok
 }
 
-// FunctionCallError represents an error that occurred during a function call.
+// FunctionCallError is what a builtin returns when a call fails. Location says
+// which argument is at fault, so the evaluator can point the diagnostic at that
+// argument in the source rather than at the whole call.
 type FunctionCallError struct {
 	Msg      string
 	Hints    []string
 	Location ArgLoc
 }
 
-func (e *FunctionCallError) Error() string    { return e.Msg }
+// Error returns the message, so that a *FunctionCallError is a Go error.
+func (e *FunctionCallError) Error() string { return e.Msg }
+
+// Hint adds a hint to the diagnostic, shown alongside the message.
 func (e *FunctionCallError) Hint(hint string) { e.Hints = append(e.Hints, hint) }
 
+// ArgLoc names the argument a [FunctionCallError] is about. It is one of
+// [ArgLocPositional], [ArgLocNamed], or [ArgLocNamedPair].
 type ArgLoc interface {
 	aArgLoc()
 }
 
+// ArgLocPositional is the positional argument at this index. Index 0 is the
+// receiver of a method call.
 type ArgLocPositional int
+
+// ArgLocNamed is the value of the named argument with this name.
 type ArgLocNamed name.Name
+
+// ArgLocNamedPair is a named argument's name and value together, which is what
+// an unexpected argument should be reported on.
 type ArgLocNamedPair name.Name
 
 func (ArgLocPositional) aArgLoc() {}
 func (ArgLocNamed) aArgLoc()      {}
 func (ArgLocNamedPair) aArgLoc()  {}
 
-// ArgErrorPosf creates an [ArgError] pointing at positional argument idx.
-// Index 0 is "self" for method calls; index 1 is the first explicit argument.
+// ArgErrorPosf returns an error about positional argument idx. Index 0 is the
+// receiver of a method call, so the first explicit argument is index 1.
 func ArgErrorPosf(idx int, format string, args ...any) *FunctionCallError {
 	return &FunctionCallError{
 		Msg:      fmt.Sprintf(format, args...),
@@ -116,8 +123,7 @@ func ArgErrorPosf(idx int, format string, args ...any) *FunctionCallError {
 	}
 }
 
-// ArgErrorNamedf creates an [ArgError] pointing at the value of the named
-// argument with the given name.
+// ArgErrorNamedf returns an error about the value of the named argument name.
 func ArgErrorNamedf(name name.Name, format string, args ...any) *FunctionCallError {
 	return &FunctionCallError{
 		Msg:      fmt.Sprintf(format, args...),
@@ -125,8 +131,9 @@ func ArgErrorNamedf(name name.Name, format string, args ...any) *FunctionCallErr
 	}
 }
 
-// ArgErrorNamedPairf creates an ArgError that points at the entire named pair
-// (key + value), used for unknown/unexpected named arguments.
+// ArgErrorNamedPairf returns an error about a named argument's name and value
+// together. Use it when the argument itself is the problem, as for one the
+// function does not accept.
 func ArgErrorNamedPairf(name name.Name, format string, args ...any) *FunctionCallError {
 	return &FunctionCallError{
 		Msg:      fmt.Sprintf(format, args...),

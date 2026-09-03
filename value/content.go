@@ -5,39 +5,50 @@ import (
 	"znkr.io/markst/types"
 )
 
-// Content is the interface for values that represent document content. It
-// extends [Value] with label support and field access (for show/set rules).
-// All Content values have [types.Content] as their type.
+// Content is implemented by the values that make up a document. It adds
+// labels and field access to [Value]; every Content value has type
+// [types.Content].
 //
 //go:generate go tool znkr.io/markst/internal/fieldaccessgen
 type Content interface {
 	Value
 
-	SetLabel(*Label) *Label
+	// SetLabel attaches l to this element and returns the label it replaced,
+	// or nil if there was none. Elements that cannot carry a label ignore l
+	// and return nil.
+	SetLabel(l *Label) *Label
+
+	// GetLabel returns the element's label, or nil if it has none.
 	GetLabel() *Label
 
+	// Field returns the value of the named field, or nil if the element has
+	// no such field. Fields are the parameters the element was constructed
+	// from, which is what show rules read.
 	Field(name.Name) Value
+
+	// HasField reports whether the element has the named field and it is set.
 	HasField(name.Name) bool
+
+	// Fields returns every set field as a dict, in declaration order.
 	Fields() *Dict
 
-	// Name returns the element name of the content value (e.g. "text",
-	// "heading", "sequence"), matching the function name used to construct it.
-	// Used in diagnostics such as "element <name> has no method `x`".
+	// Name returns the element's name, the same name the function that
+	// constructs it has: "text", "heading", "list.item". Diagnostics use it
+	// to say which element they are about.
 	Name() string
 
-	// IsBlock reports whether the element is block-level: it occupies a line
-	// of its own and breaks the paragraph flow around it. Everything else is
-	// inline, and shares a paragraph with its neighbors.
+	// IsBlock reports whether the element is block-level, meaning it takes a
+	// line of its own and breaks the paragraph around it. Everything else is
+	// inline and shares a paragraph with its neighbors.
 	IsBlock() bool
 
-	// Kind returns the element's kind, the constant that stands for its type
-	// in a [KindSet].
+	// Kind returns the constant that stands for this element's type in a
+	// [KindSet].
 	Kind() ElemKind
 
 	// inspect offers this element to a walk and descends into everything below
-	// it in document order, stopping early when the walk says so. It is
-	// generated for every element in this file; see [Preorder], the iterator
-	// built on it.
+	// it in document order, stopping early when the walk says so. Generated
+	// per element; see [Preorder], the iterator built on it.
 	inspect(w *walker) bool
 
 	aContent()
@@ -289,10 +300,9 @@ type MathAlignPoint struct {
 }
 
 // MathLr is a delimited group in math: (a), lr(|x|), floor(x). Body holds the
-// delimiters along with what they wrap — telling them apart is a layout
-// concern, so there is nothing here to keep them in separate fields. Size holds
-// the user-supplied delimiter size (nil when unset), retained so field access
-// can retrieve it.
+// delimiters together with what they wrap, since separating them is a layout
+// question. Size is the delimiter size the document requested, nil when it
+// requested none, retained so field access can read it back.
 type MathLr struct {
 	Body  Content `markst:"required"`
 	Size  Value
@@ -313,10 +323,10 @@ type MathUnderline struct {
 }
 
 // MathAccent is an accented expression in math: hat(x) or accent(x, \u{0302}).
-// Accent holds the accent's combining codepoint — the accent argument is
-// normalized to its combining form, so `hat(x)` and `accent(x, \u{0302})` are
-// the same node. Size holds the user-supplied size override (nil when unset),
-// retained so field access can retrieve it.
+// Accent is the accent's combining codepoint; the argument is normalized to
+// that form, so `hat(x)` and `accent(x, \u{0302})` build the same node. Size is
+// the size the document requested, nil when it requested none, retained so
+// field access can read it back.
 type MathAccent struct {
 	Base    Content `markst:"required"`
 	Accent  string  `markst:"required"`
@@ -326,8 +336,8 @@ type MathAccent struct {
 }
 
 // MathCancel is a cancellation line over an expression in math:
-// cancel(x, angle: ...). Angle holds the value passed for the `angle` field (a
-// user-supplied angle or function), retained so field access can retrieve it.
+// cancel(x, angle: ...). Angle holds the value passed for the `angle` field, an
+// angle or a function, retained so field access can read it back.
 type MathCancel struct {
 	Body  Content `markst:"required"`
 	Angle Value
@@ -451,8 +461,8 @@ func (*MathVec) aContent()        {}
 func (*MathCases) aContent()      {}
 func (*MathMat) aContent()        {}
 
-// Name returns the element name, matching the constructor function used to
-// build it.
+// Name returns the element name, the same as the constructor function that
+// builds it.
 func (Sequence) Name() string     { return "sequence" }
 func (*Heading) Name() string     { return "heading" }
 func (*Strong) Name() string      { return "strong" }
@@ -498,12 +508,13 @@ func (*MathVec) Name() string        { return "math.vec" }
 func (*MathCases) Name() string      { return "math.cases" }
 func (*MathMat) Name() string        { return "math.mat" }
 
-// IsBlock reports whether the element occupies a line of its own. The item
-// elements are block: a `- apples` entry breaks the paragraph before it exactly
-// as a heading does, and its siblings being gathered into a [List] is a later
-// step. A sequence is a flat splice rather than a box around its children, so
-// the question is asked of each child once it is flattened. Raw and Equation
-// answer from their Block field, set by the form they were written in.
+// IsBlock reports whether the element takes a line of its own.
+//
+// The item elements are block: a `- apples` entry breaks the paragraph before
+// it just as a heading does, and gathering its siblings into a [List] happens
+// later. A sequence is not, because it is spliced into its parent and each
+// child is then tested on its own. Raw and Equation report their Block field,
+// which is set by the form they were written in.
 func (Sequence) IsBlock() bool     { return false }
 func (*Heading) IsBlock() bool     { return true }
 func (*Strong) IsBlock() bool      { return false }

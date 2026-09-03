@@ -6,7 +6,7 @@
 // Metadata is the one element whose label is printed below: without it there
 // would be no telling one entry from another.
 
---- metadata-labelled ---
+--- metadata-labeled ---
 #metadata("2024-02-29") <published>
 = Hello
 │ #document[

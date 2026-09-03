@@ -70,7 +70,7 @@ Two.]])
 │ </thead>
 │ </table>
 
---- table-labelled ---
+--- table-labeled ---
 #table(columns: 1, [a]) <t>
 │ <table id="t">
 │ <tbody>

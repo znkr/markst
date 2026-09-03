@@ -14,15 +14,15 @@ type Attr struct {
 	Value string
 }
 
-// Encoder writes the HTML a render produces. A [WithElement] hook is handed
-// one and writes its own markup through it.
+// Encoder writes the HTML a render produces. A [WithElement] hook is handed one
+// and writes its own markup through it.
 //
-// It is also an [io.Writer], and the bytes written that way go out verbatim —
-// that is how the output of an html/template fragment lands in the document.
+// It is also an [io.Writer], and bytes written that way go out verbatim, which
+// is how an html/template fragment lands in the document.
 //
-// Every method here records the first failure and does nothing afterwards, in
-// the manner of a [bufio.Writer], so a hook can write a run of markup and ask
-// once at the end. [Encoder.Err] reports it, and [Render] returns it.
+// Like a [bufio.Writer], an Encoder records the first failure and does nothing
+// afterwards, so a hook can write a run of markup and check once at the end.
+// [Encoder.Err] reports it, and [Render] returns it.
 type Encoder struct {
 	w     stringWriter
 	cfg   *config
@@ -30,8 +30,8 @@ type Encoder struct {
 	err   error
 
 	// last is the byte most recently written, 0 before anything has been. It
-	// answers the one question the writer asks of what came before: whether a
-	// block just ended, and so whether a separator is needed.
+	// is used for one thing: to tell whether a block just ended, and so
+	// whether a separator is needed.
 	last byte
 
 	q smartquote.Quoter
@@ -59,8 +59,8 @@ func (e *Encoder) fail(err error) {
 	}
 }
 
-// Write writes p verbatim. It is here so that an [Encoder] can be handed to
-// anything that writes HTML of its own — an html/template, most of all.
+// Write writes p verbatim, so an [Encoder] can be handed to anything that
+// writes HTML of its own, an html/template above all.
 func (e *Encoder) Write(p []byte) (int, error) {
 	if e.err != nil {
 		return 0, e.err
@@ -74,7 +74,7 @@ func (e *Encoder) Write(p []byte) (int, error) {
 }
 
 // HTML writes s verbatim. Whatever it contains reaches the output as markup,
-// so it is the caller who has to know it is safe there.
+// so the caller is the one who must know it is safe there.
 func (e *Encoder) HTML(s string) {
 	if e.err != nil || s == "" {
 		return

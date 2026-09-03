@@ -54,11 +54,12 @@ func (a *analyzer) lowerMarkupItems(n syntax.Node) []expr.Ref {
 func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span)) {
 	ns := a.inner(n, syntax.KindMarkup)
 	last := expr.NoRef
-	// swallow records that the preceding sibling absorbs the whitespace after
-	// it: either it owns its line (see [ownsLine]) or it is a statement that
-	// contributes nothing for a space to sit beside. False at the start of the
-	// body, because a leading space there may still separate this run from
-	// whatever it gets spliced into — `#emph[Hello ]world`.
+	// swallow records that the whitespace after the preceding sibling can be
+	// dropped: either that sibling occupies its own line (see [ownsLine]) or
+	// it is a statement that produces nothing for a space to separate. It is
+	// false at the start of the body, where a leading space may still
+	// separate this run from what it is spliced into, as in
+	// `#emph[Hello ]world`.
 	swallow := false
 	entry := a.frame().pending
 	for child := range ns.all() {
@@ -73,24 +74,23 @@ func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span
 			swallow = false
 		case syntax.KindLabel:
 			if last == expr.NoRef {
-				// Detached label: drop it. (Matches legacy "no preceding
-				// content" behavior.)
+				// A label with nothing before it labels nothing, so drop it.
 				continue
 			}
 			label := a.leaf(child, syntax.KindLabel)
 			labelName := name.Make(label[1 : len(label)-1])
 			a.b.AttachLabel(child.Span(), last, labelName)
 		case syntax.KindSpace:
-			// A space with a block-level or statement neighbour has no two
-			// words left to separate: `#let x = 1` swallows the line break
-			// after it, exactly as a heading does.
+			// A space next to a block-level element or a statement has no two
+			// words to separate, so `#let x = 1` drops the line break after it
+			// just as a heading does.
 			if swallow || a.ownsLine(ns.nextContent()) {
 				continue
 			}
 			if ref := a.lowerExpr(child); ref != expr.NoRef {
-				// A space is content, but it is never what a label names:
-				// `text <label>` labels the text, not the space before the
-				// label. So `last` is deliberately left alone here.
+				// A space is content, but a label never names it: in
+				// `text <label>` the label belongs to the text, not to the space
+				// before it. So `last` is left unchanged here.
 				emit(ref, child.Span())
 			}
 		default:
@@ -105,17 +105,17 @@ func (a *analyzer) eachMarkupItem(n syntax.Node, emit func(expr.Ref, syntax.Span
 }
 
 // ownsLine reports whether n is markup that occupies a line of its own, so that
-// whitespace beside it separates nothing.
+// whitespace next to it separates nothing.
 //
-// It is a static under-approximation of the question realization asks of the
-// finished value — [value.Content.IsBlock], plus the two breaks. Every kind
-// listed here realizes to content that answers yes no matter what, because even
-// a show rule replacing one has its result realized in block context. Kinds
-// whose blockness is only known at runtime are left out; answering no is always
-// safe, since realization trims the space anyway.
+// This is a static under-approximation of what realization decides from the
+// finished value, which is [value.Content.IsBlock] plus the two breaks. Every
+// kind listed here always realizes to block content, since even a show rule
+// replacing one has its result realized in block context. Kinds whose blockness
+// is known only at runtime are left out, and answering no is always safe
+// because realization trims the space regardless.
 //
-// Being safe in that direction is what makes it an approximation rather than a
-// rule: under [WithoutApproximations] it answers no to everything, every space
+// Only being wrong in that direction makes this an approximation rather than a
+// rule. Under [WithoutApproximations] it answers no to everything, every space
 // is lowered, and realization produces the same document from a larger module.
 func (a *analyzer) ownsLine(n syntax.Node) bool {
 	if a.disableApprox || n == nil {
@@ -159,8 +159,8 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindText:
 		return a.b.Const(n.Span(), a.textValue(a.str(n)))
 	case syntax.KindSpace:
-		// A markup whitespace run is worth exactly one space: two blank lines
-		// scan as a parbreak instead, so there is nothing longer to preserve.
+		// A run of markup whitespace lowers to a single space. Two blank lines
+		// scan as a parbreak instead, so nothing longer needs preserving.
 		return a.b.Const(n.Span(), a.textValue(" "))
 	case syntax.KindEscape:
 		// In math, an escape like `\(` denotes a symbol character (matching
@@ -268,10 +268,10 @@ func (a *analyzer) lowerExpr(n syntax.Node) expr.Ref {
 	case syntax.KindModuleInclude:
 		return a.lowerModuleInclude(n)
 	case syntax.KindModuleImport:
-		// The parser understands the full import grammar, but nothing below it
-		// does. Report it rather than falling through to the panic below: this
-		// is reachable from ordinary source, and the shape a host reaches for
-		// first when told that markst has libraries.
+		// The parser accepts the full import grammar, but no later stage
+		// implements it. Report an error rather than falling through to the
+		// panic below: ordinary source can reach this, and it is the first
+		// thing a host tries on hearing that markst has libraries.
 		return a.emitError(n.Span(), "imports are not supported",
 			"a library's bindings are supplied by the host and need no import; see markst.CompileLibrary")
 	case syntax.KindError:
@@ -343,10 +343,10 @@ func isUnitByte(c byte) bool {
 
 func (a *analyzer) lowerNumeric(n syntax.Node) expr.Ref {
 	val := a.leaf(n, syntax.KindNumeric)
-	// Split off the unit the way the scanner did: it is the trailing run of
-	// ASCII letters, or `%`. Scanning from the front instead would cut a
-	// scientific-notation exponent in half — `0e0cm` has the unit `cm`, not
-	// `e0cm`.
+	// Split off the unit as the scanner did: the trailing run of ASCII
+	// letters, or `%`. Scanning from the front would split a
+	// scientific-notation exponent, giving `0e0cm` the unit `e0cm` instead of
+	// `cm`.
 	idx := len(val)
 	for idx > 0 && isUnitByte(val[idx-1]) {
 		idx--
@@ -460,7 +460,7 @@ func (a *analyzer) resolveNameIn(source name.Name, span syntax.Span, mathOnly bo
 			frameIdx--
 		}
 	}
-	// A math-scope fallback (installed on the equation body scope) resolves
+	// The math-scope fallback, installed on the equation body scope, resolves
 	// symbols and math elements to immutable constants.
 	if fallback != nil {
 		if v := fallback.Get(source); v != nil {
@@ -473,8 +473,9 @@ func (a *analyzer) resolveNameIn(source name.Name, span syntax.Span, mathOnly bo
 			}
 		}
 	}
-	// checkIdent already reported "unknown variable" — this is a bug if we
-	// get here, but we don't want to crash silently.
+	// Unreachable: checkIdent reports "unknown variable" for every name that
+	// gets this far. Returning NoRef rather than panicking keeps a bug here
+	// from taking the compile down with it.
 	return expr.NoRef
 }
 
@@ -620,14 +621,10 @@ func (a *analyzer) lowerAssign(span syntax.Span, op syntax.BinaryOp, leftNode, r
 			newVal := a.lowerExpr(rightNode)
 			return a.writeLValue(span, leftNode, syntax.Assign, newVal)
 		}
-		// Compound assignment to an ident needs the old value, so it can't go
-		// through writeLValue. Match Typst semantics: RHS is computed first
-		// (may shadow the LHS via side-effects), then the LHS's current value
-		// is read, then combined with the RHS.
-		//
-		// This feels more like an accident than a deliberate design choice,
-		// but here we are. For reference, here is an example that shadows
-		// the LHS via a let binding on the RHS:
+		// Compound assignment to an identifier needs the old value, so it
+		// cannot go through writeLValue. The order is Typst's: the RHS runs
+		// first, then the LHS is read, then the two are combined. That order
+		// is observable, because the RHS can shadow the LHS:
 		//
 		//   #{
 		//     let var = "a"
@@ -729,10 +726,9 @@ func (a *analyzer) writeLValue(span syntax.Span, leftNode syntax.Node, op syntax
 		a.b.CallSet(leftNode.Span(), callee, args, blocks, newVal, op)
 		return a.b.Const(span, value.None{})
 	case syntax.KindBinary, syntax.KindUnary:
-		// Lower the LHS so any runtime errors fire first (matching legacy where
-		// the eval error of the LHS supersedes "cannot mutate"); then emit a
-		// deferred Error wired to the LHS so the diagnostic only fires when the
-		// LHS itself didn't already error.
+		// Lower the LHS first so a runtime error in it wins over "cannot
+		// mutate", then wire the deferred error to the LHS so it only fires
+		// when the LHS produced no error of its own.
 		from := a.lowerExpr(leftNode)
 		a.b.Error(leftNode.Span(), "cannot mutate a temporary value", from)
 		return expr.NoRef
@@ -869,12 +865,13 @@ func (a *analyzer) lowerFieldAccess(n syntax.Node) expr.Ref {
 }
 
 // lowerCallee lowers the callee of a call to its value Ref. A `target.method`
-// callee resolves with method-call semantics ([Builder.MethodField]) so a
-// missing member reports as a missing method rather than a missing field;
-// anything else is lowered as an ordinary value. The method-vs-field choice is
-// positional — it belongs to the caller that knows the field access sits in
-// callee position, not to [lowerExpr], which lowers a field access to a plain
-// field read in every value context.
+// callee resolves with method-call semantics ([Builder.MethodField]), so a
+// missing member is reported as a missing method rather than a missing field.
+// Anything else lowers as an ordinary value.
+//
+// Choosing between method and field depends on position, so it belongs to the
+// caller that knows the field access is in callee position. [lowerExpr] lowers
+// a field access to a plain field read in every value context.
 func (a *analyzer) lowerCallee(calleeNode syntax.Node) expr.Ref {
 	if calleeNode.Kind() != syntax.KindFieldAccess {
 		return a.lowerExpr(calleeNode)
@@ -949,28 +946,27 @@ func (a *analyzer) lowerReceiver(n syntax.Node) (expr.Ref, placeInfo) {
 	}
 }
 
-// lowerMethodCall lowers `target.method(args)`, returning the result Ref and the
-// place info of the whole expression (for use when this call is itself the
-// receiver of an outer mutating method call). Dispatch goes through a
-// [Builder.MethodField] callee so the runtime applies method-call error
-// semantics (dictionary keys are not directly callable; a missing field on a
-// content element or method-bearing type is reported as a missing method).
+// lowerMethodCall lowers `target.method(args)` and returns the result Ref along
+// with the place info for the whole expression, which the caller needs if this
+// call is itself the receiver of an outer mutating method call. The callee goes
+// through [Builder.MethodField] so the runtime applies method-call error
+// semantics: a dictionary key is not directly callable, and a missing field on
+// a content element or a type with methods is reported as a missing method.
 //
-// Evaluation order is uniform: the receiver is evaluated first, then the
-// arguments left-to-right — the same order as a plain function call and every
-// other expression in the language. Unlike Typst, mutating methods do not get a
-// separate arguments-first order; the two orders differ only when an argument's
-// side effects alias the receiver's place (e.g.
-// `arr.at(pair.remove(0)).push(pair.remove(0))`), which is exactly the case a
-// runtime aliasing guard would flag. See "Method-call evaluation order: aliasing
-// guard" in IDEAS.md.
+// The receiver is evaluated first, then the arguments left to right, the same
+// order as a plain function call and every other expression in the language.
+// Typst evaluates arguments first for mutating methods; the two orders differ
+// only when an argument's side effects alias the receiver's place, as in
+// `arr.at(pair.remove(0)).push(pair.remove(0))`, which is the case a runtime
+// aliasing guard would reject anyway. See "Method-call evaluation order:
+// aliasing guard" in IDEAS.md.
 //
-// A mutating method requires the receiver to be a mutable place; a mutating call
-// on a temporary reports "cannot mutate a temporary value". Both mutating-ness
-// (from the resolved method's [value.Function.Impure]) and place-ness (from the
-// resolved links' [value.Function.Accessor]) are decided at runtime — the
-// receiver's type isn't known here — so the emitted [expr.MutCheck] carries only
-// the static shape of the receiver chain.
+// A mutating method requires the receiver to be a mutable place, and a mutating
+// call on a temporary reports "cannot mutate a temporary value". Whether the
+// method mutates (from [value.Function.Impure]) and whether the receiver is a
+// place (from [value.Function.Accessor] on each link) are both decided at
+// runtime, since the receiver's type is unknown here, so the emitted
+// [expr.MutCheck] carries only the static shape of the receiver chain.
 func (a *analyzer) lowerMethodCall(callNode, faNode, argsNode syntax.Node) (expr.Ref, placeInfo) {
 	fns := a.inner(faNode, syntax.KindFieldAccess)
 	targetNode := fns.node()
@@ -990,10 +986,10 @@ func (a *analyzer) lowerMethodCall(callNode, faNode, argsNode syntax.Node) (expr
 	}
 	ref := a.b.Call(callNode.Span(), callee, args, blocks, false, mut)
 
-	// `target.method(args)` is itself a place chain-link for an enclosing
-	// mutating call: a place iff the receiver was a place and this method
-	// resolves to an accessor (calleeRef). A fresh accessors slice avoids
-	// aliasing the one handed to mut above.
+	// `target.method(args)` is itself a link in the place chain of an
+	// enclosing mutating call. It is a place only if the receiver was one and
+	// this method resolves to an accessor (calleeRef). The accessors slice is
+	// fresh so it does not alias the one passed to mut above.
 	if recv.temporary {
 		return ref, placeInfo{temporary: true}
 	}
@@ -1054,9 +1050,9 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		// Extract the closure's name (function-shorthand `let f(x) = body`).
 		recName, ok := a.closureSourceName(closureNode)
 		if !ok {
-			// Emit the legacy "expected identifier or parameters" error at
-			// the would-be-name node's span. The closure node's first child
-			// is the offending kind (e.g. a parenthesised pattern).
+			// Report "expected identifier or parameters" where the name
+			// should have been. The closure's first child is whatever stands
+			// there instead, a parenthesised pattern for example.
 			inner, _ := closureNode.(*syntax.Inner)
 			if inner != nil && len(inner.Children()) > 0 {
 				first := inner.Children()[0]
@@ -1082,12 +1078,11 @@ func (a *analyzer) lowerLetBinding(n syntax.Node) expr.Ref {
 		// but with no pattern there's nothing meaningful to do with the value.
 		return expr.NoRef
 	}
-	// Note: `let f = (..) => body` (an anonymous closure bound to a name) is
-	// deliberately *not* self-referential — unlike the `let f(..) = body`
-	// function-shorthand form. Inside the body, `f` resolves to the outer
-	// binding (or is unknown), because the new binding is not yet in scope
-	// within its own initializer. It falls through to the normal destructuring
-	// path below and is lowered as a plain anonymous closure.
+	// `let f = (..) => body` is not self-referential, unlike the
+	// `let f(..) = body` shorthand: inside the body, `f` is the outer binding
+	// or unknown, because the new binding is not in scope within its own
+	// initializer. So it takes the ordinary destructuring path below and
+	// lowers as a plain anonymous closure.
 	var rhs expr.Ref
 	if ns.at(syntax.KindEq) {
 		ns.node() // consume eq
@@ -1194,16 +1189,15 @@ func (a *analyzer) lowerJoinedBlock(n syntax.Node, content bool, fill func()) ex
 // Conditionals ///////////////////////////////////////////////////////////////
 
 // lowerConditional lowers `if cond { ... } else if cond { ... } else { ... }`
-// into a chain of basic blocks. Each arm writes a synthetic result
-// variable; the join block reads it back, which inserts a block parameter
-// automatically via the Builder's Braun construction.
+// into a chain of basic blocks. Each arm writes a synthetic result variable,
+// and the join block reads it back, which adds a block parameter through the
+// builder's Braun construction.
 //
-// Whenever a sub-lowering (cond, body, or else-body) hands back [expr.NoRef]
-// — typically because the parser substituted an [*syntax.Error] for that
-// position — we route the current block through `jumpToJoin` instead of
-// emitting an instruction that would dangle. The conditional's value is
-// then None along the failing path; the recorded parser error already
-// describes the underlying problem.
+// A sub-lowering that returns [expr.NoRef], usually because the parser left a
+// [syntax.Error] in that position, routes the current block through jumpToJoin
+// rather than emitting an instruction that would dangle. The conditional is
+// then None along that path, and the parser error already recorded explains
+// why.
 func (a *analyzer) lowerConditional(n syntax.Node) expr.Ref {
 	// Surface embedded parser errors at the parent block before opening
 	// any inner blocks. Walks the whole subtree since the parser nests
@@ -1324,8 +1318,8 @@ func (a *analyzer) lowerBlock(n syntax.Node) expr.Ref {
 
 // lowerWhileLoop lowers `while cond { body }`.
 func (a *analyzer) lowerWhileLoop(n syntax.Node) expr.Ref {
-	// Detect error nodes early to avoid creating blocks that would be left
-	// unterminated. Matches the pattern in lowerForLoop.
+	// Check for error nodes before making any blocks, so none is left
+	// unterminated.
 	if a.collectChildErrors(n, false) {
 		return expr.NoRef
 	}
@@ -1373,17 +1367,17 @@ func (a *analyzer) lowerForLoop(n syntax.Node) expr.Ref {
 		})
 }
 
-// lowerLoop builds the CFG scaffold shared by while and for loops: the join
-// accumulator, the header/body/exit blocks, the escape catch, the back-edge
-// tail, and the [expr.Builder.JoinResult] finalization that gives the loop
-// expression its value at the exit block. cond emits the header's termination
-// check and returns the branch condition with its span; body emits any
-// per-iteration setup (lexical scope, element binding) and lowers the loop
-// body, returning its value.
+// lowerLoop builds the CFG shared by while and for loops: the join accumulator,
+// the header, body, and exit blocks, the escape catch, the back-edge, and the
+// [expr.Builder.JoinResult] that gives the loop expression its value at the
+// exit block. cond emits the header's termination check and returns the branch
+// condition with its span. body emits any per-iteration setup, such as the
+// lexical scope and the element binding, lowers the loop body, and returns its
+// value.
 //
-// The catch fires escapes that arose in the body — a break/continue reaching
-// this loop, or a return passing through it; the regular tail then lands in
-// dead code.
+// The catch fires escapes that arose in the body: a break or continue targeting
+// this loop, or a return passing through it. The ordinary back-edge then lands
+// in dead code.
 func (a *analyzer) lowerLoop(n syntax.Node, cond func() (expr.Ref, syntax.Span), body func() expr.Ref) expr.Ref {
 	accName := a.b.NewVar(name.Make("$acc"))
 	accInit := a.b.JoinBegin(n.Span())
@@ -1479,12 +1473,12 @@ func (a *analyzer) lowerClosure(n syntax.Node) expr.Ref {
 // within its own body — not for `let f = (x) => body`, where the body's `f`
 // resolves to the outer binding and the closure is anonymous.
 func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref {
-	// Emit any structural parser errors (e.g. missing `=`, missing body)
-	// at the OUTER block first. Errors deep inside the closure's body live
-	// in the closure's IR frame and only fire when the closure is called;
-	// structural errors at the closure's top level describe the definition
-	// itself and should fire eagerly. Unlike loops/conditionals we don't
-	// bail on structural errors — the closure body may still be valid IR.
+	// Report structural parser errors, such as a missing `=` or a missing
+	// body, in the enclosing block first. An error inside the closure's body
+	// is in the closure's own frame and fires only when the closure is
+	// called, but one at its top level describes the definition itself and
+	// should fire immediately. Unlike a loop or a conditional, this does not
+	// bail out: the body may still lower to valid IR.
 	a.collectChildErrors(n, false)
 
 	ns := a.inner(n, syntax.KindClosure)
@@ -1541,10 +1535,9 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		a.b.Function().Name = closureName.String()
 	}
 
-	// Bind the recursion name (if any) as a self-binding. The actual
-	// The self Ref is allocated lazily by [resolveName] only if the body
-	// references the name, so non-recursive functions stay capture-free and
-	// preserve their existing SSA shape.
+	// Bind the recursion name, if there is one, as a self-binding. Its Ref is
+	// allocated only when the body actually refers to the name, so a function
+	// that is not recursive allocates no capture for it.
 	if recName != name.Invalid {
 		if a.scope.bindings == nil {
 			a.scope.bindings = make(map[name.Name]binding)
@@ -1594,16 +1587,17 @@ func (a *analyzer) lowerClosureNamed(n syntax.Node, recName name.Name) expr.Ref 
 		}
 	}
 
-	// Lower the body. The frame's root region (seeded as [regionFnBody] by
-	// pushFrame) is the return target: a nested bare `return` resolves there and
-	// yields the body's partial join (Typst's joining `return` semantics). A
-	// block body opens its join scope on that region; an expression body opens
-	// none, so a bare `return` there yields none.
-	// This frame is the return target, so an escape caught here is
-	// necessarily a return, and this is the one catch where an explicit value
-	// provably discards the body join on every call — hence the discard
-	// warning for code-block bodies (markup bodies join naturally and never
-	// warn). The fallthrough Return lands in dead code when the catch fires.
+	// Lower the body. The frame's root region is the return target, so a bare
+	// `return` anywhere inside resolves here and yields the body's partial
+	// join, which is Typst's joining `return`. A block body opens its join
+	// scope on that region; an expression body opens none, so a bare `return`
+	// there yields none.
+	//
+	// Every escape caught here is therefore a return, and this is the one
+	// catch where an explicit value provably throws the body join away. Hence
+	// the discard warning, but only for code-block bodies: a markup body joins
+	// its parts anyway and has nothing to warn about. The Return below lands in
+	// dead code whenever the catch fires.
 	warnDiscard := bodyNode.Kind() == syntax.KindCodeBlock
 	bodyRef := a.catchEscapes(warnDiscard, func() expr.Ref { return a.lowerBlockOrExpr(bodyNode) })
 	a.b.Return(n.Span(), bodyRef)
@@ -1706,11 +1700,11 @@ func (a *analyzer) collectClosureParamChild(child syntax.Node, add func(closureP
 		named := a.inner(child, syntax.KindNamed)
 		nameNode := named.node()
 		if nameNode.Kind() != syntax.KindIdent {
-			// Parser substituted an error (or keyword) for the param
-			// name — record it and skip the whole named param. Don't
-			// lower the default either: doing so resolves the
-			// would-be-value as an outer-scope name and produces a
-			// misleading cascading "unknown variable" diagnostic.
+			// The parser put an error or a keyword where the parameter
+			// name should be. Skip the whole named parameter, default
+			// included: lowering the default would resolve it as an
+			// outer-scope name and add a misleading "unknown variable"
+			// on top of the error already reported.
 			a.unexpected(nameNode)
 
 			return
@@ -1907,11 +1901,7 @@ func (a *analyzer) lowerRaw(n syntax.Node) expr.Ref {
 	return a.b.Const(n.Span(), &value.Raw{Block: block, Lang: lang, Text: sb.String()})
 }
 
-// Set/show/contextual/include stubs //////////////////////////////////////////
-//
-// These constructs have placeholder instructions in the IR; the evaluator
-// panics on them today and will continue to do so until they're implemented
-// in their own design pass.
+// Rules, context blocks and includes ////////////////////////////////////////
 
 func (a *analyzer) lowerSetRule(n syntax.Node) expr.Ref {
 	ns := a.inner(n, syntax.KindSetRule)
@@ -1985,7 +1975,7 @@ func (a *analyzer) lowerDestructAssignment(n syntax.Node) expr.Ref {
 	a.assignDestructPattern(patternNode, rhs)
 	// Destructuring assignment is a statement: it produces no value and
 	// no surrounding content (parbreaks etc. should not be emitted for
-	// it). Returning NoRef matches lowerLetBinding's behaviour.
+	// it). Returning NoRef matches lowerLetBinding's behavior.
 	return expr.NoRef
 }
 

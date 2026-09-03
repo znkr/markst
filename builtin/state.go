@@ -5,10 +5,10 @@ import (
 	"znkr.io/markst/value"
 )
 
-// State constructs a state handle. state(key, init: none) identifies a piece of
-// document state by key; state.update(...) then produces content that changes
-// its value where it lands in the document. The handle itself is not content —
-// it is an introspection primitive, hence its own type rather than content.go.
+// State is `state(key, init: none)`, which names a piece of document state.
+// `state.update(...)` on the handle produces content that changes the value
+// where that content lands. The handle itself is not content but a value of its
+// own type.
 var State = &value.Function{
 	Name: "state",
 	Positional: []value.Param{

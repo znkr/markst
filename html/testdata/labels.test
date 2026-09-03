@@ -1,11 +1,11 @@
 // A label is how the rest of the document points at an element, which in HTML
 // is the id.
 
---- labelled-paragraph ---
+--- labeled-paragraph ---
 A paragraph. <intro>
 │ <p><span id="intro">A paragraph.</span></p>
 
---- labelled-heading ---
+--- labeled-heading ---
 = Title <title>
 │ <h1 id="title">Title</h1>
 
@@ -22,7 +22,7 @@ A paragraph. <intro>
 │ <h1 id="same">Same</h1>
 │ <h1 id="same-1">Same</h1>
 
---- labelled-list ---
+--- labeled-list ---
 - apples
 - pears
 <fruit>
@@ -31,6 +31,6 @@ A paragraph. <intro>
 │ <li id="fruit">pears</li>
 │ </ul>
 
---- labelled-strong ---
+--- labeled-strong ---
 A *bold* word. <p>
 │ <p>A <strong>bold</strong> <span id="p">word.</span></p>

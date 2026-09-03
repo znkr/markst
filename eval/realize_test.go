@@ -11,7 +11,7 @@ import (
 // pairwise fold ever saw at once.
 func TestMergeText(t *testing.T) {
 	text := func(s string) value.Content { return &value.Text{Text: s} }
-	labelled := func(s string) value.Content {
+	labeled := func(s string) value.Content {
 		return &value.Text{Text: s, Label: &value.Label{}}
 	}
 
@@ -58,10 +58,10 @@ func TestMergeText(t *testing.T) {
 		})
 	}
 
-	// A labelled text is named by its label, so it neither merges nor lets the
+	// A labeled text is named by its label, so it neither merges nor lets the
 	// texts around it merge through it.
 	t.Run("a label breaks the run", func(t *testing.T) {
-		got := mergeText([]value.Content{text("a"), labelled("b"), text("c"), text("d")})
+		got := mergeText([]value.Content{text("a"), labeled("b"), text("c"), text("d")})
 		if want := []string{"a", "b", "cd"}; len(got) != len(want) {
 			t.Fatalf("mergeText() = %v, want %v", texts(got), want)
 		}

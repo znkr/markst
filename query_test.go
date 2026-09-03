@@ -53,7 +53,7 @@ func TestQuery(t *testing.T) {
 		}
 	}
 
-	// A label nothing carries, and an unlabelled entry — which is in the
+	// A label nothing carries, and an unlabeled entry — which is in the
 	// document but has no name to ask for it by.
 	for _, label := range []string{"missing", "nobody asked"} {
 		if got, ok := markst.Query(doc, name.Make(label)); ok {

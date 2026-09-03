@@ -34,29 +34,31 @@ type Str string
 // Bytes is a byte string value.
 type Bytes string
 
-// Ratio represents a ratio (percentage), stored as a fraction of 1
-// (e.g. 0.5 for 50%).
+// Ratio is a percentage, held as a fraction of 1: 50% is 0.5.
 type Ratio float64
 
-// Fraction represents a fractional unit (e.g. 1fr, 2fr) used in layout.
+// Fraction is a share of the space left over in a layout, written 1fr, 2fr.
 type Fraction float64
 
-// Length represents a physical length with absolute (pt) and font-relative
-// (em) components that are combined at layout time.
+// Length is a distance, part absolute and part relative to the font size. The
+// two components are added at layout time, when the font size is known.
 type Length struct {
 	Pt float64 // Points (absolute component)
 	Em float64 // Em units (font-relative component)
 }
 
-// Relative is the combination of a [Ratio] and a [Length], representing a
-// length that is partially proportional and partially absolute.
+// Relative is a [Ratio] plus a [Length]: a distance that is partly a share of
+// the space available and partly fixed.
 type Relative struct {
 	Ratio  Ratio
 	Length Length
 }
 
-// Angle represents an angle in radians.
+// Angle is an angle, held in radians and written in degrees.
 type Angle float64
+
+// The String methods below render a scalar the way Markst source writes it,
+// which for the unit types means rounded to two decimals.
 
 func (n None) String() string { return "none" }
 

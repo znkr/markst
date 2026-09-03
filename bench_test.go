@@ -117,7 +117,7 @@ func BenchmarkRender(b *testing.B) {
 	}
 }
 
-// BenchmarkQuery is one labelled metadata out of a whole document — the walk a
+// BenchmarkQuery is one labeled metadata out of a whole document — the walk a
 // host doing front matter runs once per field.
 func BenchmarkQuery(b *testing.B) {
 	doc := benchDocument(b)

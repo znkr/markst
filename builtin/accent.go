@@ -51,14 +51,14 @@ func combiningAccent(c rune) (rune, bool) {
 	return a, ok
 }
 
-// singleRune returns the sole character of s, ignoring a trailing text
+// singleRune returns the only character of s, ignoring a trailing text
 // presentation selector so that `sym.arrow.l.r` ("↔︎") reads as `↔`. An emoji
-// presentation selector is left in place, so `emoji.arrow.l.r` stays a
-// multi-codepoint string and is rejected by the callers.
+// presentation selector is kept, so `emoji.arrow.l.r` remains a multi-codepoint
+// string and the callers reject it.
 //
-// A decoding failure (an empty string, or one that isn't valid UTF-8) is not a
-// single rune: utf8.DecodeRuneInString reports those as RuneError with a size
-// below two, which a literal U+FFFD — three bytes — never hits.
+// A decoding failure, from an empty string or invalid UTF-8, is not a single
+// rune. utf8.DecodeRuneInString reports those as RuneError with a size below
+// two, which a literal U+FFFD, being three bytes, never produces.
 func singleRune(s string) (rune, bool) {
 	s = strings.TrimSuffix(s, textPresentation)
 	c, size := utf8.DecodeRuneInString(s)
@@ -100,9 +100,9 @@ func accentRune(v value.Value) (rune, error) {
 	return c, nil
 }
 
-// SymbolFunc returns the function a symbol denotes when it is called. Accent
-// symbols apply themselves — `hat(f)` is `accent(f, hat)` — and every other
-// symbol is not callable.
+// SymbolFunc returns the function a symbol denotes when it is called. An accent
+// symbol applies itself, so `hat(f)` is `accent(f, hat)`. No other symbol is
+// callable.
 func SymbolFunc(s *value.Symbol) (*value.Function, error) {
 	c, ok := singleRune(s.String())
 	if !ok {

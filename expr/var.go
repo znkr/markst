@@ -6,15 +6,14 @@ import (
 	"znkr.io/markst/name"
 )
 
-// Var names an SSA-mode variable in the [Builder]'s Braun construction.
-// Each `let`, parameter, or synthetic intermediate (loop accumulator,
-// conditional result, ...) allocates a fresh Var. Two Vars are equal iff
-// both fields match, so distinct `let`s of the same source identifier
-// produce distinct Vars and shadowing works without string mangling.
+// Var names a variable while a [Builder] is constructing a function. Each
+// `let`, each parameter, and each intermediate the analyzer needs — a loop
+// accumulator, a conditional's result — gets its own Var. Two Vars are equal
+// only if both fields match, so two `let`s of the same identifier are two
+// different Vars and shadowing needs no renaming.
 //
-// Vars are a construction-time concept only: they do not appear in the
-// final IR, which identifies SSA values by [Ref]. They show up in
-// diagnostic SSA dumps via [Var.String].
+// A Var exists only during construction. The finished IR names values by
+// [Ref].
 type Var struct {
 	// Name is the display name: the source identifier for `let`-introduced
 	// vars, or a synthetic tag (e.g. "$cond", "$acc") for compiler-
@@ -26,8 +25,8 @@ type Var struct {
 	Version int
 }
 
-// String renders the var as "name$version" (or just "name" when Version
-// is 0). Used by SSA dumps and error messages.
+// String returns the var as "name$version", or just "name" when the version is
+// 0, which is how SSA dumps and diagnostics name it.
 func (v Var) String() string {
 	if v.Version == 0 {
 		return v.Name.String()
