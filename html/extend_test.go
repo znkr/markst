@@ -185,6 +185,17 @@ func TestWithoutFootnoteList(t *testing.T) {
 	}
 }
 
+func TestWithoutLabelIDs(t *testing.T) {
+	doc := compile(t, "= Intro <intro>\n\nA paragraph. <par>\n\n#link(\"a.html\")[a] <a> @intro\n")
+	got := renderDoc(t, doc, html.WithoutLabelIDs())
+	if strings.Contains(got, "id=") {
+		t.Errorf("Render() = %q, want no id attribute", got)
+	}
+	if want := `href="#intro"`; !strings.Contains(got, want) {
+		t.Errorf("Render() = %q, missing %q", got, want)
+	}
+}
+
 func TestFootnotesNumberedOnce(t *testing.T) {
 	// One footnote bound to a name and used twice is one footnote: it keeps one
 	// number, and the endnote list holds it once.

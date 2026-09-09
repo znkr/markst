@@ -79,6 +79,7 @@ type config struct {
 	labelURL       func(name.Name) (string, error)
 	footnotes      []*value.Footnote
 	noFootnoteList bool
+	noLabelIDs     bool
 	index          *value.Index
 }
 
@@ -123,6 +124,14 @@ func WithLabelURL(f func(l name.Name) (string, error)) Option {
 // rendered somewhere else.
 func WithoutFootnoteList() Option {
 	return func(c *config) { c.noFootnoteList = true }
+}
+
+// WithoutLabelIDs renders content without the ids its labels give it — for a
+// copy of content that is rendered elsewhere on the same page, where the ids
+// belong to the other rendering. An @ref still links to "#" + the label, which
+// is the anchor the other rendering carries.
+func WithoutLabelIDs() Option {
+	return func(c *config) { c.noLabelIDs = true }
 }
 
 // WithFootnotes fixes the numbering instead of taking it from the content

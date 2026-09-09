@@ -34,7 +34,7 @@ func (e *Encoder) renderEquation(c *value.Equation) {
 	if c.Block {
 		display = Attr{"display", "block"}
 	}
-	e.Start("math", display, idAttr(c))
+	e.Start("math", display, e.idAttr(c))
 
 	block := e.mathBlock
 	e.mathBlock = c.Block

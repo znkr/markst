@@ -197,11 +197,11 @@ func (e *Encoder) escape(s string, attr bool) {
 func (e *Encoder) atLineStart() bool { return e.last == '\n' || e.last == 0 }
 
 // idAttr returns the id an element's label gives it, or the empty Attr when it
-// carries none. A label is how the rest of the document points at an element,
-// which in HTML is the id.
-func idAttr(c value.Content) Attr {
+// carries none or [WithoutLabelIDs] is set. A label is how the rest of the
+// document points at an element, which in HTML is the id.
+func (e *Encoder) idAttr(c value.Content) Attr {
 	l := c.GetLabel()
-	if l == nil {
+	if l == nil || e.cfg.noLabelIDs {
 		return Attr{}
 	}
 	return Attr{"id", l.Name.String()}

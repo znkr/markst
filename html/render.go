@@ -68,7 +68,7 @@ func (e *Encoder) render(c value.Content) {
 		// A number written in the document (`3. third`). <ol> continues
 		// numbering from a value attribute, which is the behavior wanted here.
 		if c.Number >= 0 {
-			e.Start("li", Attr{"value", strconv.Itoa(c.Number)}, idAttr(c))
+			e.Start("li", Attr{"value", strconv.Itoa(c.Number)}, e.idAttr(c))
 			e.itemBody(c.Body)
 			e.End("li")
 			e.Newline()
@@ -78,7 +78,7 @@ func (e *Encoder) render(c value.Content) {
 	case *value.Terms:
 		e.itemList("dl", c, len(c.Children), func(i int) { e.Content(c.Children[i]) })
 	case *value.TermItem:
-		e.Start("dt", idAttr(c))
+		e.Start("dt", e.idAttr(c))
 		e.Content(c.Term)
 		e.End("dt")
 		e.Newline()
@@ -102,7 +102,7 @@ func (e *Encoder) render(c value.Content) {
 			e.fail(err)
 			return
 		}
-		e.Start("a", Attr{"href", href}, idAttr(c))
+		e.Start("a", Attr{"href", href}, e.idAttr(c))
 		e.Content(c.Body)
 		e.End("a")
 	case *value.Ref:
@@ -115,7 +115,7 @@ func (e *Encoder) render(c value.Content) {
 			e.fail(err)
 			return
 		}
-		e.Start("img", Attr{"src", src}, Attr{"alt", c.Alt}, idAttr(c))
+		e.Start("img", Attr{"src", src}, Attr{"alt", c.Alt}, e.idAttr(c))
 
 	case *value.HTMLElem:
 		e.renderHTMLElem(c)
@@ -144,7 +144,7 @@ func (e *Encoder) render(c value.Content) {
 // needs an anchor, so a labeled element becomes a <span> carrying the id.
 // Without a label, only the content is written.
 func (e *Encoder) tagless(c value.Content, body func()) {
-	id := idAttr(c)
+	id := e.idAttr(c)
 	if id.Name == "" {
 		body()
 		return
@@ -164,7 +164,7 @@ func (e *Encoder) headingLevel(depth int) int {
 // blockTag writes a block-level element: its tag, its body, and the newline
 // that separates it from what follows.
 func (e *Encoder) blockTag(tag string, c value.Content, body value.Content) {
-	e.Start(tag, idAttr(c))
+	e.Start(tag, e.idAttr(c))
 	e.Content(body)
 	e.End(tag)
 	e.Newline()
@@ -173,14 +173,14 @@ func (e *Encoder) blockTag(tag string, c value.Content, body value.Content) {
 // inlineTag writes an inline element, which shares its line with its
 // neighbors and so ends without a newline.
 func (e *Encoder) inlineTag(tag string, c value.Content, body value.Content) {
-	e.Start(tag, idAttr(c))
+	e.Start(tag, e.idAttr(c))
 	e.Content(body)
 	e.End(tag)
 }
 
 // itemList writes a list container: the items each start on their own line.
 func (e *Encoder) itemList(tag string, c value.Content, n int, item func(int)) {
-	e.Start(tag, idAttr(c))
+	e.Start(tag, e.idAttr(c))
 	e.Newline()
 	for i := range n {
 		item(i)
@@ -191,7 +191,7 @@ func (e *Encoder) itemList(tag string, c value.Content, n int, item func(int)) {
 
 // item writes one entry of a list.
 func (e *Encoder) item(tag string, c value.Content, body value.Content) {
-	e.Start(tag, idAttr(c))
+	e.Start(tag, e.idAttr(c))
 	e.itemBody(body)
 	e.End(tag)
 	e.Newline()
@@ -288,7 +288,7 @@ func (e *Encoder) renderRef(c *value.Ref) {
 			return
 		}
 	}
-	e.Start("a", Attr{"href", href}, idAttr(c))
+	e.Start("a", Attr{"href", href}, e.idAttr(c))
 	if c.Supplement != nil {
 		e.Content(c.Supplement)
 	} else {
@@ -319,7 +319,7 @@ func (e *Encoder) renderHTMLElem(c *value.HTMLElem) {
 	// A label is how the rest of the document refers to this element, which in
 	// HTML is the id. An explicit id attribute takes precedence over it.
 	if !hasID {
-		attrs = append(attrs, idAttr(c))
+		attrs = append(attrs, e.idAttr(c))
 	}
 
 	e.Start(c.Tag, attrs...)
@@ -342,7 +342,7 @@ func (e *Encoder) renderTable(t *value.Table) {
 		head++
 	}
 
-	e.Start("table", idAttr(t))
+	e.Start("table", e.idAttr(t))
 	e.Newline()
 	if head > 0 {
 		e.Start("thead")
